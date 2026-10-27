@@ -7,6 +7,7 @@ import Register from "./Register.jsx";
 import Admin from "./Admin.jsx";
 import Vendor from "./Vendor.jsx";
 import LGU from "./Lgu.jsx";
+import { API_BASE_URL } from "./api/config.js";
 
 
 function App() {
@@ -127,8 +128,6 @@ function Login({ onLogin, onBack, onRegister }) {
 
   // Forgot-password states.
   const [forgotMode, setForgotMode] = useState(false);
-  const [forgotEmail, setForgotEmail] = useState("");
-  const [forgotSent, setForgotSent] = useState(false);
 
 
   /* =========================
@@ -151,7 +150,7 @@ function Login({ onLogin, onBack, onRegister }) {
     try {
       // Send the username and password to Django.
       const response = await fetch(
-        "http://127.0.0.1:8000/api/auth/login/",
+        `${API_BASE_URL}/auth/login/`,
         {
           method: "POST",
 
@@ -170,9 +169,6 @@ function Login({ onLogin, onBack, onRegister }) {
 
       // Read Django's JSON response.
       const data = await response.json();
-
-      // Useful while developing/debugging AquaTimbang.
-      console.log("LOGIN RESPONSE:", data);
 
       // Django rejected the login.
       if (!response.ok) {
@@ -209,8 +205,6 @@ function Login({ onLogin, onBack, onRegister }) {
       // Read the REAL role returned by Django.
       const role = data.user.role;
 
-      console.log("ROLE FROM DJANGO:", role);
-
       // Open the correct dashboard.
       if (role === "Fish Vendor") {
         onLogin("Vendor");
@@ -238,34 +232,9 @@ function Login({ onLogin, onBack, onRegister }) {
   };
 
 
-  /* =========================
-     FORGOT PASSWORD
-  ========================= */
-
-  const handleForgotSubmit = (e) => {
-    // Prevent page refresh.
-    e.preventDefault();
-
-    // Require an email address.
-    if (!forgotEmail.trim()) {
-      setError(
-        "Please enter your registered email address."
-      );
-      return;
-    }
-
-    setError("");
-
-    // For now this only displays the confirmation screen.
-    setForgotSent(true);
-  };
-
-
   const backToLoginForm = () => {
     // Return from forgot-password mode.
     setForgotMode(false);
-    setForgotSent(false);
-    setForgotEmail("");
     setError("");
   };
 
@@ -368,91 +337,26 @@ function Login({ onLogin, onBack, onRegister }) {
 
           {forgotMode ? (
 
-            forgotSent ? (
+            <>
+              <div className="login-head">
 
-              <>
-                <div className="login-head">
+                <h3>Reset your password</h3>
 
-                  <h3>Check your email</h3>
+                <p>
+                  AquaTimbang does not send password reset emails yet.
+                  Please contact your AquaTimbang Administrator to
+                  have your password reset.
+                </p>
 
-                  <p>
-                    If an account matches {forgotEmail},
-                    we've sent password reset instructions
-                    to it.
-                  </p>
+              </div>
 
-                </div>
-
-                <button
-                  className="primary-btn full-btn"
-                  onClick={backToLoginForm}
-                >
-                  ← Back to Login
-                </button>
-              </>
-
-            ) : (
-
-              <>
-                <div className="login-head">
-
-                  <h3>Reset your password</h3>
-
-                  <p>
-                    Enter your registered email and we'll
-                    send you a reset link.
-                  </p>
-
-                </div>
-
-                <form onSubmit={handleForgotSubmit}>
-
-                  <div className="form-group">
-
-                    <label>
-                      Email Address
-                    </label>
-
-                    <input
-                      type="email"
-                      placeholder="you@email.com"
-                      value={forgotEmail}
-                      onChange={(e) =>
-                        setForgotEmail(e.target.value)
-                      }
-                    />
-
-                  </div>
-
-                  {/* Display forgot-password errors. */}
-                  {error && (
-                    <div className="login-error">
-                      ⚠ {error}
-                    </div>
-                  )}
-
-                  <button
-                    type="submit"
-                    className="primary-btn full-btn"
-                  >
-                    Send Reset Link
-                  </button>
-
-                </form>
-
-                <div className="login-hint forgot-hint">
-
-                  <button
-                    className="login-inline-link"
-                    onClick={backToLoginForm}
-                  >
-                    ← Back to Login
-                  </button>
-
-                </div>
-              </>
-
-            )
+              <button
+                className="primary-btn full-btn"
+                onClick={backToLoginForm}
+              >
+                ← Back to Login
+              </button>
+            </>
 
           ) : (
 

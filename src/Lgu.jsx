@@ -6,6 +6,18 @@ import {
   listVendorSuggestions,
   reviewVendorSuggestion,
 } from "./api/vendorSuggestions";
+import { API_BASE_URL, fetchAll } from "./api/config.js";
+import { fullName as profileName, useMyProfile } from "./api/account.js";
+import {
+  dailySeries,
+  isPublished,
+  lastDays,
+  latestBy,
+  linearForecast,
+  municipalityNames,
+  speciesNames as recordSpeciesNames,
+} from "./api/priceData.js";
+import AccountProfile from "./components/AccountProfile.jsx";
 
 
 // Read-only audit records supplied by Django. This endpoint enforces role visibility.
@@ -22,7 +34,7 @@ function useDjangoActivityLogs() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Please log in again to view activity logs.");
-        let next = "http://127.0.0.1:8000/api/activity-logs/";
+        let next = `${API_BASE_URL}/activity-logs/`;
         const all = [];
         const visited = new Set();
         while (next && !visited.has(next)) {
@@ -140,21 +152,10 @@ function exportAuditCsv(records, filename) {
 }
 
 /* ================================================================
-   CONSTANTS & MOCK DATA
+   CONSTANTS & HELPERS
    ================================================================ */
 
-const SPECIES_LIST = ["Galunggong", "Tulingan", "Bolinaw", "Tamarong", "Anduhaw"];
-
-const SCI_NAMES = {
-  Galunggong: "Decapterus macarellus",
-  Tulingan: "Euthynnus affinis",
-  Bolinaw: "Stolephorus spp.",
-  Tamarong: "Local catch",
-  Anduhaw: "Rastrelliger spp.",
-};
-
-const BASE_PRICES = { Galunggong: 180, Tulingan: 160, Bolinaw: 120, Tamarong: 150, Anduhaw: 170 };
-const MARKETS = ["Pasil Fish Market", "Carbon Public Market", "Mandaue City Market"];
+// Price-per-kg range treated as plausible; values outside it are listed as anomalies.
 const MIN_PRICE = 50;
 const MAX_PRICE = 1000;
 
@@ -168,84 +169,28 @@ const fmtDate = (isoStr) => {
   return d.toLocaleDateString("en-PH", { month: "2-digit", day: "2-digit", year: "numeric" });
 };
 
-function buildPriceHistory() {
-  const TODAY = new Date(2026, 8, 16);
-  const history = {};
-  SPECIES_LIST.forEach((sp) => {
-    const rows = [];
-    const base = BASE_PRICES[sp];
-    for (let d = 29; d >= 0; d--) {
-      const date = new Date(TODAY);
-      date.setDate(date.getDate() - d);
-      const weekday = date.getDay();
-      const bump = weekday === 0 || weekday === 6 ? 4 : 0;
-      const pseudo = Math.abs(Math.sin(d * 12.9898 + base) * 10000) % 1;
-      const price = Math.max(40, Number((base + bump + (pseudo - 0.5) * 12).toFixed(2)));
-      rows.push({ date: date.toISOString().slice(0, 10), price });
-    }
-    history[sp] = rows;
-  });
-  return history;
+const STATUS_LABELS = {
+  draft: "Draft",
+  pending: "For Review",
+  approved: "Approved",
+  published: "Published",
+  flagged: "Flagged",
+  rejected: "Rejected",
+};
+
+function downloadCsv(filename, header, rows) {
+  const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+  const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(quote).join(",")).join("\r\n");
+  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-function buildMarketPrices(priceHistory) {
-  // per-market variants of the same base history, for Price Comparison
-  const out = {};
-  MARKETS.forEach((mk, mi) => {
-    out[mk] = {};
-    SPECIES_LIST.forEach((sp) => {
-      const rows = priceHistory[sp];
-      const last = rows[rows.length - 1];
-      const offset = (mi - 1) * 2.5;
-      out[mk][sp] = Math.max(40, Number((last.price + offset).toFixed(2)));
-    });
-  });
-  return out;
-}
-
-function buildFisherfolk() {
-  return [
-    { id: 1, name: "Marites Abellana", municipality: "Cebu City", registeredDate: "01/18/2026", status: "Active", suggestionCount: 14, lastSubmission: "09/15/2026", activity: [
-      { date: "09/15/2026 04:10 PM", action: "Submitted suggested price for Bolinaw" },
-      { date: "09/14/2026 09:02 AM", action: "Used Fair Price Calculator" },
-    ]},
-    { id: 2, name: "Ronald Ceniza", municipality: "Mandaue City", registeredDate: "01/22/2026", status: "Inactive", suggestionCount: 3, lastSubmission: "08/28/2026", activity: [
-      { date: "08/28/2026 10:00 AM", action: "Submitted suggested price for Anduhaw" },
-    ]},
-    { id: 3, name: "Juan Dela Cruz", municipality: "Cebu City", registeredDate: "09/14/2026", status: "Pending", suggestionCount: 0, lastSubmission: "—", activity: [] },
-    { id: 4, name: "Pedro Santos", municipality: "Cebu City", registeredDate: "09/15/2026", status: "Pending", suggestionCount: 0, lastSubmission: "—", activity: [] },
-    { id: 5, name: "Maria Garcia", municipality: "Cebu City", registeredDate: "09/15/2026", status: "Pending", suggestionCount: 1, lastSubmission: "09/16/2026", activity: [
-      { date: "09/16/2026 08:20 AM", action: "Submitted suggested price for Galunggong" },
-    ]},
-  ];
-}
-
-function buildSuggestions() {
-  const vendors = ["Marites Abellana", "Ronald Ceniza", "Maria Garcia"];
-  const rows = [];
-  let id = 1;
-  for (let d = 9; d >= 0; d--) {
-    const date = new Date(2026, 8, 16);
-    date.setDate(date.getDate() - d);
-    const dateStr = date.toISOString().slice(0, 10);
-    SPECIES_LIST.forEach((sp) => {
-      vendors.forEach((v, i) => {
-        if ((id + i) % 3 === 0) return;
-        const base = BASE_PRICES[sp];
-        const pseudo = Math.abs(Math.sin((id + i) * 8.31) * 10000) % 1;
-        rows.push({
-          id: id++,
-          species: sp,
-          suggestedPrice: Math.max(40, Number((base + (pseudo - 0.5) * 20).toFixed(2))),
-          submittedBy: v,
-          date: dateStr,
-          comment: id % 5 === 0 ? "Typo — meant a lower price, please review." : "",
-          status: d < 2 ? "Pending Review" : ["Reviewed", "Adopted", "Rejected"][id % 3],
-        });
-      });
-    });
-  }
-  return rows.reverse();
+function EmptyPanel({ children }) {
+  return <div className="panel"><p className="empty-row" style={{ padding: 24 }}>{children}</p></div>;
 }
 
 /* ================================================================
@@ -288,7 +233,7 @@ const refreshPrices = async () => {
 
     // Request all price records from Django.
     const response = await fetch(
-      "http://127.0.0.1:8000/api/prices/",
+      `${API_BASE_URL}/prices/`,
       {
         method: "GET",
         headers: {
@@ -362,8 +307,12 @@ useEffect(() => {
     .filter(Boolean)
     .join(" ");
 
+  // Prefer the saved profile from Django; fall back to the login details.
+  const account = useMyProfile();
+
   // If first/last name are empty, show the username instead.
   const ME =
+    (account.profile && profileName(account.profile)) ||
     fullName ||
     currentUser?.username ||
     "LGU Officer";
@@ -387,63 +336,24 @@ useEffect(() => {
   sessionStorage.setItem("lguActivePage", activePage);
 }, [activePage]);
   const [toast, setToast] = useState("");
-  const [priceHistory] = useState(() => buildPriceHistory());
-  const [marketPrices] = useState(() => buildMarketPrices(buildPriceHistory()));
-  const [fisherfolk, setFisherfolk] = useState(() => buildFisherfolk());
-  const [suggestions, setSuggestions] = useState(() => buildSuggestions());
+  // Vendor price suggestions and fisherfolk accounts from Django.
+  const [suggestions, setSuggestions] = useState([]);
+  const [fisherfolk, setFisherfolk] = useState([]);
+  const [fisherfolkLoading, setFisherfolkLoading] = useState(true);
+  const [fisherfolkError, setFisherfolkError] = useState("");
 
-  const [entries, setEntries] = useState([]);
-
-  const [factors, setFactors] = useState([
-    { id: 1, date: "09/15/2026", fuel: 66.8, weather: "Cloudy", holiday: true, note: "Local fiesta — Barangay Pasil" },
-    { id: 2, date: "09/14/2026", fuel: 66.1, weather: "Stormy", holiday: false, note: "Fishing trips suspended" },
-    { id: 3, date: "09/12/2026", fuel: 66.1, weather: "Rainy", holiday: false, note: "" },
-    { id: 4, date: "09/10/2026", fuel: 65.4, weather: "Sunny", holiday: false, note: "" },
-  ]);
-
-  const [referencePrices, setReferencePrices] = useState(
-    SPECIES_LIST.map((sp, i) => ({
-      id: i + 1,
-      species: sp,
-      price: BASE_PRICES[sp],
-      publishedDate: "09/10/2026",
-      publishedBy: ME,
-    }))
-  );
-
-  const [validationHistory, setValidationHistory] = useState([
-    { id: 1, date: "09/16/2026 06:02 AM", user: ME, action: "Published daily price for Galunggong", details: "₱180.00 per kg" },
-    { id: 2, date: "09/10/2026 08:00 AM", user: ME, action: "Published reference price for all species", details: "Initial reference set" },
-  ]);
-
-  const [logs, setLogs] = useState([
-    { id: 1, date: "09/16/2026 06:02 AM", user: ME, action: "Published price", species: "Galunggong", details: "₱180.00 per kg", status: "Success" },
-    { id: 2, date: "09/16/2026 05:48 AM", user: ME, action: "Flagged entry", species: "Bolinaw", details: "₱980.00 outside bounds", status: "Flagged" },
-    { id: 3, date: "09/16/2026 05:41 AM", user: ME, action: "Encoded price", species: "Tulingan", details: "₱160.00 per kg", status: "Success" },
-  ]);
-
-  const [profile, setProfile] = useState({
-  // Use information returned by the Django login endpoint.
-  name: ME,
-  email: currentUser?.email || "—",
-  username: currentUser?.username || "—",
-  role: currentUser?.role || "LGU Officer",
-
-  // Use the user's municipality when Django provides it.
-  municipality:
-    currentUser?.municipality?.name ||
-    currentUser?.municipality ||
-    "—",
-
-  // These are placeholders until we connect them to Django.
-  registeredDate: "—",
-  lastLogin: new Date().toLocaleString("en-PH"),
-});
-
-  const [myActivity, setMyActivity] = useState([
-    { id: 1, date: "09/16/2026 06:02 AM", action: "Logged in" },
-    { id: 2, date: "09/15/2026 05:52 PM", action: "Edited price for Galunggong" },
-  ]);
+  // Reload when the officer switches pages so counts stay current.
+  useEffect(() => {
+    let cancelled = false;
+    listVendorSuggestions()
+      .then((rows) => { if (!cancelled) setSuggestions(rows); })
+      .catch(() => { if (!cancelled) setSuggestions([]); });
+    fetchAll("/auth/fisherfolk/")
+      .then((rows) => { if (!cancelled) { setFisherfolk(rows); setFisherfolkError(""); } })
+      .catch((err) => { if (!cancelled) setFisherfolkError(err.message); })
+      .finally(() => { if (!cancelled) setFisherfolkLoading(false); });
+    return () => { cancelled = true; };
+  }, [activePage]);
 
   const [dismissedNotifs, setDismissedNotifs] = useState([]);
 
@@ -452,28 +362,7 @@ useEffect(() => {
     setTimeout(() => setToast(""), 2600);
   };
 
-  const addLog = (action, species, details, status = "Success") => {
-    setLogs((prev) => [
-      { id: Date.now(), date: new Date().toLocaleString("en-PH", { month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), user: ME, action, species, details, status },
-      ...prev,
-    ]);
-  };
-
-  const addValidation = (action, details) => {
-    setValidationHistory((prev) => [
-      { id: Date.now(), date: new Date().toLocaleString("en-PH", { month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), user: ME, action, details },
-      ...prev,
-    ]);
-  };
-
-  const logActivity = (action) => {
-    setMyActivity((prev) => [
-      { id: Date.now(), date: new Date().toLocaleString("en-PH", { month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), action },
-      ...prev,
-    ]);
-  };
-
-  const notifications = buildLguNotifications(suggestions, entries, fisherfolk);
+  const notifications = buildLguNotifications(suggestions, priceRecords, fisherfolk);
   const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
 
   const menuGroups = [
@@ -526,92 +415,62 @@ useEffect(() => {
 
   const renderPage = () => {
     switch (activePage) {
- case "Price Entry":
-  return (
-    <PriceEntry
-  // Existing frontend entries.
-  entries={entries}
-  setEntries={setEntries}
-
-  // Existing helper functions.
-  notify={notify}
-  addLog={addLog}
-  logActivity={logActivity}
-
-  // Real Django price records.
-  priceRecords={priceRecords}
-  setPriceRecords={setPriceRecords}
-
-  // Reload Django records after save/edit/delete.
-  refreshPrices={refreshPrices}
-/>
-  );
-     case "Review & Publish":
-  return (
-    <ReviewPublish
-      // Send the real Django price records to ReviewPublish.
-      priceRecords={priceRecords}
-
-      // Allows ReviewPublish to refresh data after approve/reject/publish.
-      refreshPrices={refreshPrices}
-
-      // Keep the existing frontend properties for now.
-      entries={entries}
-      setEntries={setEntries}
-      notify={notify}
-      addLog={addLog}
-      addValidation={addValidation}
-      logActivity={logActivity}
-    />
-  );
+      case "Price Entry":
+        return (
+          <PriceEntry
+            notify={notify}
+            // Real Django price records.
+            priceRecords={priceRecords}
+            setPriceRecords={setPriceRecords}
+            // Reload Django records after save/edit/delete.
+            refreshPrices={refreshPrices}
+          />
+        );
+      case "Review & Publish":
+        return (
+          <ReviewPublish
+            priceRecords={priceRecords}
+            refreshPrices={refreshPrices}
+            notify={notify}
+          />
+        );
       case "Fish Species Management":
         return <LGUFishSpeciesManagement notify={notify} />;
       case "External Factors":
-        return <ExternalFactors factors={factors} setFactors={setFactors} notify={notify} addLog={addLog} />;
+        return <ExternalFactors />;
       case "Fisherfolk Management":
-        return <FisherfolkManagement fisherfolk={fisherfolk} notify={notify} />;
+        return <FisherfolkManagement fisherfolk={fisherfolk} suggestions={suggestions} loading={fisherfolkLoading} error={fisherfolkError} />;
       case "Price Suggestions":
-        return (
-          <PriceSuggestions
-            suggestions={suggestions} setSuggestions={setSuggestions}
-            referencePrices={referencePrices} setReferencePrices={setReferencePrices}
-            notify={notify} addValidation={addValidation} logActivity={logActivity}
-          />
-        );
+        return <PriceSuggestions notify={notify} />;
       case "Official Reference Prices":
-        return (
-          <OfficialReferencePrices
-            referencePrices={referencePrices} setReferencePrices={setReferencePrices}
-            notify={notify} addValidation={addValidation} logActivity={logActivity}
-          />
-        );
+        return <OfficialReferencePrices priceRecords={priceRecords} loading={pricesLoading} error={pricesError} goTo={setActivePage} />;
       case "Price Trends":
-        return <PriceTrends priceHistory={priceHistory} />;
+        return <PriceTrends priceRecords={priceRecords} loading={pricesLoading} error={pricesError} />;
       case "Price Comparison":
-        return <PriceComparison marketPrices={marketPrices} />;
+        return <PriceComparison priceRecords={priceRecords} loading={pricesLoading} error={pricesError} />;
       case "Price Anomalies":
-        return <PriceAnomalies entries={entries} suggestions={suggestions} />;
+        return <PriceAnomalies priceRecords={priceRecords} suggestions={suggestions} />;
       case "Price Forecast":
-        return <PriceForecast priceHistory={priceHistory} factors={factors} notify={notify} />;
+        return <PriceForecast priceRecords={priceRecords} loading={pricesLoading} error={pricesError} notify={notify} />;
       case "Reports":
-        return <Reports entries={entries} notify={notify} />;
+        return <Reports priceRecords={priceRecords} notify={notify} />;
       case "Validation History":
-        return <ValidationHistory validationHistory={validationHistory} notify={notify} />;
+        return <ValidationHistory notify={notify} />;
       case "Audit Log":
-        return <AuditLog logs={logs} notify={notify} />;
+        return <AuditLog notify={notify} />;
       case "Notifications":
         return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} goTo={setActivePage} />;
       case "My Profile":
-        return <MyProfile profile={profile} setProfile={setProfile} activity={myActivity} notify={notify} />;
+        return <AccountProfile account={account} notify={notify} description="Your LGU officer account details and recent activity." />;
       default:
         return (
-          <LGUDashboard 
-            entries={entries} priceRecords={priceRecords} pricesLoading={pricesLoading} pricesError={pricesError} logs={logs} suggestions={suggestions} fisherfolk={fisherfolk}
-            priceHistory={priceHistory} goTo={setActivePage} 
-          // Send the logged-in user's name to the dashboard.
-             userName={ME}
-            />
-            
+          <LGUDashboard
+            priceRecords={priceRecords} pricesLoading={pricesLoading} pricesError={pricesError}
+            suggestions={suggestions} fisherfolk={fisherfolk}
+            goTo={setActivePage}
+            // Send the logged-in user's name to the dashboard.
+            userName={ME}
+          />
         );
     }
   };
@@ -708,7 +567,7 @@ useEffect(() => {
   );
 }
 
-function buildLguNotifications(suggestions, entries, fisherfolk) {
+function buildLguNotifications(suggestions, priceRecords, fisherfolk) {
   const notifs = [];
   let id = 1;
 
@@ -721,7 +580,7 @@ function buildLguNotifications(suggestions, entries, fisherfolk) {
     });
   }
 
-  const pendingFisherfolk = fisherfolk.filter((f) => f.status === "Pending");
+  const pendingFisherfolk = fisherfolk.filter((f) => f.account_status === "pending");
   if (pendingFisherfolk.length > 0) {
     notifs.push({
       id: id++, type: "info", page: "Fisherfolk Management",
@@ -730,16 +589,28 @@ function buildLguNotifications(suggestions, entries, fisherfolk) {
     });
   }
 
-  const flagged = entries.filter((e) => e.status === "Flagged");
+  const forReview = priceRecords.filter((r) => r.status === "pending");
+  if (forReview.length > 0) {
+    notifs.push({
+      id: id++, type: "warning", page: "Review & Publish",
+      title: `${forReview.length} price entr${forReview.length > 1 ? "ies" : "y"} waiting for review`,
+      detail: forReview.slice(0, 3).map((r) => `${r.fish_name} at ${peso(r.price_per_kg)}`).join(", "),
+    });
+  }
+
+  const flagged = priceRecords.filter((r) => r.status === "flagged");
   if (flagged.length > 0) {
     notifs.push({
       id: id++, type: "danger", page: "Review & Publish",
       title: `${flagged.length} flagged price entr${flagged.length > 1 ? "ies" : "y"}`,
-      detail: flagged.map((e) => `${e.species} at ${peso(e.price)}`).join(", "),
+      detail: flagged.slice(0, 3).map((r) => `${r.fish_name} at ${peso(r.price_per_kg)}`).join(", "),
     });
   }
 
-  const notEncoded = SPECIES_LIST.filter((sp) => !entries.some((e) => e.species === sp));
+  // Species that have price history but no entry yet for today.
+  const today = new Date().toLocaleDateString("en-CA");
+  const encodedToday = new Set(priceRecords.filter((r) => r.recorded_date === today).map((r) => r.fish_name));
+  const notEncoded = recordSpeciesNames(priceRecords).filter((sp) => !encodedToday.has(sp));
   if (notEncoded.length > 0) {
     notifs.push({
       id: id++, type: "warning", page: "Price Entry",
@@ -755,7 +626,7 @@ function buildLguNotifications(suggestions, entries, fisherfolk) {
    DASHBOARD
    ================================================================ */
 
-function LGUDashboard({ entries, priceRecords, pricesLoading, pricesError, logs, suggestions, fisherfolk, priceHistory, goTo, userName }) {
+function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, fisherfolk, goTo, userName }) {
   // Build today's local date as YYYY-MM-DD, matching Django's recorded_date field.
   const today = new Date().toLocaleDateString("en-CA");
 
@@ -803,11 +674,11 @@ function LGUDashboard({ entries, priceRecords, pricesLoading, pricesError, logs,
     ? priceRecords.filter((record) => normalizeStatus(record.status) === "flagged").length
     : null;
 
-  // The current Django price response does not contain suggestion/fisherfolk data.
-  // Show a dash rather than continuing to display the old mock values.
-  const suggestionsThisWeek = null;
-  const participatingFisherfolk = null;
-  const pendingSuggestions = null;
+  // Suggestion and fisherfolk counts from the vendor-suggestions API.
+  const weekStart = startOfWeek.toLocaleDateString("en-CA");
+  const suggestionsThisWeek = suggestions.filter((s) => s.date >= weekStart).length;
+  const participatingFisherfolk = fisherfolk.filter((f) => f.suggestion_count > 0).length;
+  const pendingSuggestions = suggestions.filter((s) => s.status === "Pending Review").length;
 
   // Sort real Django records newest first for Recent Activity.
   const recentPriceRecords = [...priceRecords]
@@ -905,8 +776,8 @@ function LGUDashboard({ entries, priceRecords, pricesLoading, pricesError, logs,
           <div className="stat-icon green">📥</div>
           <div>
             <span>Suggestions This Week</span>
-            <h2>{suggestionsThisWeek ?? "—"}</h2>
-            <small>Suggestions API not connected yet</small>
+            <h2>{suggestionsThisWeek}</h2>
+            <small>submitted by fish vendors</small>
           </div>
         </div>
 
@@ -914,8 +785,8 @@ function LGUDashboard({ entries, priceRecords, pricesLoading, pricesError, logs,
           <div className="stat-icon purple">👥</div>
           <div>
             <span>Participating Fisherfolk</span>
-            <h2>{participatingFisherfolk ?? "—"}</h2>
-            <small>{pendingSuggestions ?? "—"} suggestions pending</small>
+            <h2>{participatingFisherfolk}</h2>
+            <small>{pendingSuggestions} suggestions pending</small>
           </div>
         </div>
       </div>
@@ -1014,7 +885,7 @@ function LGUDashboard({ entries, priceRecords, pricesLoading, pricesError, logs,
    LGU FISH SPECIES MANAGEMENT — DJANGO DATABASE
    ================================================================ */
 function LGUFishSpeciesManagement({ notify }) {
-  const API = "http://127.0.0.1:8000/api/fish-species/";
+  const API = `${API_BASE_URL}/fish-species/`;
   const [species, setSpecies] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -1240,11 +1111,7 @@ function LGUFishSpeciesManagement({ notify }) {
 }
 
 function PriceEntry({
-  entries,
-  setEntries,
   notify,
-  addLog,
-  logActivity,
   refreshPrices,
   setPriceRecords,
 }) {
@@ -1294,7 +1161,7 @@ function PriceEntry({
       const token = getToken();
 
       const response = await fetch(
-        "http://127.0.0.1:8000/api/fish-species/",
+        `${API_BASE_URL}/fish-species/`,
         {
           headers: {
             Authorization: `Token ${token}`,
@@ -1346,7 +1213,7 @@ function PriceEntry({
       const token = getToken();
 
       const response = await fetch(
-        "http://127.0.0.1:8000/api/municipalities/",
+        `${API_BASE_URL}/municipalities/`,
         {
           headers: {
             Authorization: `Token ${token}`,
@@ -1428,7 +1295,7 @@ function PriceEntry({
       const token = getToken();
 
       const response = await fetch(
-        "http://127.0.0.1:8000/api/prices/",
+        `${API_BASE_URL}/prices/`,
         {
           headers: {
             Authorization: `Token ${token}`,
@@ -1545,7 +1412,7 @@ function PriceEntry({
 
       // Send the new price record to Django.
       const response = await fetch(
-        "http://127.0.0.1:8000/api/prices/",
+        `${API_BASE_URL}/prices/`,
         {
           method: "POST",
 
@@ -1594,19 +1461,7 @@ function PriceEntry({
         await refreshPrices();
       }
 
-      // Add the action to the local audit log.
-      addLog(
-        "Encoded price",
-        data.fish_name,
-        `₱${Number(data.price_per_kg).toFixed(2)} per kg`
-      );
 
-      // Add the action to recent user activity.
-      logActivity(
-        `Encoded price for ${data.fish_name}: ₱${Number(
-          data.price_per_kg
-        ).toFixed(2)}`
-      );
 
       notify(
         `${data.fish_name} price saved successfully.`
@@ -1658,7 +1513,7 @@ function PriceEntry({
 
       // Update only the price field in Django.
       const response = await fetch(
-        `http://127.0.0.1:8000/api/prices/${record.id}/`,
+        `${API_BASE_URL}/prices/${record.id}/`,
         {
           method: "PATCH",
 
@@ -1695,18 +1550,7 @@ function PriceEntry({
         await refreshPrices();
       }
 
-      // Record the update in the local log.
-      addLog(
-        "Edited price",
-        record.fish_name,
-        `₱${Number(
-          record.price_per_kg
-        ).toFixed(2)} → ₱${newPrice.toFixed(2)}`
-      );
 
-      logActivity(
-        `Edited price for ${record.fish_name}`
-      );
 
       notify(
         `${record.fish_name} price updated.`
@@ -1741,7 +1585,7 @@ function PriceEntry({
 
       // Delete the record from Django.
       const response = await fetch(
-        `http://127.0.0.1:8000/api/prices/${record.id}/`,
+        `${API_BASE_URL}/prices/${record.id}/`,
         {
           method: "DELETE",
 
@@ -1782,18 +1626,7 @@ function PriceEntry({
         await refreshPrices();
       }
 
-      // Add the deletion to the audit log.
-      addLog(
-        "Deleted price",
-        record.fish_name,
-        `₱${Number(
-          record.price_per_kg
-        ).toFixed(2)}`
-      );
 
-      logActivity(
-        `Deleted price for ${record.fish_name}`
-      );
 
       notify(
         `${record.fish_name} price deleted.`
@@ -1820,7 +1653,7 @@ function PriceEntry({
     try {
       const token = getToken();
       if (!token) throw new Error("Please log in again.");
-      const response = await fetch(`http://127.0.0.1:8000/api/prices/${record.id}/submit-review/`, {
+      const response = await fetch(`${API_BASE_URL}/prices/${record.id}/submit-review/`, {
         method: "POST",
         headers: { Authorization: `Token ${token}`, "Content-Type": "application/json" },
       });
@@ -2111,13 +1944,7 @@ function ReviewPublish({
   priceRecords,
   refreshPrices,
 
-  // Existing helper functions.
-  entries,
-  setEntries,
   notify,
-  addLog,
-  addValidation,
-  logActivity,
 }) {
   // Controls the currently selected tab.
   const [tab, setTab] = useState("For Review");
@@ -2125,10 +1952,7 @@ function ReviewPublish({
   // Stores the text entered in the search box.
   const [search, setSearch] = useState("");
 
-  // Use the real Django price records whenever they are available.
-  // This prevents the Review & Publish page from depending only
-  // on the old frontend demo entries.
-  const records = priceRecords.length > 0 ? priceRecords : entries;
+  const records = priceRecords;
 
   // Convert a Django PriceRecord into the format expected
   // by the existing Review & Publish table.
@@ -2284,7 +2108,7 @@ console.log("Bangus #8 comparison:", {
 
       // Send the approval request to Django.
       const response = await fetch(
-        `http://127.0.0.1:8000/api/prices/${record.id}/approve/`,
+        `${API_BASE_URL}/prices/${record.id}/approve/`,
         {
           method: "POST",
           headers: {
@@ -2312,26 +2136,8 @@ console.log("Bangus #8 comparison:", {
         await refreshPrices();
       }
 
-      if (addLog) {
-        addLog(
-          "Approved price",
-          record.species,
-          peso(record.price)
-        );
-      }
 
-      if (addValidation) {
-        addValidation(
-          "Approved price entry",
-          `${record.species} at ${peso(record.price)}`
-        );
-      }
 
-      if (logActivity) {
-        logActivity(
-          `Approved price for ${record.species}`
-        );
-      }
 
       notify(
         `${record.species} approved. Publish to make it live.`
@@ -2363,7 +2169,7 @@ console.log("Bangus #8 comparison:", {
 
       // Send the rejection request to Django.
       const response = await fetch(
-        `http://127.0.0.1:8000/api/prices/${record.id}/reject/`,
+        `${API_BASE_URL}/prices/${record.id}/reject/`,
         {
           method: "POST",
           headers: {
@@ -2397,27 +2203,8 @@ console.log("Bangus #8 comparison:", {
         await refreshPrices();
       }
 
-      if (addLog) {
-        addLog(
-          "Rejected price",
-          record.species,
-          peso(record.price),
-          "Rejected"
-        );
-      }
 
-      if (addValidation) {
-        addValidation(
-          "Rejected price entry",
-          `${record.species} at ${peso(record.price)}`
-        );
-      }
 
-      if (logActivity) {
-        logActivity(
-          `Rejected price for ${record.species}`
-        );
-      }
 
       notify(`${record.species} rejected.`);
     } catch (error) {
@@ -2451,7 +2238,7 @@ console.log("Bangus #8 comparison:", {
       // Publish each approved database record.
       for (const record of approved) {
         const response = await fetch(
-          `http://127.0.0.1:8000/api/prices/${record.id}/publish/`,
+          `${API_BASE_URL}/prices/${record.id}/publish/`,
           {
             method: "POST",
             headers: {
@@ -2479,26 +2266,8 @@ console.log("Bangus #8 comparison:", {
         await refreshPrices();
       }
 
-      if (addLog) {
-        addLog(
-          "Published prices",
-          "—",
-          `${approved.length} entries published`
-        );
-      }
 
-      if (addValidation) {
-        addValidation(
-          "Published daily prices",
-          `${approved.length} entries published`
-        );
-      }
 
-      if (logActivity) {
-        logActivity(
-          `Published ${approved.length} daily price entries`
-        );
-      }
 
       notify(
         `${approved.length} prices published. Vendors can now see them.`
@@ -2646,9 +2415,7 @@ console.log("Bangus #8 comparison:", {
                           </strong>
 
                           <small>
-                            {SCI_NAMES[
-                              record.species
-                            ] || ""}
+                            {record.municipality_name || ""}
                           </small>
                         </div>
                       </div>
@@ -2739,101 +2506,16 @@ console.log("Bangus #8 comparison:", {
    EXTERNAL FACTORS
    ================================================================ */
 
-function ExternalFactors({ factors, setFactors, notify, addLog }) {
-  const [form, setForm] = useState({ date: "2026-09-16", fuel: "66.80", weather: "Cloudy", holiday: true, note: "Local fiesta — Barangay Pasil" });
-  const update = (key, val) => setForm({ ...form, [key]: val });
-
-  const save = () => {
-    const fuel = parseFloat(form.fuel);
-    if (!form.date || isNaN(fuel) || fuel <= 0) {
-      notify("Enter a valid date and fuel price.");
-      return;
-    }
-    const formatted = new Date(form.date).toLocaleDateString("en-PH");
-    setFactors((prev) => [{ id: Date.now(), date: formatted, fuel, weather: form.weather, holiday: form.holiday, note: form.note }, ...prev]);
-    addLog("Logged external factor", "—", `Fuel ${peso(fuel)}, ${form.weather}`);
-    notify("External factor saved.");
-  };
-
-  const remove = (f) => {
-    if (!window.confirm(`Delete the entry for ${f.date}?`)) return;
-    setFactors((prev) => prev.filter((x) => x.id !== f.id));
-    notify("Entry deleted.");
-  };
-
-  const edit = (f) => {
-    const input = window.prompt(`New fuel price for ${f.date}:`, f.fuel);
-    if (input === null) return;
-    const fuel = parseFloat(input);
-    if (isNaN(fuel) || fuel <= 0) {
-      notify("Invalid fuel price.");
-      return;
-    }
-    setFactors((prev) => prev.map((x) => (x.id === f.id ? { ...x, fuel } : x)));
-    notify("Entry updated.");
-  };
-
+function ExternalFactors() {
   return (
     <>
       <div className="page-title">
-        <div><h2>External Factors</h2><p>Log fuel prices, weather, and holidays used by the forecasting model.</p></div>
+        <div><h2>External Factors</h2><p>Fuel prices, weather, and holidays that affect fish supply.</p></div>
       </div>
-
-      <div className="config-grid">
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon orange">☁</div>
-            <div><h3>Log External Factor</h3><p>Record conditions that affect fish supply</p></div>
-          </div>
-
-          <div className="form-group"><label>Date</label><input type="date" value={form.date} onChange={(e) => update("date", e.target.value)} /></div>
-          <div className="form-group">
-            <label>Fuel Price per Liter</label>
-            <div className="input-with-unit"><span>₱</span><input type="number" step="0.01" value={form.fuel} onChange={(e) => update("fuel", e.target.value)} /></div>
-          </div>
-          <div className="form-group">
-            <label>Weather Condition</label>
-            <select value={form.weather} onChange={(e) => update("weather", e.target.value)}>
-              <option>Sunny</option><option>Cloudy</option><option>Rainy</option><option>Stormy</option>
-            </select>
-          </div>
-          <div className="toggle-row">
-            <div><strong>Holiday or Fiesta</strong><p>Mark if this date is a local holiday.</p></div>
-            <label className="switch"><input type="checkbox" checked={form.holiday} onChange={(e) => update("holiday", e.target.checked)} /><span className="slider"></span></label>
-          </div>
-          <div className="form-group"><label>Notes</label><input value={form.note} onChange={(e) => update("note", e.target.value)} /></div>
-          <button className="primary-btn full-btn" onClick={save}>Save Factor</button>
-        </div>
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon purple">▤</div>
-            <div><h3>Recent Entries</h3><p>Latest logged external conditions</p></div>
-          </div>
-
-          <table className="inner-table">
-            <thead><tr><th>DATE</th><th>FUEL</th><th>WEATHER</th><th>HOLIDAY</th><th>ACTIONS</th></tr></thead>
-            <tbody>
-              {factors.map((f) => (
-                <tr key={f.id}>
-                  <td>{f.date}</td>
-                  <td><strong>{peso(f.fuel)}</strong></td>
-                  <td>{f.weather}</td>
-                  <td>{f.holiday ? <span className="badge pending">Yes</span> : <span className="badge inactive">No</span>}</td>
-                  <td>
-                    <div className="action-icons">
-                      <button title="Edit" onClick={() => edit(f)}>✎</button>
-                      <button title="Delete" onClick={() => remove(f)}>✕</button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="info-box purple-info">These values are used as external inputs in the forecasting module to improve price predictions.</div>
-        </div>
-      </div>
+      <EmptyPanel>
+        External factors are not stored in the AquaTimbang database yet, so there is nothing to show here.
+        Forecasts are currently based only on LGU-published price history.
+      </EmptyPanel>
     </>
   );
 }
@@ -2842,22 +2524,24 @@ function ExternalFactors({ factors, setFactors, notify, addLog }) {
    FISHERFOLK MANAGEMENT
    ================================================================ */
 
-function FisherfolkManagement({ fisherfolk, notify }) {
+function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
   const [search, setSearch] = useState("");
   const [viewing, setViewing] = useState(null);
 
+  const statusLabel = (f) => (f.account_status === "approved" ? (f.is_active ? "Active" : "Inactive") : f.account_status === "pending" ? "Pending" : "Rejected");
   const visible = fisherfolk.filter((f) =>
-    [f.name, f.municipality].join(" ").toLowerCase().includes(search.toLowerCase())
+    [f.name, f.username, f.municipality, f.market_name].join(" ").toLowerCase().includes(search.toLowerCase())
   );
-
   const initials = (name) => name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
+  const formatDay = (value) => (value ? new Date(value).toLocaleDateString("en-PH") : "—");
+  const vendorSuggestions = viewing ? suggestions.filter((s) => s.vendorId === viewing.id) : [];
 
   return (
     <>
       <div className="page-title">
         <div>
           <h2>Fisherfolk Management</h2>
-          <p>Monitor the fisherfolk accounts registered under your municipality.</p>
+          <p>Monitor the fish vendor accounts registered under your municipality.</p>
         </div>
       </div>
 
@@ -2873,29 +2557,29 @@ function FisherfolkManagement({ fisherfolk, notify }) {
               <div className="table-avatar profile-avatar">{initials(viewing.name)}</div>
               <div>
                 <strong>{viewing.name}</strong>
-                <p>{viewing.municipality}</p>
+                <p>{viewing.municipality || "—"}</p>
                 <div className="profile-badges">
-                  <span className={`badge ${viewing.status.toLowerCase()}`}>{viewing.status}</span>
+                  <span className={`badge ${statusLabel(viewing).toLowerCase()}`}>{statusLabel(viewing)}</span>
                 </div>
               </div>
             </div>
 
             <div className="profile-grid">
-              <div className="profile-field"><span>Registration Date</span><strong>{viewing.registeredDate}</strong></div>
-              <div className="profile-field"><span>Price Suggestions</span><strong>{viewing.suggestionCount}</strong></div>
-              <div className="profile-field"><span>Last Submission</span><strong>{viewing.lastSubmission}</strong></div>
-              <div className="profile-field"><span>Account Status</span><strong>{viewing.status}</strong></div>
+              <div className="profile-field"><span>Registration Date</span><strong>{formatDay(viewing.date_joined)}</strong></div>
+              <div className="profile-field"><span>Market / Stall</span><strong>{viewing.market_name || "—"}{viewing.stall_number ? ` · ${viewing.stall_number}` : ""}</strong></div>
+              <div className="profile-field"><span>Price Suggestions</span><strong>{viewing.suggestion_count}</strong></div>
+              <div className="profile-field"><span>Last Submission</span><strong>{formatDay(viewing.last_submission)}</strong></div>
             </div>
 
-            <div className="mini-head">Account Activity</div>
+            <div className="mini-head">Recent Suggestions</div>
             <div className="history-list">
-              {viewing.activity.length === 0 ? (
-                <p className="empty-row">No recorded activity yet.</p>
+              {vendorSuggestions.length === 0 ? (
+                <p className="empty-row">No suggestions submitted yet.</p>
               ) : (
-                viewing.activity.map((a, i) => (
-                  <div className="history-item" key={i}>
-                    <div><strong>{a.action}</strong></div>
-                    <small>{a.date}</small>
+                vendorSuggestions.slice(0, 10).map((s) => (
+                  <div className="history-item" key={s.id}>
+                    <div><strong>{s.species} — {peso(s.suggestedPrice)}</strong> <span className="badge pending">{s.status}</span></div>
+                    <small>{s.date}</small>
                   </div>
                 ))
               )}
@@ -2929,7 +2613,11 @@ function FisherfolkManagement({ fisherfolk, notify }) {
             </tr>
           </thead>
           <tbody>
-            {visible.length === 0 ? (
+            {loading ? (
+              <tr><td colSpan="7" className="empty-row">Loading fisherfolk…</td></tr>
+            ) : error ? (
+              <tr><td colSpan="7" className="empty-row">{error}</td></tr>
+            ) : visible.length === 0 ? (
               <tr><td colSpan="7" className="empty-row">No fisherfolk found.</td></tr>
             ) : (
               visible.map((f) => (
@@ -2940,14 +2628,14 @@ function FisherfolkManagement({ fisherfolk, notify }) {
                       <strong>{f.name}</strong>
                     </div>
                   </td>
-                  <td>{f.municipality}</td>
-                  <td>{f.registeredDate}</td>
-                  <td><span className={`badge ${f.status.toLowerCase()}`}>{f.status}</span></td>
-                  <td>{f.suggestionCount}</td>
-                  <td>{f.lastSubmission}</td>
+                  <td>{f.municipality || "—"}</td>
+                  <td>{formatDay(f.date_joined)}</td>
+                  <td><span className={`badge ${statusLabel(f).toLowerCase()}`}>{statusLabel(f)}</span></td>
+                  <td>{f.suggestion_count}</td>
+                  <td>{formatDay(f.last_submission)}</td>
                   <td>
                     <div className="action-icons">
-                      <button title="View Activity" onClick={() => setViewing(f)}>👁</button>
+                      <button title="View Profile" onClick={() => setViewing(f)}>👁</button>
                     </div>
                   </td>
                 </tr>
@@ -2965,15 +2653,7 @@ function FisherfolkManagement({ fisherfolk, notify }) {
    ================================================================ */
 
 
-function PriceSuggestions({
-  suggestions,
-  setSuggestions,
-  referencePrices,
-  setReferencePrices,
-  notify,
-  addValidation,
-  logActivity,
-}) {
+function PriceSuggestions({ notify }) {
   const [speciesFilter, setSpeciesFilter] = useState("All Species");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [search, setSearch] = useState("");
@@ -3026,11 +2706,8 @@ function PriceSuggestions({
     );
 
   const speciesNames = [
-    ...new Set([
-      ...SPECIES_LIST,
-      ...records.map((s) => s.species).filter(Boolean),
-    ]),
-  ];
+    ...new Set(records.map((s) => s.species).filter(Boolean)),
+  ].sort((a, b) => a.localeCompare(b));
 
   const computedAverage = (species) => {
     const rows = records.filter(
@@ -3078,16 +2755,7 @@ function PriceSuggestions({
 
       const label = labels[decision];
 
-      addValidation?.(
-        `${label} vendor suggestion`,
-        `${suggestion.species} by ${
-          suggestion.submittedBy || "Vendor"
-        }: ${peso(suggestion.suggestedPrice)}`
-      );
 
-      logActivity?.(
-        `${label} suggestion for ${suggestion.species}`
-      );
 
       notify?.(`Suggestion ${label.toLowerCase()} successfully.`);
     } catch (err) {
@@ -3417,98 +3085,48 @@ function PriceSuggestions({
    OFFICIAL REFERENCE PRICES
    ================================================================ */
 
-function OfficialReferencePrices({ referencePrices, setReferencePrices, notify, addValidation, logActivity }) {
-  const [showForm, setShowForm] = useState(false);
-  const [target, setTarget] = useState(null);
-  const [price, setPrice] = useState("");
-  const [note, setNote] = useState("");
-
-  const openPublish = (r) => {
-    setTarget(r);
-    setPrice(String(r.price));
-    setNote("");
-    setShowForm(true);
-  };
-
-  const publish = () => {
-    const value = parseFloat(price);
-    if (isNaN(value) || value <= 0) {
-      notify("Enter a valid price.");
-      return;
-    }
-
-    setReferencePrices((prev) =>
-      prev.map((r) => (r.id === target.id ? { ...r, price: value, publishedDate: new Date().toLocaleDateString("en-PH"), publishedBy: ME } : r))
-    );
-
-    addValidation(
-      value === target.price ? "Re-confirmed reference price" : "Published corrected reference price",
-      `${target.species}: ${peso(target.price)} → ${peso(value)}${note ? ` — ${note}` : ""}`
-    );
-    logActivity(`Published reference price for ${target.species}: ${peso(value)}`);
-    notify(`${target.species} reference price published.`);
-    setShowForm(false);
-  };
+function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
+  // The latest published price for each species and municipality is the official reference.
+  const rows = latestBy(priceRecords.filter(isPublished), (r) => `${r.fish_species}|${r.municipality}`)
+    .sort((a, b) => a.fish_name.localeCompare(b.fish_name) || a.municipality_name.localeCompare(b.municipality_name));
 
   return (
     <>
       <div className="page-title">
         <div>
           <h2>Official Reference Prices</h2>
-          <p>The current published reference price per species — separate from daily market entries.</p>
+          <p>The latest published price per species and municipality.</p>
         </div>
+        <button className="secondary-btn" onClick={() => goTo("Price Entry")}>✎ Encode New Price</button>
       </div>
 
-      {showForm && target && (
-        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h3>Publish Reference Price — {target.species}</h3>
-              <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
-            </div>
-
-            <div className="form-group">
-              <label>Current Reference Price</label>
-              <div className="locked-field">{peso(target.price)}</div>
-            </div>
-
-            <div className="form-group">
-              <label>New Reference Price per KG</label>
-              <div className="input-with-unit"><span>₱</span><input type="number" value={price} onChange={(e) => setPrice(e.target.value)} /></div>
-            </div>
-
-            <div className="form-group">
-              <label>Note (optional, for the audit trail)</label>
-              <input value={note} placeholder="Reason for this correction or update" onChange={(e) => setNote(e.target.value)} />
-            </div>
-
-            <div className="button-row">
-              <button className="secondary-btn" onClick={() => setShowForm(false)}>Cancel</button>
-              <button className="primary-btn" onClick={publish}>Publish</button>
-            </div>
-          </div>
-        </div>
-      )}
+      <div className="info-box" style={{ marginBottom: 14 }}>
+        To change a reference price, encode a new price in Price Entry and publish it in Review &amp; Publish.
+      </div>
 
       <div className="panel">
         <table>
           <thead>
-            <tr><th>SPECIES</th><th>REFERENCE PRICE</th><th>LAST PUBLISHED</th><th>PUBLISHED BY</th><th>ACTIONS</th></tr>
+            <tr><th>SPECIES</th><th>MUNICIPALITY</th><th>REFERENCE PRICE</th><th>PRICE DATE</th><th>PUBLISHED BY</th></tr>
           </thead>
           <tbody>
-            {referencePrices.map((r) => (
-              <tr key={r.id}>
-                <td><strong>{r.species}</strong></td>
-                <td><strong>{peso(r.price)}</strong></td>
-                <td>{r.publishedDate}</td>
-                <td>{r.publishedBy}</td>
-                <td>
-                  <div className="action-icons">
-                    <button title="Publish / Correct" onClick={() => openPublish(r)}>✎</button>
-                  </div>
-                </td>
-              </tr>
-            ))}
+            {loading ? (
+              <tr><td colSpan="5" className="empty-row">Loading published prices…</td></tr>
+            ) : error ? (
+              <tr><td colSpan="5" className="empty-row">{error}</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan="5" className="empty-row">No prices have been published yet.</td></tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.id}>
+                  <td><strong>{r.fish_name}</strong></td>
+                  <td>{r.municipality_name}</td>
+                  <td><strong>{peso(r.price_per_kg)}</strong></td>
+                  <td>{fmtDate(r.recorded_date)}</td>
+                  <td>{r.published_by_name || "—"}</td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -3520,19 +3138,23 @@ function OfficialReferencePrices({ referencePrices, setReferencePrices, notify, 
    PRICE TRENDS (broader LGU view)
    ================================================================ */
 
-function PriceTrends({ priceHistory }) {
-  const [species, setSpecies] = useState(SPECIES_LIST[0]);
+function PriceTrends({ priceRecords, loading, error }) {
+  const published = priceRecords.filter(isPublished);
+  const species = recordSpeciesNames(published);
+  const municipalities = municipalityNames(published);
+  const [selected, setSelected] = useState("");
+  const [municipality, setMunicipality] = useState("");
   const [range, setRange] = useState("30");
+  const current = species.includes(selected) ? selected : species[0] || "";
 
-  const rows = priceHistory[species].slice(-Number(range));
+  const rows = lastDays(dailySeries(published, current, municipality), range);
   const prices = rows.map((r) => r.price);
-  const avg = prices.reduce((a, b) => a + b, 0) / prices.length;
-  const high = Math.max(...prices);
-  const low = Math.min(...prices);
-  const first = prices[0];
-  const last = prices[prices.length - 1];
-  const change = last - first;
-  const pctChange = (change / first) * 100;
+  const hasData = prices.length > 0;
+  const avg = hasData ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
+  const high = hasData ? Math.max(...prices) : null;
+  const low = hasData ? Math.min(...prices) : null;
+  const change = hasData ? prices[prices.length - 1] - prices[0] : 0;
+  const pctChange = hasData && prices[0] ? (change / prices[0]) * 100 : 0;
   const max = Math.max(...prices, 1);
 
   return (
@@ -3540,75 +3162,89 @@ function PriceTrends({ priceHistory }) {
       <div className="page-title">
         <div>
           <h2>Price Trends</h2>
-          <p>A broader view of price movement across all species, for oversight and planning.</p>
+          <p>Movement of LGU-published prices, for oversight and planning.</p>
         </div>
         <div className="filter-row">
-          <select className="date-input" value={species} onChange={(e) => setSpecies(e.target.value)}>
-            {SPECIES_LIST.map((s) => <option key={s}>{s}</option>)}
+          <select className="date-input" value={current} onChange={(e) => setSelected(e.target.value)} disabled={!species.length}>
+            {!species.length && <option value="">No published prices</option>}
+            {species.map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <select className="date-input" value={municipality} onChange={(e) => setMunicipality(e.target.value)}>
+            <option value="">All municipalities</option>
+            {municipalities.map((m) => <option key={m}>{m}</option>)}
           </select>
           <select className="date-input" value={range} onChange={(e) => setRange(e.target.value)}>
             <option value="7">Last 7 days</option>
             <option value="14">Last 14 days</option>
             <option value="30">Last 30 days</option>
+            <option value="90">Last 90 days</option>
           </select>
         </div>
       </div>
 
-      <div className="stats-grid">
-        <div className="stat-card"><div className="stat-icon blue">₱</div><div><span>Average Price</span><h2>{peso(avg)}</h2></div></div>
-        <div className="stat-card"><div className="stat-icon orange">↑</div><div><span>Highest Price</span><h2>{peso(high)}</h2></div></div>
-        <div className="stat-card"><div className="stat-icon green">↓</div><div><span>Lowest Price</span><h2>{peso(low)}</h2></div></div>
-        <div className="stat-card">
-          <div className={`stat-icon ${change >= 0 ? "purple" : "green"}`}>{change >= 0 ? "▲" : "▼"}</div>
-          <div>
-            <span>Price Change</span>
-            <h2 className={change >= 0 ? "up" : "down"}>{change >= 0 ? "+" : ""}{peso(change)}</h2>
-            <small>{pctChange >= 0 ? "+" : ""}{pctChange.toFixed(1)}% over range</small>
-          </div>
-        </div>
-      </div>
-
-      <div className="panel">
-        <div className="panel-header">
-          <div><h3>{species} — Price History</h3><p>Last {range} days</p></div>
-        </div>
-        <div className="chart-area">
-          <div className="chart-placeholder">
-            <div className="bars">
-              {rows.map((r, i) => (
-                <div key={i} className="bar" style={{ height: `${20 + (r.price / max) * 75}%` }} title={peso(r.price)}></div>
-              ))}
+      {loading ? <EmptyPanel>Loading published prices…</EmptyPanel> : error ? <EmptyPanel>{error}</EmptyPanel> : !hasData ? (
+        <EmptyPanel>No published prices yet. Trends appear once prices are published in Review &amp; Publish.</EmptyPanel>
+      ) : (
+        <>
+          <div className="stats-grid">
+            <div className="stat-card"><div className="stat-icon blue">₱</div><div><span>Average Price</span><h2>{peso(avg)}</h2></div></div>
+            <div className="stat-card"><div className="stat-icon orange">↑</div><div><span>Highest Price</span><h2>{peso(high)}</h2></div></div>
+            <div className="stat-card"><div className="stat-icon green">↓</div><div><span>Lowest Price</span><h2>{peso(low)}</h2></div></div>
+            <div className="stat-card">
+              <div className={`stat-icon ${change >= 0 ? "purple" : "green"}`}>{change >= 0 ? "▲" : "▼"}</div>
+              <div>
+                <span>Price Change</span>
+                <h2 className={change >= 0 ? "up" : "down"}>{change >= 0 ? "+" : ""}{peso(change)}</h2>
+                <small>{pctChange >= 0 ? "+" : ""}{pctChange.toFixed(1)}% over range</small>
+              </div>
             </div>
-            <p className="chart-note">Hover a bar to see that day's price.</p>
           </div>
-        </div>
-      </div>
 
-      <div className="panel" style={{ marginTop: 18 }}>
-        <div className="panel-header">
-          <div><h3>All Species — Percentage Change</h3><p>Over the last {range} days</p></div>
+          <div className="panel">
+            <div className="panel-header">
+              <div><h3>{current} — Price History</h3><p>{rows.length} day{rows.length !== 1 ? "s" : ""} with published prices · {municipality || "all municipalities"}</p></div>
+            </div>
+            <div className="chart-area">
+              <div className="chart-placeholder">
+                <div className="bars">
+                  {rows.map((r) => (
+                    <div key={r.date} className="bar" style={{ height: `${20 + (r.price / max) * 75}%` }} title={`${fmtDate(r.date)} — ${peso(r.price)}`}></div>
+                  ))}
+                </div>
+                <p className="chart-note">Hover a bar to see that day's price.</p>
+              </div>
+            </div>
+          </div>
+        </>
+      )}
+
+      {hasData && (
+        <div className="panel" style={{ marginTop: 18 }}>
+          <div className="panel-header">
+            <div><h3>All Species — Percentage Change</h3><p>Over the selected range</p></div>
+          </div>
+          <table>
+            <thead><tr><th>SPECIES</th><th>START PRICE</th><th>CURRENT PRICE</th><th>CHANGE</th><th>% CHANGE</th></tr></thead>
+            <tbody>
+              {species.map((sp) => {
+                const p = lastDays(dailySeries(published, sp, municipality), range).map((x) => x.price);
+                if (!p.length) return <tr key={sp}><td><strong>{sp}</strong></td><td colSpan="4">No published prices in this range.</td></tr>;
+                const d = p[p.length - 1] - p[0];
+                const pc = p[0] ? (d / p[0]) * 100 : 0;
+                return (
+                  <tr key={sp}>
+                    <td><strong>{sp}</strong></td>
+                    <td>{peso(p[0])}</td>
+                    <td>{peso(p[p.length - 1])}</td>
+                    <td className={d >= 0 ? "up" : "down"}>{d >= 0 ? "+" : ""}{peso(d)}</td>
+                    <td className={pc >= 0 ? "up" : "down"}>{pc >= 0 ? "+" : ""}{pc.toFixed(1)}%</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
-        <table>
-          <thead><tr><th>SPECIES</th><th>START PRICE</th><th>CURRENT PRICE</th><th>CHANGE</th><th>% CHANGE</th></tr></thead>
-          <tbody>
-            {SPECIES_LIST.map((sp) => {
-              const r = priceHistory[sp].slice(-Number(range));
-              const p = r.map((x) => x.price);
-              const d = p[p.length - 1] - p[0];
-              const pc = (d / p[0]) * 100;
-              return (
-                <tr key={sp}>
-                  <td><strong>{sp}</strong></td>
-                  <td>{peso(p[0])}</td>
-                  <td>{peso(p[p.length - 1])}</td>
-                  <td className={d >= 0 ? "up" : "down"}>{d >= 0 ? "+" : ""}{peso(d)}</td>
-                  <td className={pc >= 0 ? "up" : "down"}>{pc >= 0 ? "+" : ""}{pc.toFixed(1)}%</td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
+      )}
     </>
   );
 }
@@ -3617,45 +3253,61 @@ function PriceTrends({ priceHistory }) {
    PRICE COMPARISON
    ================================================================ */
 
-function PriceComparison({ marketPrices }) {
-  const [species, setSpecies] = useState(SPECIES_LIST[0]);
+function PriceComparison({ priceRecords, loading, error }) {
+  const published = priceRecords.filter(isPublished);
+  const species = recordSpeciesNames(published);
+  const [selected, setSelected] = useState("");
+  const current = species.includes(selected) ? selected : species[0] || "";
 
-  const rows = MARKETS.map((mk) => ({ market: mk, price: marketPrices[mk][species] }));
-  const highest = Math.max(...rows.map((r) => r.price));
-  const lowest = Math.min(...rows.map((r) => r.price));
+  // Latest published price for the species in each municipality.
+  const rows = latestBy(published.filter((r) => r.fish_name === current), (r) => r.municipality)
+    .map((r) => ({ municipality: r.municipality_name, price: Number(r.price_per_kg), date: r.recorded_date }))
+    .sort((a, b) => b.price - a.price);
+  const highest = rows.length ? Math.max(...rows.map((r) => r.price)) : null;
+  const lowest = rows.length ? Math.min(...rows.map((r) => r.price)) : null;
 
   return (
     <>
       <div className="page-title">
         <div>
           <h2>Price Comparison</h2>
-          <p>Compare current prices for a species across every market you oversee.</p>
+          <p>Compare the latest published price for a species across municipalities.</p>
         </div>
-        <select className="date-input" value={species} onChange={(e) => setSpecies(e.target.value)}>
-          {SPECIES_LIST.map((s) => <option key={s}>{s}</option>)}
+        <select className="date-input" value={current} onChange={(e) => setSelected(e.target.value)} disabled={!species.length}>
+          {!species.length && <option value="">No published prices</option>}
+          {species.map((s) => <option key={s}>{s}</option>)}
         </select>
       </div>
 
       <div className="panel">
         <div className="panel-header">
-          <div><h3>{species} — Price by Market</h3><p>Today's rates</p></div>
+          <div><h3>{current || "—"} — Price by Municipality</h3><p>Latest published rates</p></div>
         </div>
         <table>
-          <thead><tr><th>MARKET</th><th>PRICE / KG</th><th>VS. HIGHEST</th><th>NOTE</th></tr></thead>
+          <thead><tr><th>MUNICIPALITY</th><th>PRICE / KG</th><th>PRICE DATE</th><th>VS. HIGHEST</th><th>NOTE</th></tr></thead>
           <tbody>
-            {rows.map((r) => (
-              <tr key={r.market}>
-                <td><strong>{r.market}</strong></td>
-                <td><strong>{peso(r.price)}</strong></td>
-                <td className={r.price === highest ? "" : "down"}>
-                  {r.price === highest ? "—" : `-${peso(highest - r.price)}`}
-                </td>
-                <td>
-                  {r.price === highest && <span className="badge accent">Highest</span>}
-                  {r.price === lowest && <span className="badge success">Lowest</span>}
-                </td>
-              </tr>
-            ))}
+            {loading ? (
+              <tr><td colSpan="5" className="empty-row">Loading published prices…</td></tr>
+            ) : error ? (
+              <tr><td colSpan="5" className="empty-row">{error}</td></tr>
+            ) : rows.length === 0 ? (
+              <tr><td colSpan="5" className="empty-row">No published prices yet.</td></tr>
+            ) : (
+              rows.map((r) => (
+                <tr key={r.municipality}>
+                  <td><strong>{r.municipality}</strong></td>
+                  <td><strong>{peso(r.price)}</strong></td>
+                  <td>{fmtDate(r.date)}</td>
+                  <td className={r.price === highest ? "" : "down"}>
+                    {r.price === highest ? "—" : `-${peso(highest - r.price)}`}
+                  </td>
+                  <td>
+                    {rows.length > 1 && r.price === highest && <span className="badge accent">Highest</span>}
+                    {rows.length > 1 && r.price === lowest && <span className="badge success">Lowest</span>}
+                  </td>
+                </tr>
+              ))
+            )}
           </tbody>
         </table>
       </div>
@@ -3667,10 +3319,14 @@ function PriceComparison({ marketPrices }) {
    PRICE ANOMALIES
    ================================================================ */
 
-function PriceAnomalies({ entries, suggestions }) {
-  const anomalousEntries = entries.filter((e) => e.price < MIN_PRICE || e.price > MAX_PRICE);
+function PriceAnomalies({ priceRecords, suggestions }) {
+  // Flagged entries plus any entry priced outside the plausible range.
+  const anomalousEntries = priceRecords.filter((r) => {
+    const price = Number(r.price_per_kg);
+    return r.status === "flagged" || price < MIN_PRICE || price > MAX_PRICE;
+  });
 
-  const suggestionAnomalies = SPECIES_LIST.flatMap((sp) => {
+  const suggestionAnomalies = [...new Set(suggestions.map((s) => s.species))].flatMap((sp) => {
     const rows = suggestions.filter((s) => s.species === sp);
     if (rows.length < 3) return [];
     const avg = rows.reduce((a, b) => a + b.suggestedPrice, 0) / rows.length;
@@ -3688,20 +3344,21 @@ function PriceAnomalies({ entries, suggestions }) {
 
       <div className="panel">
         <div className="panel-header">
-          <div><h3>Flagged Daily Entries</h3><p>Outside the {peso(MIN_PRICE)} – {peso(MAX_PRICE)} validation range</p></div>
+          <div><h3>Unusual Price Entries</h3><p>Flagged entries, or prices outside the {peso(MIN_PRICE)} – {peso(MAX_PRICE)} range</p></div>
         </div>
         <table>
-          <thead><tr><th>SPECIES</th><th>PRICE</th><th>MARKET</th><th>STATUS</th></tr></thead>
+          <thead><tr><th>DATE</th><th>SPECIES</th><th>PRICE</th><th>MUNICIPALITY</th><th>STATUS</th></tr></thead>
           <tbody>
             {anomalousEntries.length === 0 ? (
-              <tr><td colSpan="4" className="empty-row">No anomalous entries right now.</td></tr>
+              <tr><td colSpan="5" className="empty-row">No anomalous entries right now.</td></tr>
             ) : (
-              anomalousEntries.map((e) => (
-                <tr key={e.id}>
-                  <td><strong>{e.species}</strong></td>
-                  <td className="flag-price"><strong>{peso(e.price)}</strong></td>
-                  <td>{e.market}</td>
-                  <td><span className="badge flagged">{e.status}</span></td>
+              anomalousEntries.map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtDate(r.recorded_date)}</td>
+                  <td><strong>{r.fish_name}</strong></td>
+                  <td className="flag-price"><strong>{peso(r.price_per_kg)}</strong></td>
+                  <td>{r.municipality_name}</td>
+                  <td><span className={`badge ${r.status === "flagged" ? "flagged" : "pending"}`}>{STATUS_LABELS[r.status] || r.status}</span></td>
                 </tr>
               ))
             )}
@@ -3743,37 +3400,27 @@ function PriceAnomalies({ entries, suggestions }) {
    PRICE FORECAST
    ================================================================ */
 
-function PriceForecast({ priceHistory, factors, notify }) {
-  const [species, setSpecies] = useState(SPECIES_LIST[0]);
+function PriceForecast({ priceRecords, loading, error, notify }) {
+  const published = priceRecords.filter(isPublished);
+  const species = recordSpeciesNames(published);
+  const [selected, setSelected] = useState("");
   const [days, setDays] = useState("7");
+  const current = species.includes(selected) ? selected : species[0] || "";
 
-  const rows = priceHistory[species];
-  const last = rows[rows.length - 1];
-  const weekAgo = rows[rows.length - 8];
-  const trendPerDay = (last.price - weekAgo.price) / 7;
-  const count = Number(days);
-  const holidays = factors.filter((f) => f.holiday).length;
-
-  const forecast = Array.from({ length: count }).map((_, i) => {
-    const d = new Date(last.date + "T00:00:00");
-    d.setDate(d.getDate() + i + 1);
-    const value = last.price + trendPerDay * (i + 1) * 0.8;
-    const spread = 3 + i * 0.6;
-    return { date: d.toLocaleDateString("en-PH"), price: value, low: value - spread, high: value + spread, up: trendPerDay >= 0 };
-  });
-
-  const pct = ((forecast[forecast.length - 1].price - last.price) / last.price) * 100;
+  // Fit the trend on the last 30 days of published prices.
+  const history = lastDays(dailySeries(published, current), 30);
+  const forecast = linearForecast(history, days);
+  const last = history[history.length - 1];
+  const pct = forecast && last ? ((forecast[forecast.length - 1].price - last.price) / last.price) * 100 : 0;
+  const recent = history.slice(-8);
+  const max = Math.max(...recent.map((r) => r.price), ...(forecast || []).map((f) => f.high), 1);
 
   const exportForecast = () => {
-    const header = "Date,Projected Price,Low,High\n";
-    const body = forecast.map((f) => `"${f.date}","${f.price.toFixed(2)}","${f.low.toFixed(2)}","${f.high.toFixed(2)}"`).join("\n");
-    const blob = new Blob([header + body], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = `${species}_forecast.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(
+      `${current}_forecast.csv`,
+      ["Date", "Projected Price", "Low", "High"],
+      forecast.map((f) => [f.date, f.price.toFixed(2), f.low.toFixed(2), f.high.toFixed(2)])
+    );
     notify("Forecast exported.");
   };
 
@@ -3782,11 +3429,12 @@ function PriceForecast({ priceHistory, factors, notify }) {
       <div className="page-title">
         <div>
           <h2>Price Forecast</h2>
-          <p>Projected price movement generated from historical prices and external factors.</p>
+          <p>A simple trend projection from the last 30 days of published prices. Not an official price.</p>
         </div>
         <div className="filter-row">
-          <select className="date-input" value={species} onChange={(e) => setSpecies(e.target.value)}>
-            {SPECIES_LIST.map((s) => <option key={s}>{s}</option>)}
+          <select className="date-input" value={current} onChange={(e) => setSelected(e.target.value)} disabled={!species.length}>
+            {!species.length && <option value="">No published prices</option>}
+            {species.map((s) => <option key={s}>{s}</option>)}
           </select>
           <select className="date-input" value={days} onChange={(e) => setDays(e.target.value)}>
             <option value="7">Next 7 days</option>
@@ -3796,47 +3444,50 @@ function PriceForecast({ priceHistory, factors, notify }) {
         </div>
       </div>
 
-      <div className="panel">
-        <div className="panel-header">
-          <div><h3>{species} — Forecast</h3><p>Historical prices with projected values</p></div>
-          <button className="secondary-btn" onClick={exportForecast}>↓ Export Forecast</button>
-        </div>
-
-        <div className="chart-area">
-          <div className="chart-placeholder">
-            <div className="bars">
-              {priceHistory[species].slice(-8).map((r, i) => <div key={`h${i}`} className="bar" style={{ height: `${50 + i * 3}%` }}></div>)}
-              {forecast.map((f, i) => (
-                <div key={`f${i}`} className="bar forecast-bar" style={{ height: `${55 + i * (28 / count)}%` }} title={`${f.date} — ${peso(f.price)}`}></div>
-              ))}
-            </div>
-            <p className="chart-note">Blue bars are actual prices, orange bars are projected values.</p>
+      {loading ? <EmptyPanel>Loading published prices…</EmptyPanel> : error ? <EmptyPanel>{error}</EmptyPanel> : !forecast ? (
+        <EmptyPanel>At least 7 days of published prices are needed to project a trend{current ? ` for ${current}` : ""}.</EmptyPanel>
+      ) : (
+        <div className="panel">
+          <div className="panel-header">
+            <div><h3>{current} — Forecast</h3><p>Recent published prices with projected values</p></div>
+            <button className="secondary-btn" onClick={exportForecast}>↓ Export Forecast</button>
           </div>
-        </div>
 
-        <div className="insight-box">
-          <strong>📈 Insight</strong>
-          <p>
-            {species} prices are projected to {pct >= 0 ? "rise" : "fall"} by about {Math.abs(pct).toFixed(1)}%
-            over the next {days} days, ending near {peso(forecast[forecast.length - 1].price)} per kilogram.
-            {holidays > 0 && ` ${holidays} logged holiday${holidays > 1 ? "s" : ""} may push demand higher than usual.`}
-          </p>
-        </div>
+          <div className="chart-area">
+            <div className="chart-placeholder">
+              <div className="bars">
+                {recent.map((r) => <div key={`h${r.date}`} className="bar" style={{ height: `${20 + (r.price / max) * 75}%` }} title={`${fmtDate(r.date)} — ${peso(r.price)}`}></div>)}
+                {forecast.map((f) => (
+                  <div key={`f${f.date}`} className="bar forecast-bar" style={{ height: `${20 + (f.price / max) * 75}%` }} title={`${fmtDate(f.date)} — ${peso(f.price)}`}></div>
+                ))}
+              </div>
+              <p className="chart-note">Blue bars are published prices, orange bars are projected values.</p>
+            </div>
+          </div>
 
-        <table>
-          <thead><tr><th>DATE</th><th>PROJECTED PRICE</th><th>EXPECTED RANGE</th><th>TREND</th></tr></thead>
-          <tbody>
-            {forecast.map((f, i) => (
-              <tr key={i}>
-                <td>{f.date}</td>
-                <td><strong>{peso(f.price)}</strong></td>
-                <td>{peso(f.low)} – {peso(f.high)}</td>
-                <td className={f.up ? "up" : "down"}>{f.up ? "▲ Rising" : "▼ Easing"}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+          <div className="insight-box">
+            <strong>📈 Insight</strong>
+            <p>
+              {current} prices are projected to {pct >= 0 ? "rise" : "fall"} by about {Math.abs(pct).toFixed(1)}%
+              over the next {days} days, ending near {peso(forecast[forecast.length - 1].price)} per kilogram.
+            </p>
+          </div>
+
+          <table>
+            <thead><tr><th>DATE</th><th>PROJECTED PRICE</th><th>EXPECTED RANGE</th><th>TREND</th></tr></thead>
+            <tbody>
+              {forecast.map((f) => (
+                <tr key={f.date}>
+                  <td>{fmtDate(f.date)}</td>
+                  <td><strong>{peso(f.price)}</strong></td>
+                  <td>{peso(f.low)} – {peso(f.high)}</td>
+                  <td className={f.up ? "up" : "down"}>{f.up ? "▲ Rising" : "▼ Easing"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
     </>
   );
 }
@@ -3845,25 +3496,25 @@ function PriceForecast({ priceHistory, factors, notify }) {
    REPORTS
    ================================================================ */
 
-function Reports({ entries, notify }) {
-  const [type, setType] = useState("Price History Report");
+function Reports({ priceRecords, notify }) {
+  const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [speciesFilter, setSpeciesFilter] = useState("All Species");
+  const species = recordSpeciesNames(priceRecords);
 
-  const visible = entries.filter((e) => speciesFilter === "All Species" || e.species === speciesFilter);
-  const published = entries.filter((e) => e.status === "Published");
-  const flagged = entries.filter((e) => e.status === "Flagged");
-  const average = entries.length ? entries.reduce((s, e) => s + e.price, 0) / entries.length : 0;
+  const visible = priceRecords
+    .filter((r) => speciesFilter === "All Species" || r.fish_name === speciesFilter)
+    .filter((r) => statusFilter === "All Statuses" || r.status === statusFilter)
+    .sort((a, b) => (a.recorded_date < b.recorded_date ? 1 : a.recorded_date > b.recorded_date ? -1 : b.id - a.id));
+  const published = visible.filter(isPublished);
+  const flagged = visible.filter((r) => r.status === "flagged");
+  const average = visible.length ? visible.reduce((s, r) => s + Number(r.price_per_kg), 0) / visible.length : 0;
 
   const exportCSV = () => {
-    const header = "Date,Species,Price per kg,Market,Status\n";
-    const body = visible.map((e) => `"${e.date}","${e.species}","${e.price.toFixed(2)}","${e.market}","${e.status}"`).join("\n");
-    const blob = new Blob([header + body], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "price_report.csv";
-    a.click();
-    URL.revokeObjectURL(url);
+    downloadCsv(
+      "price_report.csv",
+      ["Date", "Species", "Price per kg", "Municipality", "Status", "Recorded by"],
+      visible.map((r) => [r.recorded_date, r.fish_name, Number(r.price_per_kg).toFixed(2), r.municipality_name, STATUS_LABELS[r.status] || r.status, r.recorded_by_name || ""])
+    );
     notify("Report exported as CSV.");
   };
 
@@ -3875,15 +3526,15 @@ function Reports({ entries, notify }) {
   return (
     <>
       <div className="page-title">
-        <div><h2>Reports</h2><p>Generate and export price history and external factor reports.</p></div>
+        <div><h2>Reports</h2><p>Generate and export price record reports from the database.</p></div>
         <div className="filter-row">
-          <button className="secondary-btn" onClick={exportCSV}>↓ Export CSV</button>
+          <button className="secondary-btn" onClick={exportCSV} disabled={!visible.length}>↓ Export CSV</button>
           <button className="primary-btn" onClick={exportPDF}>↓ Export PDF</button>
         </div>
       </div>
 
       <div className="log-summary">
-        <div className="mini-stat"><span>Total Entries</span><strong>{entries.length}</strong></div>
+        <div className="mini-stat"><span>Total Entries</span><strong>{visible.length}</strong></div>
         <div className="mini-stat"><span>Published</span><strong>{published.length}</strong></div>
         <div className="mini-stat"><span>Average Price</span><strong>{peso(average)}</strong></div>
         <div className="mini-stat"><span>Flagged Entries</span><strong>{flagged.length}</strong></div>
@@ -3891,35 +3542,35 @@ function Reports({ entries, notify }) {
 
       <div className="panel">
         <div className="table-tools">
-          <select value={type} onChange={(e) => setType(e.target.value)}>
-            <option>Price History Report</option>
-            <option>External Factor Summary</option>
-            <option>Publication Summary</option>
+          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+            <option>All Statuses</option>
+            {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
           </select>
           <select value={speciesFilter} onChange={(e) => setSpeciesFilter(e.target.value)}>
             <option>All Species</option>
-            {SPECIES_LIST.map((s) => <option key={s}>{s}</option>)}
+            {species.map((s) => <option key={s}>{s}</option>)}
           </select>
         </div>
 
         <table>
-          <thead><tr><th>DATE</th><th>SPECIES</th><th>PRICE / KG</th><th>MARKET</th><th>STATUS</th></tr></thead>
+          <thead><tr><th>DATE</th><th>SPECIES</th><th>PRICE / KG</th><th>MUNICIPALITY</th><th>STATUS</th></tr></thead>
           <tbody>
             {visible.length === 0 ? (
               <tr><td colSpan="5" className="empty-row">No records found.</td></tr>
             ) : (
-              visible.map((e) => (
-                <tr key={e.id}>
-                  <td>{e.date}</td>
-                  <td><strong>{e.species}</strong></td>
-                  <td><strong>{peso(e.price)}</strong></td>
-                  <td>{e.market}</td>
-                  <td><span className={`badge ${e.status.toLowerCase().replace(/\s/g, "")}`}>{e.status}</span></td>
+              visible.slice(0, 200).map((r) => (
+                <tr key={r.id}>
+                  <td>{fmtDate(r.recorded_date)}</td>
+                  <td><strong>{r.fish_name}</strong></td>
+                  <td><strong>{peso(r.price_per_kg)}</strong></td>
+                  <td>{r.municipality_name}</td>
+                  <td><span className={`badge ${r.status}`}>{STATUS_LABELS[r.status] || r.status}</span></td>
                 </tr>
               ))
             )}
           </tbody>
         </table>
+        {visible.length > 200 && <p className="chart-note">Showing the 200 most recent of {visible.length} records. Export CSV for the full list.</p>}
       </div>
     </>
   );
@@ -3929,34 +3580,29 @@ function Reports({ entries, notify }) {
    VALIDATION HISTORY
    ================================================================ */
 
-function ValidationHistory({ validationHistory, notify }) {
+// Review decisions recorded in the activity log.
+const DECISION_ACTIONS = ["approved", "published", "flagged", "rejected", "reviewed", "adopted"];
+
+function ValidationHistory({ notify }) {
+  const { records, loading, error, refresh } = useDjangoActivityLogs();
   const [search, setSearch] = useState("");
 
-  const visible = validationHistory.filter((v) =>
-    [v.user, v.action, v.details].join(" ").toLowerCase().includes(search.toLowerCase())
+  const decisions = records.filter((l) => DECISION_ACTIONS.includes(String(l.action).toLowerCase()));
+  const visible = decisions.filter((l) =>
+    [l.actor_username, l.action, l.target_name, formatAuditDetails(l.details)].join(" ").toLowerCase().includes(search.toLowerCase())
   );
-
-  const exportCSV = () => {
-    const header = "Date,User,Decision,Details\n";
-    const body = visible.map((v) => `"${v.date}","${v.user}","${v.action}","${v.details}"`).join("\n");
-    const blob = new Blob([header + body], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "validation_history.csv";
-    a.click();
-    URL.revokeObjectURL(url);
-    notify("Validation history exported.");
-  };
 
   return (
     <>
       <div className="page-title">
         <div>
           <h2>Validation History</h2>
-          <p>Every review, approval, rejection, and reference-price decision you've made.</p>
+          <p>Every approval, publication, flag, rejection and suggestion review you've made.</p>
         </div>
-        <button className="secondary-btn" onClick={exportCSV}>↓ Export</button>
+        <div className="filter-row">
+          <button className="secondary-btn" onClick={refresh}>↻ Refresh</button>
+          <button className="secondary-btn" disabled={!visible.length} onClick={() => { exportAuditCsv(visible, "validation_history.csv"); notify("Validation history exported."); }}>↓ Export</button>
+        </div>
       </div>
 
       <div className="panel">
@@ -3968,17 +3614,22 @@ function ValidationHistory({ validationHistory, notify }) {
         </div>
 
         <table>
-          <thead><tr><th>DATE</th><th>USER</th><th>DECISION</th><th>DETAILS</th></tr></thead>
+          <thead><tr><th>DATE</th><th>USER</th><th>DECISION</th><th>RECORD</th><th>DETAILS</th></tr></thead>
           <tbody>
-            {visible.length === 0 ? (
-              <tr><td colSpan="4" className="empty-row">No decisions recorded yet.</td></tr>
+            {loading ? (
+              <tr><td colSpan="5" className="empty-row">Loading decisions…</td></tr>
+            ) : error ? (
+              <tr><td colSpan="5" className="empty-row">{error}</td></tr>
+            ) : visible.length === 0 ? (
+              <tr><td colSpan="5" className="empty-row">No decisions recorded yet.</td></tr>
             ) : (
-              visible.map((v) => (
-                <tr key={v.id}>
-                  <td>{v.date}</td>
-                  <td>{v.user}</td>
-                  <td><strong>{v.action}</strong></td>
-                  <td>{v.details}</td>
+              visible.map((l) => (
+                <tr key={l.id}>
+                  <td>{formatAuditTimestamp(l.created_at)}</td>
+                  <td>{l.actor_username}</td>
+                  <td><AuditActionBadge action={l.action} /></td>
+                  <td>{l.target_name || "—"}</td>
+                  <td>{auditSummary(l)}</td>
                 </tr>
               ))
             )}
@@ -4062,70 +3713,6 @@ function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goT
             </div>
           ))
         )}
-      </div>
-    </>
-  );
-}
-
-/* ================================================================
-   MY PROFILE
-   ================================================================ */
-
-function MyProfile({ profile, setProfile, activity, notify }) {
-  const [draft, setDraft] = useState(profile);
-  const update = (key, value) => setDraft({ ...draft, [key]: value });
-
-  const save = () => {
-    if (!draft.name.trim() || !draft.email.trim()) {
-      notify("Name and email are required.");
-      return;
-    }
-    setProfile(draft);
-    notify("Profile saved.");
-  };
-
-  return (
-    <>
-      <div className="page-title">
-        <div><h2>My Profile</h2><p>Your LGU officer account details.</p></div>
-        <button className="primary-btn" onClick={save}>Save Changes</button>
-      </div>
-
-      <div className="config-grid">
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon blue">♙</div>
-            <div><h3>Profile Information</h3><p>Editable contact details</p></div>
-          </div>
-          <div className="form-group"><label>Full Name</label><input value={draft.name} onChange={(e) => update("name", e.target.value)} /></div>
-          <div className="form-group"><label>Email Address</label><input value={draft.email} onChange={(e) => update("email", e.target.value)} /></div>
-
-          <div className="profile-grid" style={{ marginTop: 14 }}>
-            <div className="profile-field"><span>Username</span><strong>{draft.username}</strong></div>
-            <div className="profile-field"><span>Role</span><strong>{draft.role}</strong></div>
-            <div className="profile-field"><span>Municipality</span><strong>{draft.municipality}</strong></div>
-            <div className="profile-field"><span>Last Login</span><strong>{draft.lastLogin}</strong></div>
-          </div>
-
-          <div className="info-box" style={{ marginTop: 14 }}>
-            Username and role can only be changed by an administrator, from User Management.
-          </div>
-        </div>
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon orange">◷</div>
-            <div><h3>My Activity</h3><p>Your recent actions in AquaTimbang</p></div>
-          </div>
-          <div className="history-list">
-            {activity.map((a) => (
-              <div className="history-item" key={a.id}>
-                <div><strong>{a.action}</strong></div>
-                <small>{a.date}</small>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </>
   );

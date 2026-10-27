@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import "./App.css";
 import "./Login.css";
+import { API_BASE_URL } from "./api/config.js";
 
 function Register({ onBack, onGoToLogin }) {
   const [role, setRole] = useState("Fish Vendor");
@@ -14,7 +15,7 @@ function Register({ onBack, onGoToLogin }) {
   email: "",
   dob: "",
   sex: "",
-  municipality: "Cebu City",
+  municipality: "",
   municipalityOther: "",
 
   // Fish Vendor verification
@@ -46,7 +47,7 @@ function Register({ onBack, onGoToLogin }) {
     const loadRegistrationOptions = async () => {
       try {
         const response = await fetch(
-          "http://127.0.0.1:8000/api/auth/registration-options/"
+          `${API_BASE_URL}/auth/registration-options/`
         );
 
         if (!response.ok) {
@@ -191,7 +192,7 @@ if (role === "LGU Officer") {
 
   try {
     const response = await fetch(
-  "http://127.0.0.1:8000/api/auth/register/",
+  `${API_BASE_URL}/auth/register/`,
   {
     method: "POST",
     body: registrationData,

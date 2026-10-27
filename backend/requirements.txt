@@ -1,0 +1,6 @@
+Django>=6.1,<6.2
+djangorestframework>=3.18,<4
+django-cors-headers>=4.9,<5
+Pillow>=13,<14
+# Only needed when DB_ENGINE=mysql in backend/.env
+mysqlclient>=2.2

@@ -1,9 +1,6 @@
 // AquaTimbang - Vendor Price Suggestions API
 
-const API_BASE = (
-  import.meta.env.VITE_API_BASE_URL ||
-  "http://127.0.0.1:8000/api"
-).replace(/\/$/, "");
+import { API_BASE_URL as API_BASE } from "./config.js";
 
 const STATUS_LABELS = {
   pending: "Pending Review",
@@ -89,8 +86,6 @@ export async function createVendorSuggestion(data) {
     suggested_price: data.suggested_price ?? data.suggestedPrice,
     comment: data.comment ?? "",
   };
-
-  console.log("Submitting vendor suggestion:", payload);
 
   const result = await apiRequest("/vendor-suggestions/", {
     method: "POST",

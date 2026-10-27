@@ -1,3 +1,4 @@
+from bisect import bisect_left
 from .validators import (
 
     validate_document_upload,
@@ -567,6 +568,43 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
 
         ]
 
+def attach_previous_prices(records):
+    """
+    Set record._previous_price to the latest published price recorded
+    before it for the same fish species and municipality, using one
+    query for all records instead of one per record.
+    """
+    records = [r for r in records if not hasattr(r, "_previous_price")]
+    if not records:
+        return
+    history = {}
+    published = (
+        PriceRecord.objects.filter(
+            status=PriceRecord.STATUS_PUBLISHED,
+            fish_species_id__in={r.fish_species_id for r in records},
+            municipality_id__in={r.municipality_id for r in records},
+        )
+        .order_by("recorded_date", "id")
+        .values_list("fish_species_id", "municipality_id", "recorded_date", "price_per_kg")
+    )
+    for species_id, municipality_id, recorded_date, price in published:
+        history.setdefault((species_id, municipality_id), []).append((recorded_date, price))
+    for record in records:
+        rows = history.get((record.fish_species_id, record.municipality_id), [])
+        # Rows are sorted by date; find the last one before this record's date.
+        index = bisect_left(rows, (record.recorded_date,)) - 1
+        record._previous_price = rows[index][1] if index >= 0 else None
+
+
+class PriceRecordListSerializer(serializers.ListSerializer):
+    """Pre-load previous prices for every record in a list response."""
+
+    def to_representation(self, data):
+        records = list(data.all() if hasattr(data, "all") else data)
+        attach_previous_prices(records)
+        return super().to_representation(records)
+
+
 class PriceRecordSerializer(serializers.ModelSerializer):
 
     """
@@ -649,35 +687,17 @@ class PriceRecordSerializer(serializers.ModelSerializer):
 
         same fish species and municipality.
 
+        List responses pre-load these values in one query
+
+        (see PriceRecordListSerializer).
+
         """
 
-        previous = (
+        if not hasattr(obj, "_previous_price"):
 
-            PriceRecord.objects.filter(
+            attach_previous_prices([obj])
 
-                fish_species=obj.fish_species,
-
-                municipality=obj.municipality,
-
-                status=PriceRecord.STATUS_PUBLISHED,
-
-                recorded_date__lt=obj.recorded_date,
-
-            )
-
-            .order_by("-recorded_date", "-id")
-
-            .first()
-
-        )
-
-        # No previous published record exists.
-
-        if previous is None:
-
-            return None
-
-        return previous.price_per_kg
+        return obj._previous_price
 
     def get_price_change(self, obj):
 
@@ -760,6 +780,10 @@ class PriceRecordSerializer(serializers.ModelSerializer):
         # Connect this serializer to PriceRecord.
 
         model = PriceRecord
+
+        # Pre-load previous prices when serializing many records.
+
+        list_serializer_class = PriceRecordListSerializer
 
         # Fields available through the AquaTimbang API.
 
@@ -935,3 +959,76 @@ class ActivityLogSerializer(serializers.ModelSerializer):
             "target_id", "target_name", "details", "created_at",
         ]
         read_only_fields = fields
+
+from .models import VendorPriceSuggestion
+
+
+class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
+    species = serializers.CharField(
+        source="fish_species.name",
+        read_only=True,
+    )
+    municipality_name = serializers.CharField(
+        source="municipality.name",
+        read_only=True,
+    )
+    submitted_by = serializers.CharField(
+        source="vendor.username",
+        read_only=True,
+    )
+    status_display = serializers.CharField(
+        source="get_status_display",
+        read_only=True,
+    )
+
+    class Meta:
+        model = VendorPriceSuggestion
+        fields = [
+            "id",
+            "vendor",
+            "submitted_by",
+            "fish_species",
+            "species",
+            "municipality",
+            "municipality_name",
+            "suggested_price",
+            "comment",
+            "status",
+            "status_display",
+            "lgu_feedback",
+            "reviewed_by",
+            "reviewed_at",
+            "created_at",
+            "updated_at",
+        ]
+        read_only_fields = [
+            "vendor",
+            "municipality",
+            "status",
+            "lgu_feedback",
+            "reviewed_by",
+            "reviewed_at",
+            "created_at",
+            "updated_at",
+        ]
+
+    def validate_suggested_price(self, value):
+        if value <= 0:
+            raise serializers.ValidationError(
+                "Suggested price must be greater than zero."
+            )
+        return value
+
+    def validate_fish_species(self, value):
+        if not value.is_active:
+            raise serializers.ValidationError(
+                "This fish species is inactive."
+            )
+        return value
+
+    def validate_municipality(self, value):
+        if not value.is_active:
+            raise serializers.ValidationError(
+                "This municipality is inactive."
+            )
+        return value

@@ -1,10 +1,16 @@
 import React, { useState, useEffect } from "react";
 import "./App.css";
 import "./Admin.css";
+import { API_BASE_URL, apiUrl, authHeaders, fetchAll } from "./api/config.js";
+import { fullName as profileName, useMyProfile } from "./api/account.js";
+import { listVendorSuggestions, reviewVendorSuggestion } from "./api/vendorSuggestions.js";
+import { dailySeries, isPublished, lastDays, linearForecast } from "./api/priceData.js";
+import AccountProfile from "./components/AccountProfile.jsx";
 
 
 // Read-only audit records supplied by Django. This endpoint enforces role visibility.
-function useDjangoActivityLogs() {
+// reloadSignal: any value; the logs reload whenever it changes.
+function useDjangoActivityLogs(reloadSignal) {
   const [records, setRecords] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -17,7 +23,7 @@ function useDjangoActivityLogs() {
       try {
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Please log in again to view activity logs.");
-        let next = "http://127.0.0.1:8000/api/activity-logs/";
+        let next = `${API_BASE_URL}/activity-logs/`;
         const all = [];
         const visited = new Set();
         while (next && !visited.has(next)) {
@@ -44,7 +50,7 @@ function useDjangoActivityLogs() {
     }
     load();
     return () => { cancelled = true; };
-  }, [refreshKey]);
+  }, [refreshKey, reloadSignal]);
   return { records, loading, error, refresh: () => setRefreshKey(k => k + 1) };
 }
 
@@ -100,6 +106,7 @@ function AuditActionBadge({ action }) {
 }
 function auditModule(log) {
   const type = String(log.target_type || "").toLowerCase().replaceAll("_", " ");
+  if (type.includes("suggestion")) return "Fisherfolk Suggestions";
   if (type.includes("price")) return "Price Records";
   if (type.includes("species") || type.includes("fishspecies")) return "Fish Species";
   if (type.includes("user") || type.includes("profile") || type.includes("account")) return "User Management";
@@ -146,16 +153,8 @@ function exportAuditCsv(records, filename) {
 }
 
 /* ================================================================
-   CONSTANTS & MOCK DATA GENERATORS
+   CONSTANTS & DATA ADAPTERS
    ================================================================ */
-
-const SPECIES_LIST = ["Galunggong", "Tulingan", "Bolinaw", "Tamarong", "Anduhaw"];
-
-const BASE_PRICES = {
-  Galunggong: 180, Tulingan: 160, Bolinaw: 120, Tamarong: 150, Anduhaw: 170,
-};
-
-const MARKET_NAMES = ["Pasil Fish Market", "Carbon Public Market"];
 
 const peso = (n) => {
   if (n === null || n === undefined || isNaN(n)) return "—";
@@ -178,67 +177,56 @@ const fmtDate = (isoStr) => {
   return d.toLocaleDateString("en-PH", { month: "2-digit", day: "2-digit", year: "numeric" });
 };
 
-function buildPriceRecords() {
-  const TODAY = new Date(2026, 8, 16); // Sep 16, 2026 — matches the rest of the app
-  const enterers = ["L. Fernandez", "Anna Smith"];
-  const records = [];
-  let id = 1;
+const PRICE_STATUS_LABELS = {
+  draft: "Draft",
+  pending: "Pending Review",
+  approved: "Approved",
+  published: "Published",
+  flagged: "Flagged",
+  rejected: "Rejected",
+};
 
-  for (let d = 29; d >= 0; d--) {
-    const date = new Date(TODAY);
-    date.setDate(date.getDate() - d);
-    const dateStr = date.toISOString().slice(0, 10);
+// Django PriceRecord → row shape used by the dashboard tables.
+const toPriceRow = (r) => ({
+  id: r.id,
+  date: r.recorded_date,
+  species: r.fish_name,
+  municipality: r.municipality_name,
+  market: r.municipality_name,
+  price: Number(r.price_per_kg),
+  previousPrice: r.previous_price === null || r.previous_price === undefined ? null : Number(r.previous_price),
+  enteredBy: r.recorded_by_name || "—",
+  status: PRICE_STATUS_LABELS[r.status] || r.status,
+});
 
-    SPECIES_LIST.forEach((sp) => {
-      MARKET_NAMES.forEach((mk) => {
-        // simulate a gap: Tamarong at Carbon Public Market missing the last 3 days
-        if (sp === "Tamarong" && mk === "Carbon Public Market" && d < 3) return;
+// Django user (from /auth/users/) → row shape used by the dashboard tables.
+const toUserRow = (account) => ({
+  id: account.id,
+  name: `${account.first_name || ""} ${account.last_name || ""}`.trim() || account.username,
+  username: account.username,
+  email: account.email,
+  role: account.role,
+  municipality: account.municipality || "",
+  status:
+    account.account_status === "rejected"
+      ? "Rejected"
+      : account.account_status === "pending"
+      ? "Pending"
+      : account.is_active
+      ? "Active"
+      : "Inactive",
+  lastLogin: account.last_login,
+});
 
-        const base = BASE_PRICES[sp];
-        const pseudo = Math.abs(Math.sin(id * 12.9898) * 10000) % 1;
-        const variance = (pseudo - 0.5) * 14;
-        const price = Math.max(40, Number((base + variance).toFixed(2)));
-
-        records.push({
-          id: id,
-          date: dateStr,
-          species: sp,
-          municipality: mk === "Pasil Fish Market" ? "Cebu City" : "Cebu City",
-          market: mk,
-          price,
-          enteredBy: enterers[id % 2],
-          status: "Active",
-          previousPrice: null,
-          correctedBy: null,
-          correctedDate: null,
-        });
-        id++;
-      });
-    });
-  }
-
-  // mark a few as corrected (price fixed after an error)
-  [6, 42, 81].forEach((i) => {
-    const rec = records[i];
-    if (rec) {
-      records[i] = {
-        ...rec,
-        status: "Corrected",
-        previousPrice: Number((rec.price - 9).toFixed(2)),
-        correctedBy: "System Admin",
-        correctedDate: rec.date,
-      };
-    }
-  });
-
-  // mark a couple as deleted (kept for audit trail, hidden from active views)
-  [16, 61].forEach((i) => {
-    const rec = records[i];
-    if (rec) records[i] = { ...rec, status: "Deleted" };
-  });
-
-  return records.reverse(); // most recent first
-}
+// Django activity log → row shape used by reports.
+const toLogRow = (log) => ({
+  id: log.id,
+  date: formatAuditTimestamp(log.created_at),
+  user: log.actor_username,
+  role: log.actor_role,
+  module: auditModule(log),
+  action: `${auditLabel(log.action)} ${log.target_name || ""}`.trim(),
+});
 
 function generateRecommendations(records) {
   const active = records.filter((r) => r.status !== "Deleted");
@@ -259,7 +247,7 @@ function generateRecommendations(records) {
   };
 
   const recs = [];
-  SPECIES_LIST.forEach((sp) => {
+  [...new Set(active.map((r) => r.species))].forEach((sp) => {
     const thisWeek = avgFor(sp, weekAgo.toISOString().slice(0, 10), today);
     const lastWeek = avgFor(
       sp,
@@ -293,41 +281,6 @@ function generateRecommendations(records) {
   return recs.slice(0, 3);
 }
 
-function buildSuggestions() {
-  const vendors = ["Marites Abellana", "Ronald Ceniza", "Juan Dela Cruz", "Pedro Santos", "Maria Garcia"];
-  const statuses = ["Pending Review", "Reviewed", "Adopted", "Rejected"];
-  const suggestions = [];
-  let id = 1;
-
-  for (let d = 13; d >= 0; d--) {
-    const date = new Date(2026, 8, 16);
-    date.setDate(date.getDate() - d);
-    const dateStr = date.toISOString().slice(0, 10);
-
-    const perDay = 2 + (id % 3);
-    for (let i = 0; i < perDay; i++) {
-      const sp = SPECIES_LIST[(id + i) % SPECIES_LIST.length];
-      const base = BASE_PRICES[sp];
-      const pseudo = Math.abs(Math.sin((id + i) * 7.77) * 10000) % 1;
-      const price = Math.max(40, Number((base + (pseudo - 0.5) * 20).toFixed(2)));
-
-      suggestions.push({
-        id,
-        species: sp,
-        municipality: "Cebu City",
-        market: MARKET_NAMES[id % MARKET_NAMES.length],
-        suggestedPrice: price,
-        submittedBy: vendors[id % vendors.length],
-        date: dateStr,
-        status: d < 2 ? "Pending Review" : statuses[id % statuses.length],
-      });
-      id++;
-    }
-  }
-
-  return suggestions.reverse();
-}
-
 function suggestionStats(suggestions, species, from, to) {
   const rows = suggestions.filter(
     (s) => (species === "All Species" || s.species === species) && s.date >= from && s.date <= to
@@ -345,39 +298,7 @@ function suggestionStats(suggestions, species, from, to) {
   };
 }
 
-const MIN_RECORDS_FOR_FORECAST = 20;
-
-function buildForecastSeries(priceRecords, speciesName, market, periodDays) {
-  const rows = priceRecords
-    .filter((r) => r.species === speciesName && r.status !== "Deleted" && (market === "All Markets" || r.market === market))
-    .sort((a, b) => (a.date > b.date ? 1 : -1));
-
-  const sufficientData = rows.length >= MIN_RECORDS_FOR_FORECAST;
-  if (!rows.length) return { sufficientData, historical: [], predicted: [] };
-
-  const last = rows[rows.length - 1];
-  const weekAgoIdx = Math.max(0, rows.length - 8);
-  const trendPerDay = (last.price - rows[weekAgoIdx].price) / Math.max(1, rows.length - 1 - weekAgoIdx);
-
-  const historical = rows.slice(-14).map((r) => ({ date: r.date, price: r.price }));
-
-  const predicted = [];
-  let cursor = last.price;
-  const lastDate = new Date(last.date + "T00:00:00");
-  for (let i = 1; i <= periodDays; i++) {
-    const d = new Date(lastDate);
-    d.setDate(d.getDate() + i);
-    cursor = cursor + trendPerDay * 0.8;
-    predicted.push({
-      date: d.toISOString().slice(0, 10),
-      price: Math.max(40, Number(cursor.toFixed(2))),
-    });
-  }
-
-  return { sufficientData, historical, predicted, lastActual: last.price };
-}
-
-function buildNotifications(users, priceRecords, species, markets, forecasts, announcements) {
+function buildNotifications(users, priceRecords, species, municipalities, suggestions) {
   const notifs = [];
   let nid = 1;
 
@@ -390,44 +311,37 @@ function buildNotifications(users, priceRecords, species, markets, forecasts, an
     });
   }
 
-  const flagged = priceRecords.filter((r) => r.status === "Corrected");
+  const flagged = priceRecords.filter((r) => r.status === "Flagged");
   if (flagged.length > 0) {
     notifs.push({
       id: nid++, type: "info", page: "Price Records",
-      title: `${flagged.length} price record${flagged.length > 1 ? "s" : ""} corrected recently`,
-      detail: flagged.slice(0, 3).map((r) => r.species).join(", "),
+      title: `${flagged.length} flagged price record${flagged.length > 1 ? "s" : ""}`,
+      detail: flagged.slice(0, 3).map((r) => `${r.species} · ${r.municipality}`).join(", "),
     });
   }
 
-  const activeSpecies = species.filter((s) => s.status === "Active");
-  const activeMarkets = markets.filter((m) => m.status === "Active");
-  const activeRecords = priceRecords.filter((r) => r.status !== "Deleted");
-  const today = activeRecords.length ? activeRecords[0].date : null;
-  let missingCount = 0;
-  if (today) {
-    activeSpecies.forEach((sp) => {
-      activeMarkets.forEach((mk) => {
-        const has = priceRecords.some(
-          (r) => r.species === sp.name && r.market === mk.name && r.date === today && r.status !== "Deleted"
-        );
-        if (!has) missingCount++;
-      });
+  const pendingSuggestions = suggestions.filter((s) => s.status === "Pending Review");
+  if (pendingSuggestions.length > 0) {
+    notifs.push({
+      id: nid++, type: "info", page: "Fisherfolk Suggestions",
+      title: `${pendingSuggestions.length} vendor suggestion${pendingSuggestions.length > 1 ? "s" : ""} awaiting review`,
+      detail: pendingSuggestions.slice(0, 3).map((s) => s.species).join(", "),
     });
   }
+
+  // Active species × municipality pairs with no price recorded today.
+  const today = new Date().toLocaleDateString("en-CA");
+  let missingCount = 0;
+  species.filter((s) => s.status === "Active").forEach((sp) => {
+    municipalities.filter((m) => m.status === "Active").forEach((mk) => {
+      if (!priceRecords.some((r) => r.species === sp.name && r.municipality === mk.name && r.date === today)) missingCount++;
+    });
+  });
   if (missingCount > 0) {
     notifs.push({
       id: nid++, type: "danger", page: "Price Records",
       title: `${missingCount} missing price record${missingCount > 1 ? "s" : ""} for today`,
       detail: "No entry logged by any LGU officer yet.",
-    });
-  }
-
-  const activeAnnouncements = announcements.filter((a) => a.status === "Active");
-  if (activeAnnouncements.length > 0) {
-    notifs.push({
-      id: nid++, type: "info", page: "System Announcements",
-      title: `${activeAnnouncements.length} active announcement${activeAnnouncements.length > 1 ? "s" : ""}`,
-      detail: activeAnnouncements.map((a) => a.title).join(", "),
     });
   }
 
@@ -474,7 +388,7 @@ function Admin({ onLogout }) {
 
       try {
         const response = await fetch(
-          "http://127.0.0.1:8000/api/auth/users/pending/",
+          `${API_BASE_URL}/auth/users/pending/`,
           {
             method: "GET",
             headers: {
@@ -539,7 +453,7 @@ useEffect(() => {
 
     try {
       const response = await fetch(
-        "http://127.0.0.1:8000/api/auth/users/",
+        `${API_BASE_URL}/auth/users/`,
         {
           method: "GET",
           headers: {
@@ -586,131 +500,75 @@ useEffect(() => {
   fetchDatabaseUsers();
 }, []);
 
-  /* ---------- SHARED STATE ---------- */
+  /* ---------- SHARED STATE (loaded from Django) ---------- */
 
-  const [users, setUsers] = useState([
-    { id: 1, name: "Juan Dela Cruz", email: "juan@email.com", username: "juan_fisher", contact: "0917 234 5561", role: "Fish Vendor", municipality: "Cebu City", status: "Pending", registeredDate: "09/14/2026", approvedDate: "", lastLogin: "Never", loginCount: 0, logoutCount: 0, online: false },
-    { id: 2, name: "Pedro Santos", email: "pedro@email.com", username: "pedro_fish", contact: "0918 445 2290", role: "Fish Vendor", municipality: "Cebu City", status: "Pending", registeredDate: "09/15/2026", approvedDate: "", lastLogin: "Never", loginCount: 0, logoutCount: 0, online: false },
-    { id: 3, name: "Maria Garcia", email: "maria@email.com", username: "maria_vendor", contact: "0920 118 7734", role: "Fish Vendor", municipality: "Cebu City", status: "Pending", registeredDate: "09/15/2026", approvedDate: "", lastLogin: "Never", loginCount: 0, logoutCount: 0, online: false },
-    { id: 9, name: "Carlos Reyes", email: "carlos.reyes@cebucity.gov.ph", username: "carlos_lgu", contact: "0919 610 4482", role: "LGU Personnel", municipality: "Cebu City", status: "Pending", registeredDate: "09/16/2026", approvedDate: "", lastLogin: "Never", loginCount: 0, logoutCount: 0, online: false },
-    { id: 4, name: "Anna Smith", email: "anna@email.com", username: "anna_lgu", contact: "0917 700 1123", role: "LGU Personnel", municipality: "Cebu City", status: "Active", registeredDate: "03/02/2026", approvedDate: "03/03/2026", lastLogin: "09/16/2026 07:10 AM", loginCount: 118, logoutCount: 114, online: true },
-    { id: 5, name: "Liza Fernandez", email: "liza@cebucity.gov.ph", username: "liza_lgu", contact: "0917 555 8820", role: "LGU Personnel", municipality: "Cebu City", status: "Active", registeredDate: "02/20/2026", approvedDate: "02/21/2026", lastLogin: "09/16/2026 06:02 AM", loginCount: 142, logoutCount: 139, online: true },
-    { id: 6, name: "Marites Abellana", email: "marites@email.com", username: "marites_v", contact: "0917 555 0198", role: "Fish Vendor", municipality: "Cebu City", status: "Active", registeredDate: "01/18/2026", approvedDate: "01/19/2026", lastLogin: "09/16/2026 07:45 AM", loginCount: 96, logoutCount: 93, online: true },
-    { id: 7, name: "Ronald Ceniza", email: "ronald@email.com", username: "ronald_v", contact: "0918 302 4471", role: "Fish Vendor", municipality: "Mandaue City", status: "Inactive", registeredDate: "01/22/2026", approvedDate: "01/23/2026", lastLogin: "08/29/2026 09:12 AM", loginCount: 41, logoutCount: 41, online: false },
-    { id: 8, name: "System Admin", email: "admin@aquatimbang.ph", username: "sysadmin", contact: "0917 000 0001", role: "System Administrator", municipality: "Cebu City", status: "Active", registeredDate: "01/01/2026", approvedDate: "01/01/2026", lastLogin: "09/16/2026 08:55 AM", loginCount: 210, logoutCount: 205, online: true },
-  ]);
+  const account = useMyProfile();
+  const adminName = (account.profile && profileName(account.profile)) || "Administrator";
+  const adminInitials = adminName.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase();
+
+  const users = databaseUsers.map(toUserRow);
 
   const [species, setSpecies] = useState([]);
+  const [apiPriceRecords, setApiPriceRecords] = useState([]);
+  const [priceRecordsError, setPriceRecordsError] = useState("");
+  const [apiMunicipalities, setApiMunicipalities] = useState([]);
+  const [suggestions, setSuggestions] = useState([]);
+  const [suggestionsError, setSuggestionsError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const reloadData = () => setReloadKey((k) => k + 1);
 
-// LOAD FISH SPECIES FROM DJANGO DATABASE
-useEffect(() => {
-  const loadFishSpecies = async () => {
-    try {
-      const token = localStorage.getItem("authToken");
+  // Reload shared data whenever the admin switches pages so counts stay current.
+  useEffect(() => {
+    let cancelled = false;
+    fetchAll("/fish-species/")
+      .then((rows) => { if (!cancelled) setSpecies(rows.map(mapDatabaseSpecies)); })
+      .catch((error) => console.error("Fish species loading error:", error));
+    fetchAll("/prices/")
+      .then((rows) => { if (!cancelled) { setApiPriceRecords(rows); setPriceRecordsError(""); } })
+      .catch((error) => { if (!cancelled) setPriceRecordsError(error.message); });
+    fetchAll("/municipalities/")
+      .then((rows) => { if (!cancelled) setApiMunicipalities(rows); })
+      .catch((error) => console.error("Municipalities loading error:", error));
+    listVendorSuggestions()
+      .then((rows) => { if (!cancelled) { setSuggestions(rows.map((row) => ({ ...row, market: row.municipality }))); setSuggestionsError(""); } })
+      .catch((error) => { if (!cancelled) setSuggestionsError(error.message); });
+    return () => { cancelled = true; };
+  }, [activePage, reloadKey]);
 
-      const response = await fetch(
-        "http://127.0.0.1:8000/api/fish-species/",
-        {
-          headers: {
-            Authorization: `Token ${token}`,
-          },
-        }
-      );
+  const priceRecords = apiPriceRecords.map(toPriceRow);
+  const publishedRecords = priceRecords.filter((r) => r.status === "Published");
 
-      if (!response.ok) {
-        throw new Error(`Failed to load fish species (${response.status})`);
-      }
+  const municipalities = apiMunicipalities.map((m) => ({
+    id: m.id,
+    name: m.name,
+    province: m.province,
+    status: m.is_active ? "Active" : "Inactive",
+  }));
 
-      const data = await response.json();
+  // Markets come from the market names fish vendors gave when registering.
+  const markets = [
+    ...new Map(
+      databaseUsers
+        .filter((u) => u.verification?.details?.market_name)
+        .map((u) => {
+          const name = u.verification.details.market_name.trim();
+          const key = `${name}|${u.municipality}`;
+          return [key, { id: key, name, municipality: u.municipality || "—", status: "Active" }];
+        })
+    ).values(),
+  ].sort((a, b) => a.name.localeCompare(b.name));
 
-      const records = Array.isArray(data)
-        ? data
-        : data.results;
+  const { records: activityLogs } = useDjangoActivityLogs(`${activePage}-${reloadKey}`);
+  const logs = activityLogs.map(toLogRow);
 
-      if (!Array.isArray(records)) {
-        throw new Error("Unexpected fish species response.");
-      }
-
-      setSpecies(records.map(mapDatabaseSpecies));
-    } catch (error) {
-      console.error("Fish species loading error:", error);
-    }
-  };
-
-  loadFishSpecies();
-}, []);
-
-  const [municipalities, setMunicipalities] = useState([
-    { id: 1, name: "Cebu City", status: "Active" },
-    { id: 2, name: "Mandaue City", status: "Active" },
-    { id: 3, name: "Lapu-Lapu City", status: "Inactive" },
-  ]);
-
-  const [markets, setMarkets] = useState([
-    { id: 1, name: "Pasil Fish Market", municipality: "Cebu City", status: "Active" },
-    { id: 2, name: "Carbon Public Market", municipality: "Cebu City", status: "Active" },
-    { id: 3, name: "Mandaue City Market", municipality: "Mandaue City", status: "Active" },
-    { id: 4, name: "Opon Public Market", municipality: "Lapu-Lapu City", status: "Inactive" },
-  ]);
-
-  const [priceRecords, setPriceRecords] = useState(() => buildPriceRecords());
-
-  const [logs, setLogs] = useState([
-    { id: 1, date: "09/16/2026 10:15 AM", user: "System Admin", role: "Administrator", action: "Approved user account", module: "User Management", status: "Success" },
-    { id: 2, date: "09/16/2026 09:42 AM", user: "System Admin", role: "Administrator", action: "Updated fish species", module: "Fish Species", status: "Success" },
-    { id: 3, date: "09/16/2026 09:20 AM", user: "System Admin", role: "Administrator", action: "Changed price validation bounds", module: "Configuration", status: "Success" },
-    { id: 4, date: "09/16/2026 08:55 AM", user: "System Admin", role: "Administrator", action: "Logged in", module: "Authentication", status: "Success" },
-  ]);
-
-  const [config, setConfig] = useState({
-    minPrice: 50,
-    maxPrice: 1000,
-    horizon: "7",
-    method: "SARIMAX",
-    retention: "5",
-    keepLogs: true,
-    lockout: true,
-    sessionTimeout: true,
-  });
-
-  const [suggestions, setSuggestions] = useState(() => buildSuggestions());
   const [forecasts, setForecasts] = useState([]);
-  const [announcements, setAnnouncements] = useState([
-    { id: 1, title: "Scheduled maintenance — Sept 20", message: "AquaTimbang will be briefly unavailable on Sept 20, 12:00 AM–2:00 AM for maintenance.", date: "09/15/2026", status: "Active" },
-    { id: 2, title: "New species added: Anduhaw", message: "Anduhaw has been added to the tracked species list.", date: "02/03/2026", status: "Expired" },
-  ]);
   const [dismissedNotifs, setDismissedNotifs] = useState([]);
-  const [adminProfile, setAdminProfile] = useState({
-    name: "System Admin",
-    email: "admin@aquatimbang.ph",
-    username: "sysadmin",
-    role: "System Administrator",
-    lastLogin: "09/16/2026 08:55 AM",
-  });
 
   /* ---------- HELPERS ---------- */
 
   const notify = (message) => {
     setToast(message);
     setTimeout(() => setToast(""), 2600);
-  };
-
-  const addLog = (action, module) => {
-    setLogs((prev) => [
-      {
-        id: Date.now(),
-        date: new Date().toLocaleString("en-PH", {
-          month: "2-digit", day: "2-digit", year: "numeric",
-          hour: "2-digit", minute: "2-digit",
-        }),
-        user: "System Admin",
-        role: "Administrator",
-        action,
-        module,
-        status: "Success",
-      },
-      ...prev,
-    ]);
   };
 
   const menuGroups = [
@@ -750,74 +608,68 @@ useEffect(() => {
     },
   ];
 
-  const notifications = buildNotifications(users, priceRecords, species, markets, forecasts, announcements);
+  const notifications = buildNotifications(users, priceRecords, species, municipalities, suggestions);
   const unreadNotifs = notifications.filter((n) => !dismissedNotifs.includes(n.id));
 
   const renderPage = () => {
     switch (activePage) {
       case "User Management":
-       return (
-  <UserManagement
-    users={users}
-    setUsers={setUsers}
-    notify={notify}
-    addLog={addLog}
-    logs={logs}
-    pendingRegistrations={pendingRegistrations}
-    usersLoading={usersLoading} 
-    usersError={usersError}
-    setPendingRegistrations={setPendingRegistrations}
-    databaseUsers={databaseUsers}
-    setDatabaseUsers={setDatabaseUsers}
-    databaseUsersLoading={databaseUsersLoading}
-    databaseUsersError={databaseUsersError}
-  />
-);
+        return (
+          <UserManagement
+            notify={notify}
+            loading={usersLoading || databaseUsersLoading}
+            loadError={usersError || databaseUsersError}
+            activityLogs={activityLogs}
+            pendingRegistrations={pendingRegistrations}
+            setPendingRegistrations={setPendingRegistrations}
+            databaseUsers={databaseUsers}
+            setDatabaseUsers={setDatabaseUsers}
+          />
+        );
       case "Fish Species":
         return (
           <FishSpecies
             species={species} setSpecies={setSpecies}
             priceRecords={priceRecords}
-            notify={notify} addLog={addLog}
+            notify={notify}
           />
         );
       case "Municipality & Market":
         return (
           <MunicipalityMarket
-            municipalities={municipalities} setMunicipalities={setMunicipalities}
-            markets={markets} setMarkets={setMarkets}
-            notify={notify} addLog={addLog}
+            municipalities={municipalities} markets={markets}
+            onChanged={reloadData} notify={notify}
           />
         );
       case "Price Records":
         return (
           <PriceRecords
-            priceRecords={priceRecords} setPriceRecords={setPriceRecords}
-            species={species} markets={markets}
-            notify={notify} addLog={addLog}
+            priceRecords={priceRecords} error={priceRecordsError}
+            species={species} municipalities={municipalities}
+            onChanged={reloadData} notify={notify}
           />
         );
       case "System Configuration":
-        return <SystemConfiguration config={config} setConfig={setConfig} notify={notify} addLog={addLog} />;
+        return <SystemConfiguration />;
       case "Fisherfolk Suggestions":
         return (
           <FisherfolkSuggestions
-            suggestions={suggestions} setSuggestions={setSuggestions}
-            notify={notify} addLog={addLog}
+            suggestions={suggestions} error={suggestionsError}
+            onChanged={reloadData} notify={notify}
           />
         );
       case "Predictive Analytics":
         return (
           <PredictiveAnalytics
-            species={species} markets={markets} priceRecords={priceRecords}
+            apiPriceRecords={apiPriceRecords} municipalities={municipalities}
             forecasts={forecasts} setForecasts={setForecasts}
-            notify={notify} addLog={addLog}
+            notify={notify}
           />
         );
       case "Data Monitoring":
         return (
           <DataMonitoring
-            species={species} markets={markets} priceRecords={priceRecords}
+            species={species} municipalities={municipalities} priceRecords={priceRecords}
             goTo={setActivePage}
           />
         );
@@ -836,36 +688,27 @@ useEffect(() => {
           />
         );
       case "Activity Logs":
-        return <ActivityLogs logs={logs} notify={notify} />;
+        return <ActivityLogs notify={notify} />;
       case "System Announcements":
-        return (
-          <SystemAnnouncements
-            announcements={announcements} setAnnouncements={setAnnouncements}
-            notify={notify} addLog={addLog}
-          />
-        );
+        return <SystemAnnouncements />;
       case "Admin Profile":
+        return <AccountProfile account={account} notify={notify} description="Your administrator account details and recent activity." />;
+      default:
         return (
-          <AdminProfilePage
-            profile={adminProfile} setProfile={setAdminProfile}
-            notify={notify} addLog={addLog}
+          <Dashboard
+            users={users}
+            species={species}
+            publishedRecords={publishedRecords}
+            municipalities={municipalities}
+            logs={logs}
+            goTo={setActivePage}
+            adminName={adminName}
+            pendingRegistrations={pendingRegistrations}
+            usersLoading={usersLoading}
+            usersError={usersError}
+            databaseUsers={databaseUsers}
           />
         );
-      default:
-      return (
-  <Dashboard
-    users={users}
-    species={species}
-    priceRecords={priceRecords}
-    markets={markets}
-    logs={logs}
-    goTo={setActivePage}
-    pendingRegistrations={pendingRegistrations}
-    usersLoading={usersLoading}
-    usersError={usersError}
-    databaseUsers={databaseUsers}
-  />
-);
     }
   };
 
@@ -907,9 +750,9 @@ useEffect(() => {
 
         <div className="sidebar-bottom">
           <div className="admin-profile">
-            <div className="avatar">SA</div>
+            <div className="avatar">{adminInitials}</div>
             <div>
-              <strong>System Admin</strong>
+              <strong>{adminName}</strong>
               <small>Administrator</small>
             </div>
           </div>
@@ -938,9 +781,9 @@ useEffect(() => {
               {unreadNotifs.length > 0 && <span className="notif-dot"></span>}
             </button>
             <div className="top-profile">
-              <div className="avatar small">SA</div>
+              <div className="avatar small">{adminInitials}</div>
               <div>
-                <strong>System Admin</strong>
+                <strong>{adminName}</strong>
                 <span>Administrator</span>
               </div>
             </div>
@@ -963,10 +806,11 @@ useEffect(() => {
 function Dashboard({
   users,
   species,
-  priceRecords,
-  markets,
+  publishedRecords,
+  municipalities,
   logs,
   goTo,
+  adminName,
   pendingRegistrations,
   databaseUsers,
   usersLoading,
@@ -974,46 +818,37 @@ function Dashboard({
 }) {
   const pending = users.filter((u) => u.status === "Pending");
   const activeUsers = users.filter((u) => u.status === "Active");
-  const onlineUsers = activeUsers.filter((u) => u.online);
-  const offlineUsers = activeUsers.filter((u) => !u.online);
   const activeSpecies = species.filter((s) => s.status === "Active");
-  const activeMarkets = markets.filter((m) => m.status === "Active");
+  const activeMunicipalities = municipalities.filter((m) => m.status === "Active");
 
-  const activeRecords = priceRecords.filter((r) => r.status !== "Deleted");
-  const today = activeRecords.length ? activeRecords[0].date : null;
+  // Highest published prices for today, the last 7 days and the last 30 days.
+  const today = new Date().toLocaleDateString("en-CA");
+  const daysAgo = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toLocaleDateString("en-CA");
+  };
+  const highestOf = (rows) => (rows.length ? rows.reduce((a, b) => (b.price > a.price ? b : a)) : null);
+  const highestToday = highestOf(publishedRecords.filter((r) => r.date === today));
+  const highestWeek = highestOf(publishedRecords.filter((r) => r.date >= daysAgo(7)));
+  const highestMonth = highestOf(publishedRecords.filter((r) => r.date >= daysAgo(30)));
 
-  const todayRecords = activeRecords.filter((r) => r.date === today);
-  const highestToday = todayRecords.length
-    ? todayRecords.reduce((a, b) => (b.price > a.price ? b : a))
-    : null;
+  // Most recently active accounts first.
+  const recentLogins = users
+    .filter((u) => u.lastLogin)
+    .sort((a, b) => (a.lastLogin < b.lastLogin ? 1 : -1))
+    .slice(0, 5);
 
-  const weekAgo = today ? new Date(today + "T00:00:00") : null;
-  if (weekAgo) weekAgo.setDate(weekAgo.getDate() - 7);
-  const monthAgo = today ? new Date(today + "T00:00:00") : null;
-  if (monthAgo) monthAgo.setDate(monthAgo.getDate() - 30);
+  const speciesWithPrices = new Set(publishedRecords.map((r) => r.species)).size;
 
-  const weekRecords = today
-    ? activeRecords.filter((r) => r.date >= weekAgo.toISOString().slice(0, 10))
-    : [];
-  const monthRecords = activeRecords;
-
-  const highestWeek = weekRecords.length
-    ? weekRecords.reduce((a, b) => (b.price > a.price ? b : a))
-    : null;
-  const highestMonth = monthRecords.length
-    ? monthRecords.reduce((a, b) => (b.price > a.price ? b : a))
-    : null;
-
-  const speciesWithPrices = new Set(activeRecords.map((r) => r.species)).size;
-
-  const recommendations = generateRecommendations(priceRecords);
+  const recommendations = generateRecommendations(publishedRecords);
 
   return (
     <>
       <div className="welcome-card">
         <div>
           <span className="eyebrow">SYSTEM ADMINISTRATOR</span>
-          <h2>Welcome back, Administrator</h2>
+          <h2>Welcome back, {adminName}</h2>
           <p>Monitor AquaTimbang users, fish species, prices, and system activity.</p>
         </div>
         <div className="welcome-fish">🐟</div>
@@ -1041,9 +876,9 @@ function Dashboard({
         <div className="stat-card clickable" onClick={() => goTo("User Management")}>
           <div className="stat-icon green">●</div>
           <div>
-            <span>Online Now</span>
-            <h2>{onlineUsers.length}</h2>
-            <small>{offlineUsers.length} offline · {activeUsers.length} active total</small>
+            <span>Active Accounts</span>
+            <h2>{activeUsers.length}</h2>
+            <small>Approved and able to log in</small>
           </div>
         </div>
 
@@ -1063,7 +898,7 @@ function Dashboard({
           <div>
             <span>Highest Price Today</span>
             <h2>{highestToday ? peso(highestToday.price) : "—"}</h2>
-            <small>{highestToday ? `${highestToday.species} · ${highestToday.market}` : "No records today"}</small>
+            <small>{highestToday ? `${highestToday.species} · ${highestToday.municipality}` : "No published prices today"}</small>
           </div>
         </div>
 
@@ -1088,9 +923,9 @@ function Dashboard({
         <div className="stat-card clickable" onClick={() => goTo("Municipality & Market")}>
           <div className="stat-icon purple">⚑</div>
           <div>
-            <span>Active Markets</span>
-            <h2>{activeMarkets.length}</h2>
-            <small>Across {municipalitiesCount(markets)} municipalities</small>
+            <span>Active Municipalities</span>
+            <h2>{activeMunicipalities.length}</h2>
+            <small>of {municipalities.length} registered</small>
           </div>
         </div>
       </div>
@@ -1120,7 +955,7 @@ function Dashboard({
           <div className="panel-header">
             <div>
               <h3>Login Activity</h3>
-              <p>Sessions across all users</p>
+              <p>Most recent logins across all users</p>
             </div>
             <button className="text-button" onClick={() => goTo("User Management")}>
               View Users →
@@ -1132,19 +967,21 @@ function Dashboard({
               <tr>
                 <th>USER</th>
                 <th>ROLE</th>
-                <th>LOGINS</th>
+                <th>LAST LOGIN</th>
                 <th>STATUS</th>
               </tr>
             </thead>
             <tbody>
-              {users.filter((u) => u.status === "Active").slice(0, 5).map((u) => (
+              {recentLogins.length === 0 ? (
+                <tr><td colSpan="4" className="empty-row">No logins recorded yet.</td></tr>
+              ) : recentLogins.map((u) => (
                 <tr key={u.id}>
                   <td><strong>{u.name}</strong></td>
                   <td>{u.role}</td>
-                  <td>{u.loginCount}</td>
+                  <td>{formatAuditTimestamp(u.lastLogin)}</td>
                   <td>
-                    <span className={`badge ${u.online ? "success" : "inactive"}`}>
-                      {u.online ? "Online" : "Offline"}
+                    <span className={`badge ${u.status === "Active" ? "success" : "inactive"}`}>
+                      {u.status}
                     </span>
                   </td>
                 </tr>
@@ -1198,10 +1035,11 @@ function Dashboard({
           <div className="panel-header">
             <div>
               <h3>Recent Activities</h3>
-              <p>Latest administrator activities</p>
+              <p>Latest activity recorded across the system</p>
             </div>
           </div>
 
+          {logs.length === 0 && <p className="empty-row">No activity recorded yet.</p>}
           {logs.slice(0, 3).map((l) => (
             <div className="activity" key={l.id}>
               <div className="activity-icon blue-bg">◷</div>
@@ -1218,34 +1056,23 @@ function Dashboard({
   );
 }
 
-function municipalitiesCount(markets) {
-  return new Set(markets.filter((m) => m.status === "Active").map((m) => m.municipality)).size;
-}
-
 /* ================================================================
    USER MANAGEMENT
    ================================================================ */
 
 function UserManagement({
-  users,
-  setUsers,
   notify,
-  addLog,
-  logs,
+  loading,
+  loadError,
+  activityLogs,
   pendingRegistrations,
   setPendingRegistrations,
   databaseUsers,
   setDatabaseUsers,
-  databaseUsersLoading,
-  databaseUsersError,
-  usersLoading,
-  usersError,
 }) {
   const [tab, setTab] = useState("Pending");
   const [search, setSearch] = useState("");
   const [roleFilter, setRoleFilter] = useState("All Roles");
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [documentLoading, setDocumentLoading] = useState(false);
   const [reviewingUser, setReviewingUser] = useState(null);
@@ -1276,7 +1103,7 @@ function UserManagement({
 
   try {
     const response = await fetch(
-      `http://127.0.0.1:8000/api/auth/users/${userId}/verification/${documentType}/`,
+      `${API_BASE_URL}/auth/users/${userId}/verification/${documentType}/`,
       {
         headers: {
           Authorization: `Token ${token}`,
@@ -1314,10 +1141,6 @@ function UserManagement({
     setDocumentLoading(false);
   }
 };
-  const [form, setForm] = useState({
-    name: "", email: "", username: "", password: "", contact: "",
-    role: "Fish Vendor", municipality: "Cebu City",
-  });
 
   // Convert Django pending registrations into the format
   // expected by the existing User Management table.
@@ -1339,8 +1162,7 @@ function UserManagement({
     lastLogin: "Never",
   }));
 
-  // Keep sample users available in the other tabs for now,
-  // but exclude their sample pending registrations.
+  // Every registered account from Django.
   const combinedUsers = databaseUsers.map((account) => ({
   id: account.id,
   name: `${account.first_name || ""} ${account.last_name || ""}`.trim(),
@@ -1377,8 +1199,8 @@ function UserManagement({
 }));
 
   const pendingCount = pendingRegistrations.length;
-  const onlineCount = users.filter((u) => u.online).length;
-  const offlineCount = users.filter((u) => u.status === "Active" && !u.online).length;
+  const activeCount = combinedUsers.filter((u) => u.status === "Active").length;
+  const rejectedCount = combinedUsers.filter((u) => u.status === "Rejected" || u.status === "Inactive").length;
 
   const visible = (
   tab === "Pending"
@@ -1433,7 +1255,7 @@ const submitReview = async () => {
 
   try {
     const response = await fetch(
-      `http://127.0.0.1:8000/api/auth/users/${reviewingUser.id}/${reviewAction}/`,
+      `${API_BASE_URL}/auth/users/${reviewingUser.id}/${reviewAction}/`,
       {
         method: "POST",
         headers: {
@@ -1479,11 +1301,6 @@ const submitReview = async () => {
       )
     );
 
-    addLog(
-      `${reviewAction === "approve" ? "Approved" : "Rejected"} user: ${reviewingUser.name}`,
-      "User Management"
-    );
-
     notify(
       `${reviewingUser.name} ${
         reviewAction === "approve" ? "approved" : "rejected"
@@ -1501,102 +1318,16 @@ const submitReview = async () => {
     setReviewSaving(false);
   }
 };
-  const toggleStatus = (u) => {
-    const next = u.status === "Active" ? "Inactive" : "Active";
-
-    if (next === "Inactive" &&
-      !window.confirm(
-        `Deactivate ${u.name}'s account? They will immediately lose access and won't be able to log in until reactivated.`
-      )
-    ) return;
-
-    setUsers((prev) =>
-      prev.map((x) => (x.id === u.id ? { ...x, status: next, online: next === "Active" ? x.online : false } : x))
-    );
-    addLog(`${next === "Active" ? "Activated" : "Deactivated"} user: ${u.name}`, "User Management");
-    notify(`${u.name} is now ${next.toLowerCase()}.`);
-  };
-
-  const remove = (u) => {
-    if (!window.confirm(`Delete the account of ${u.name}? This cannot be undone.`)) return;
-    setUsers((prev) => prev.filter((x) => x.id !== u.id));
-    addLog(`Deleted user: ${u.name}`, "User Management");
-    notify(`${u.name} deleted.`);
-  };
-
-  const resetPassword = (u) => {
-    if (!window.confirm(`Send a password reset link to ${u.name} (${u.email})?`)) return;
-    addLog(`Reset password for user: ${u.name}`, "User Management");
-    notify(`Password reset link sent to ${u.name}.`);
-  };
-
+  // Activity log entries made by or about this account.
   const userHistory = (u) =>
-    logs.filter((l) => l.action.toLowerCase().includes(u.name.toLowerCase()));
-
-  const openAdd = () => {
-    setEditing(null);
-    setForm({ name: "", email: "", username: "", password: "", contact: "", role: "Fish Vendor", municipality: "Cebu City" });
-    setShowForm(true);
-  };
-
-  const openEdit = (u) => {
-    setEditing(u);
-    setForm({ ...u, password: "" });
-    setShowForm(true);
-  };
-
-  const save = () => {
-    if (!form.name.trim() || !form.username.trim()) {
-      notify("Name and username are required.");
-      return;
-    }
-
-    if (editing) {
-      const roleChanged = editing.role !== form.role;
-
-      if (roleChanged &&
-        !window.confirm(
-          `Change ${editing.name}'s role from ${editing.role} to ${form.role}? ` +
-          `Starting with their next login, they will only have ${form.role} access and functions — ` +
-          `their old ${editing.role} permissions will no longer apply.`
-        )
-      ) return;
-
-      const { password, ...rest } = form;
-      setUsers((prev) => prev.map((x) => (x.id === editing.id ? { ...x, ...rest } : x)));
-      addLog(
-        roleChanged
-          ? `Changed role for ${form.name}: ${editing.role} → ${form.role}`
-          : `Updated user: ${form.name}`,
-        "User Management"
-      );
-      notify(roleChanged ? `${form.name}'s role updated to ${form.role}.` : "User updated.");
-    } else {
-      if (!form.password.trim() || !form.contact.trim() || !form.email.trim()) {
-        notify("Password, contact, and email are required for a new account.");
-        return;
-      }
-      const { password, ...rest } = form;
-      setUsers((prev) => [
-        ...prev,
-        {
-          ...rest,
-          id: Date.now(),
-          status: "Active",
-          registeredDate: new Date().toLocaleDateString("en-PH"),
-          approvedDate: new Date().toLocaleDateString("en-PH"),
-          lastLogin: "Never",
-          loginCount: 0,
-          logoutCount: 0,
-          online: false,
-        },
-      ]);
-      addLog(`Created user: ${form.name}`, "User Management");
-      notify("User created.");
-    }
-
-    setShowForm(false);
-  };
+    activityLogs
+      .filter((l) => l.actor_username === u.username || l.target_name === u.username)
+      .map((l) => ({
+        id: l.id,
+        action: `${auditLabel(l.action)} ${l.target_name || ""}`.trim(),
+        module: `${auditModule(l)} · by ${l.actor_username}`,
+        date: formatAuditTimestamp(l.created_at),
+      }));
 
   const initials = (name) => name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
   const roleClass = (role) => (role === "Fish Vendor" ? "vendor" : role === "LGU Personnel" ? "lgu" : "admin");
@@ -1608,8 +1339,10 @@ const submitReview = async () => {
           <h2>User Management</h2>
           <p>Manage user accounts, approvals, roles, and access.</p>
         </div>
-        <button className="primary-btn" onClick={openAdd}>+ Add User</button>
       </div>
+
+      {loading && <div className="info-box">Loading accounts…</div>}
+      {loadError && <div className="warn-box" role="alert">{loadError}</div>}
 
       <div className="log-summary">
         <div className="mini-stat">
@@ -1621,12 +1354,12 @@ const submitReview = async () => {
           <strong>{pendingCount}</strong>
         </div>
         <div className="mini-stat">
-          <span>Online Now</span>
-          <strong>{onlineCount}</strong>
+          <span>Active</span>
+          <strong>{activeCount}</strong>
         </div>
         <div className="mini-stat">
-          <span>Offline</span>
-          <strong>{offlineCount}</strong>
+          <span>Rejected / Inactive</span>
+          <strong>{rejectedCount}</strong>
         </div>
       </div>
 
@@ -1636,80 +1369,6 @@ const submitReview = async () => {
           <div>
             <strong>{pendingCount} pending registrations</strong>
             <p>Review requested roles carefully — LGU Officer requests must be identity-verified before you approve them.</p>
-          </div>
-        </div>
-      )}
-
-      {showForm && (
-        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h3>{editing ? "Edit User" : "Add New User"}</h3>
-              <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
-            </div>
-
-            <div className="form-group">
-              <label>Full Name</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
-            </div>
-
-            <div className="form-group">
-              <label>Username</label>
-              <input value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} />
-            </div>
-
-            {!editing && (
-              <div className="form-group">
-                <label>Password</label>
-                <input
-                  type="password"
-                  value={form.password}
-                  placeholder="Set an initial password"
-                  onChange={(e) => setForm({ ...form, password: e.target.value })}
-                />
-              </div>
-            )}
-
-            <div className="form-group">
-              <label>Email Address</label>
-              <input value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} />
-            </div>
-
-            <div className="form-group">
-              <label>Contact Number</label>
-              <input value={form.contact} onChange={(e) => setForm({ ...form, contact: e.target.value })} />
-            </div>
-
-            <div className="form-group">
-              <label>Role</label>
-              <select value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>
-                <option>Fish Vendor</option>
-                <option>LGU Personnel</option>
-                <option>System Administrator</option>
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Municipality</label>
-              <select value={form.municipality} onChange={(e) => setForm({ ...form, municipality: e.target.value })}>
-                <option>Cebu City</option>
-                <option>Mandaue City</option>
-              </select>
-            </div>
-
-            {!editing && (
-              <div className="info-box">
-                New accounts created here are activated immediately. Self-registered
-                Fish Vendor accounts instead land in "Pending" until approved.
-              </div>
-            )}
-
-            <div className="button-row">
-              <button className="secondary-btn" onClick={() => setShowForm(false)}>Cancel</button>
-              <button className="primary-btn" onClick={save}>
-                {editing ? "Save Changes" : "Create User"}
-              </button>
-            </div>
           </div>
         </div>
       )}
@@ -2079,15 +1738,6 @@ const submitReview = async () => {
                     ) : (
                       <div className="action-icons">
                         <button title="View Profile" onClick={() => setViewing(u)}>👁</button>
-                        <button title="Edit" onClick={() => openEdit(u)}>✎</button>
-                        <button title="Reset Password" onClick={() => resetPassword(u)}>🔑</button>
-                        <button
-                          title={u.status === "Active" ? "Deactivate" : "Activate"}
-                          onClick={() => toggleStatus(u)}
-                        >
-                          ◉
-                        </button>
-                        <button title="Delete" onClick={() => remove(u)}>✕</button>
                       </div>
                     )}
                   </td>
@@ -2105,7 +1755,7 @@ const submitReview = async () => {
    FISH SPECIES
    ================================================================ */
 
-function FishSpecies({ species, setSpecies, priceRecords, notify, addLog }) {
+function FishSpecies({ species, setSpecies, priceRecords, notify }) {
   const [search, setSearch] = useState("");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
@@ -2191,8 +1841,8 @@ function FishSpecies({ species, setSpecies, priceRecords, notify, addLog }) {
 
   try {
     const url = editing
-      ? `http://127.0.0.1:8000/api/fish-species/${editing.id}/`
-      : "http://127.0.0.1:8000/api/fish-species/";
+      ? `${API_BASE_URL}/fish-species/${editing.id}/`
+      : `${API_BASE_URL}/fish-species/`;
 
     const result = await speciesRequest(
       url,
@@ -2210,10 +1860,6 @@ function FishSpecies({ species, setSpecies, priceRecords, notify, addLog }) {
         : [...prev, updated]
     );
 
-    addLog(
-      `${editing ? "Updated" : "Added"} species: ${updated.name}`,
-      "Fish Species"
-    );
 
     notify(editing ? "Species updated successfully." : "Species added successfully.");
     setShowForm(false);
@@ -2242,7 +1888,7 @@ const toggleStatus = async (s) => {
 
   try {
     const result = await speciesRequest(
-      `http://127.0.0.1:8000/api/fish-species/${s.id}/`,
+      `${API_BASE_URL}/fish-species/${s.id}/`,
       "PATCH",
       { is_active: nextActive }
     );
@@ -2253,10 +1899,6 @@ const toggleStatus = async (s) => {
       prev.map((item) => item.id === s.id ? updated : item)
     );
 
-    addLog(
-      `${nextActive ? "Reactivated" : "Deactivated"} species: ${s.name}`,
-      "Fish Species"
-    );
 
     notify(`${s.name} is now ${nextActive ? "active" : "inactive"}.`);
   } catch (error) {
@@ -2285,13 +1927,12 @@ const toggleStatus = async (s) => {
 
   try {
     await speciesRequest(
-      `http://127.0.0.1:8000/api/fish-species/${s.id}/`,
+      `${API_BASE_URL}/fish-species/${s.id}/`,
       "DELETE"
     );
 
     setSpecies((prev) => prev.filter((item) => item.id !== s.id));
 
-    addLog(`Deleted species: ${s.name}`, "Fish Species");
     notify(`${s.name} deleted successfully.`);
   } catch (error) {
     console.error("Species deletion error:", error);
@@ -2477,110 +2118,71 @@ const toggleStatus = async (s) => {
    MUNICIPALITY & MARKET MANAGEMENT
    ================================================================ */
 
-function MunicipalityMarket({ municipalities, setMunicipalities, markets, setMarkets, notify, addLog }) {
-  const [muniForm, setMuniForm] = useState({ name: "" });
+function MunicipalityMarket({ municipalities, markets, onChanged, notify }) {
+  const [muniForm, setMuniForm] = useState({ name: "", province: "" });
   const [showMuniForm, setShowMuniForm] = useState(false);
   const [editingMuni, setEditingMuni] = useState(null);
+  const [saving, setSaving] = useState(false);
 
-  const [marketForm, setMarketForm] = useState({ name: "", municipality: municipalities[0]?.name || "" });
-  const [showMarketForm, setShowMarketForm] = useState(false);
-  const [editingMarket, setEditingMarket] = useState(null);
-
-  const activeMunicipalities = municipalities.filter((m) => m.status === "Active");
-
-  /* ---- municipalities ---- */
+  const sendMunicipality = async (url, method, body) => {
+    const response = await fetch(url, {
+      method,
+      headers: authHeaders({ "Content-Type": "application/json" }),
+      body: JSON.stringify(body),
+    });
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = data && typeof data === "object" ? Object.values(data).flat().map(String).join(" ") : "";
+      throw new Error(message || `Request failed (HTTP ${response.status}).`);
+    }
+    return data;
+  };
 
   const openAddMuni = () => {
     setEditingMuni(null);
-    setMuniForm({ name: "" });
+    setMuniForm({ name: "", province: "" });
     setShowMuniForm(true);
   };
 
   const openEditMuni = (m) => {
     setEditingMuni(m);
-    setMuniForm({ name: m.name });
+    setMuniForm({ name: m.name, province: m.province || "" });
     setShowMuniForm(true);
   };
 
-  const saveMuni = () => {
-    if (!muniForm.name.trim()) {
-      notify("Municipality name is required.");
+  const saveMuni = async () => {
+    if (!muniForm.name.trim() || !muniForm.province.trim()) {
+      notify("Municipality name and province are required.");
       return;
     }
-
-    if (editingMuni) {
-      setMunicipalities((prev) =>
-        prev.map((x) => (x.id === editingMuni.id ? { ...x, name: muniForm.name } : x))
-      );
-      addLog(`Renamed municipality to: ${muniForm.name}`, "Municipality & Market");
-      notify("Municipality updated.");
-    } else {
-      setMunicipalities((prev) => [...prev, { id: Date.now(), name: muniForm.name, status: "Active" }]);
-      addLog(`Added municipality: ${muniForm.name}`, "Municipality & Market");
-      notify("Municipality added.");
+    setSaving(true);
+    try {
+      const body = { name: muniForm.name.trim(), province: muniForm.province.trim() };
+      if (editingMuni) {
+        await sendMunicipality(apiUrl(`/municipalities/${editingMuni.id}/`), "PATCH", body);
+        notify("Municipality updated.");
+      } else {
+        await sendMunicipality(apiUrl("/municipalities/"), "POST", { ...body, is_active: true });
+        notify("Municipality added.");
+      }
+      setShowMuniForm(false);
+      onChanged();
+    } catch (error) {
+      notify(error.message);
+    } finally {
+      setSaving(false);
     }
-
-    setShowMuniForm(false);
   };
 
-  const toggleMuni = (m) => {
-    const next = m.status === "Active" ? "Inactive" : "Active";
-    setMunicipalities((prev) => prev.map((x) => (x.id === m.id ? { ...x, status: next } : x)));
-    addLog(`${next === "Active" ? "Reactivated" : "Deactivated"} municipality: ${m.name}`, "Municipality & Market");
-    notify(`${m.name} is now ${next.toLowerCase()}.`);
-  };
-
-  /* ---- markets ---- */
-
-  const openAddMarket = () => {
-    setEditingMarket(null);
-    setMarketForm({ name: "", municipality: activeMunicipalities[0]?.name || "" });
-    setShowMarketForm(true);
-  };
-
-  const openEditMarket = (m) => {
-    setEditingMarket(m);
-    setMarketForm({ name: m.name, municipality: m.municipality });
-    setShowMarketForm(true);
-  };
-
-  const saveMarket = () => {
-    if (!marketForm.name.trim()) {
-      notify("Market name is required.");
-      return;
+  const toggleMuni = async (m) => {
+    const activate = m.status !== "Active";
+    try {
+      await sendMunicipality(apiUrl(`/municipalities/${m.id}/`), "PATCH", { is_active: activate });
+      notify(`${m.name} is now ${activate ? "active" : "inactive"}.`);
+      onChanged();
+    } catch (error) {
+      notify(error.message);
     }
-
-    if (editingMarket) {
-      setMarkets((prev) =>
-        prev.map((x) => (x.id === editingMarket.id ? { ...x, ...marketForm } : x))
-      );
-      addLog(`Updated market: ${marketForm.name}`, "Municipality & Market");
-      notify("Market updated.");
-    } else {
-      setMarkets((prev) => [...prev, { ...marketForm, id: Date.now(), status: "Active" }]);
-      addLog(`Added market: ${marketForm.name}`, "Municipality & Market");
-      notify("Market added.");
-    }
-
-    setShowMarketForm(false);
-  };
-
-  const toggleMarket = (m) => {
-    const next = m.status === "Active" ? "Inactive" : "Active";
-    setMarkets((prev) => prev.map((x) => (x.id === m.id ? { ...x, status: next } : x)));
-    addLog(`${next === "Active" ? "Reactivated" : "Deactivated"} market: ${m.name}`, "Municipality & Market");
-    notify(`${m.name} is now ${next.toLowerCase()}.`);
-  };
-
-  const removeMarket = (m) => {
-    if (m.status === "Active") {
-      notify("Only inactive markets can be removed. Deactivate it first.");
-      return;
-    }
-    if (!window.confirm(`Permanently remove ${m.name}? This cannot be undone.`)) return;
-    setMarkets((prev) => prev.filter((x) => x.id !== m.id));
-    addLog(`Removed inactive market: ${m.name}`, "Municipality & Market");
-    notify(`${m.name} removed.`);
   };
 
   return (
@@ -2588,7 +2190,7 @@ function MunicipalityMarket({ municipalities, setMunicipalities, markets, setMar
       <div className="page-title">
         <div>
           <h2>Municipality &amp; Market Management</h2>
-          <p>Manage municipalities and the markets that report prices under them.</p>
+          <p>Manage municipalities and see the markets that registered vendors work in.</p>
         </div>
       </div>
 
@@ -2602,46 +2204,18 @@ function MunicipalityMarket({ municipalities, setMunicipalities, markets, setMar
 
             <div className="form-group">
               <label>Municipality Name</label>
-              <input value={muniForm.name} onChange={(e) => setMuniForm({ name: e.target.value })} />
+              <input value={muniForm.name} onChange={(e) => setMuniForm({ ...muniForm, name: e.target.value })} />
+            </div>
+
+            <div className="form-group">
+              <label>Province</label>
+              <input value={muniForm.province} onChange={(e) => setMuniForm({ ...muniForm, province: e.target.value })} />
             </div>
 
             <div className="button-row">
               <button className="secondary-btn" onClick={() => setShowMuniForm(false)}>Cancel</button>
-              <button className="primary-btn" onClick={saveMuni}>
-                {editingMuni ? "Save Changes" : "Add Municipality"}
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {showMarketForm && (
-        <div className="modal-backdrop" onClick={() => setShowMarketForm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h3>{editingMarket ? "Edit Market" : "Add Market"}</h3>
-              <button className="modal-close" onClick={() => setShowMarketForm(false)}>✕</button>
-            </div>
-
-            <div className="form-group">
-              <label>Market Name</label>
-              <input value={marketForm.name} onChange={(e) => setMarketForm({ ...marketForm, name: e.target.value })} />
-            </div>
-
-            <div className="form-group">
-              <label>Municipality</label>
-              <select
-                value={marketForm.municipality}
-                onChange={(e) => setMarketForm({ ...marketForm, municipality: e.target.value })}
-              >
-                {activeMunicipalities.map((m) => <option key={m.id}>{m.name}</option>)}
-              </select>
-            </div>
-
-            <div className="button-row">
-              <button className="secondary-btn" onClick={() => setShowMarketForm(false)}>Cancel</button>
-              <button className="primary-btn" onClick={saveMarket}>
-                {editingMarket ? "Save Changes" : "Add Market"}
+              <button className="primary-btn" onClick={saveMuni} disabled={saving}>
+                {saving ? "Saving…" : editingMuni ? "Save Changes" : "Add Municipality"}
               </button>
             </div>
           </div>
@@ -2663,14 +2237,18 @@ function MunicipalityMarket({ municipalities, setMunicipalities, markets, setMar
             <thead>
               <tr>
                 <th>NAME</th>
+                <th>PROVINCE</th>
                 <th>STATUS</th>
                 <th>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
-              {municipalities.map((m) => (
+              {municipalities.length === 0 ? (
+                <tr><td colSpan="4" className="empty-row">No municipalities yet.</td></tr>
+              ) : municipalities.map((m) => (
                 <tr key={m.id}>
                   <td><strong>{m.name}</strong></td>
+                  <td>{m.province || "—"}</td>
                   <td><span className={`badge ${m.status === "Active" ? "success" : "inactive"}`}>{m.status}</span></td>
                   <td>
                     <div className="action-icons">
@@ -2696,7 +2274,7 @@ function MunicipalityMarket({ municipalities, setMunicipalities, markets, setMar
             <div className="config-icon orange">▤</div>
             <div>
               <h3>Markets</h3>
-              <p>Individual markets under each municipality</p>
+              <p>Markets named by registered fish vendors</p>
             </div>
           </div>
 
@@ -2705,40 +2283,23 @@ function MunicipalityMarket({ municipalities, setMunicipalities, markets, setMar
               <tr>
                 <th>MARKET</th>
                 <th>MUNICIPALITY</th>
-                <th>STATUS</th>
-                <th>ACTIONS</th>
               </tr>
             </thead>
             <tbody>
-              {markets.map((m) => (
+              {markets.length === 0 ? (
+                <tr><td colSpan="2" className="empty-row">No vendor has registered a market yet.</td></tr>
+              ) : markets.map((m) => (
                 <tr key={m.id}>
                   <td><strong>{m.name}</strong></td>
                   <td>{m.municipality}</td>
-                  <td><span className={`badge ${m.status === "Active" ? "success" : "inactive"}`}>{m.status}</span></td>
-                  <td>
-                    <div className="action-icons">
-                      <button title="Edit" onClick={() => openEditMarket(m)}>✎</button>
-                      <button
-                        title={m.status === "Active" ? "Deactivate" : "Reactivate"}
-                        onClick={() => toggleMarket(m)}
-                      >
-                        ◉
-                      </button>
-                      {m.status === "Inactive" && (
-                        <button title="Remove permanently" onClick={() => removeMarket(m)}>✕</button>
-                      )}
-                    </div>
-                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
 
-          <button className="primary-btn full-btn" onClick={openAddMarket}>+ Add Market</button>
-
           <div className="info-box" style={{ marginTop: 14 }}>
-            Only inactive markets can be permanently removed — deactivate a market
-            first if it's closing for good.
+            Markets are taken from fish vendor registrations. A separate market list
+            that can be edited here is not stored in the database yet.
           </div>
         </div>
 
@@ -2751,62 +2312,68 @@ function MunicipalityMarket({ municipalities, setMunicipalities, markets, setMar
    PRICE RECORDS
    ================================================================ */
 
-function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify, addLog }) {
-  const [tab, setTab] = useState("Current");
+function PriceRecords({ priceRecords, error, species, municipalities, onChanged, notify }) {
+  const [tab, setTab] = useState("Latest Day");
   const [search, setSearch] = useState("");
   const [speciesFilter, setSpeciesFilter] = useState("All Species");
-  const [marketFilter, setMarketFilter] = useState("All Markets");
+  const [municipalityFilter, setMunicipalityFilter] = useState("All Municipalities");
   const [dateFilter, setDateFilter] = useState("");
 
-  const activeSpecies = species.filter((s) => s.status === "Active");
-  const activeMarkets = markets.filter((m) => m.status === "Active");
-
-  const today = priceRecords.length
-    ? priceRecords.filter((r) => r.status !== "Deleted")[0]?.date
-    : null;
+  const latestDay = priceRecords.reduce((max, r) => (r.date > max ? r.date : max), "");
+  const today = new Date().toLocaleDateString("en-CA");
 
   const base = priceRecords.filter((r) => {
-    if (tab === "Current") return r.date === today && r.status !== "Deleted";
-    if (tab === "Historical") return r.status !== "Deleted";
-    if (tab === "Corrected") return r.status === "Corrected";
-    if (tab === "Deleted") return r.status === "Deleted";
+    if (tab === "Latest Day") return r.date === latestDay;
+    if (tab === "Published") return r.status === "Published";
+    if (tab === "In Review") return ["Draft", "Pending Review", "Approved"].includes(r.status);
+    if (tab === "Flagged / Rejected") return r.status === "Flagged" || r.status === "Rejected";
     return true;
   });
 
   const visible = base
     .filter((r) => speciesFilter === "All Species" || r.species === speciesFilter)
-    .filter((r) => marketFilter === "All Markets" || r.market === marketFilter)
+    .filter((r) => municipalityFilter === "All Municipalities" || r.municipality === municipalityFilter)
     .filter((r) => !dateFilter || r.date === dateFilter)
     .filter((r) =>
-      [r.species, r.market, r.enteredBy].join(" ").toLowerCase().includes(search.toLowerCase())
-    );
+      [r.species, r.municipality, r.enteredBy].join(" ").toLowerCase().includes(search.toLowerCase())
+    )
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id));
 
+  // Active species × municipality pairs with no price recorded today.
   const missing = [];
-  if (today) {
-    activeSpecies.forEach((sp) => {
-      activeMarkets.forEach((mk) => {
-        const has = priceRecords.some(
-          (r) => r.species === sp.name && r.market === mk.name && r.date === today && r.status !== "Deleted"
-        );
-        if (!has) missing.push({ species: sp.name, market: mk.name });
-      });
+  species.filter((s) => s.status === "Active").forEach((sp) => {
+    municipalities.filter((m) => m.status === "Active").forEach((mk) => {
+      if (!priceRecords.some((r) => r.species === sp.name && r.municipality === mk.name && r.date === today)) {
+        missing.push({ species: sp.name, municipality: mk.name });
+      }
     });
-  }
+  });
 
-  const deleteRecord = (r) => {
-    if (!window.confirm(`Mark this ${r.species} record (${peso(r.price)}) as deleted?`)) return;
-    setPriceRecords((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "Deleted" } : x)));
-    addLog(`Deleted price record: ${r.species} · ${peso(r.price)} · ${fmtDate(r.date)}`, "Price Records");
-    notify("Record marked as deleted.");
+  const send = async (r, method, body) => {
+    const response = await fetch(apiUrl(`/prices/${r.id}/`), {
+      method,
+      headers: authHeaders(body ? { "Content-Type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (!response.ok) {
+      const data = await response.json().catch(() => null);
+      const message = data && typeof data === "object" ? Object.values(data).flat().map(String).join(" ") : "";
+      throw new Error(message || `Request failed (HTTP ${response.status}).`);
+    }
   };
 
-  const restoreRecord = (r) => {
-    setPriceRecords((prev) => prev.map((x) => (x.id === r.id ? { ...x, status: "Active" } : x)));
-    addLog(`Restored price record: ${r.species} · ${peso(r.price)} · ${fmtDate(r.date)}`, "Price Records");
-    notify("Record restored.");
+  const deleteRecord = async (r) => {
+    if (!window.confirm(`Permanently delete this ${r.species} record (${peso(r.price)}, ${fmtDate(r.date)})?`)) return;
+    try {
+      await send(r, "DELETE");
+      notify("Record deleted.");
+      onChanged();
+    } catch (err) {
+      notify(err.message);
+    }
   };
 
-  const correctRecord = (r) => {
+  const correctRecord = async (r) => {
     const input = window.prompt(`Correct the price for ${r.species} on ${fmtDate(r.date)}:`, r.price);
     if (input === null) return;
 
@@ -2815,42 +2382,33 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
       notify("Invalid price entered.");
       return;
     }
-
-    setPriceRecords((prev) =>
-      prev.map((x) =>
-        x.id === r.id
-          ? {
-              ...x,
-              status: "Corrected",
-              previousPrice: x.price,
-              price: newPrice,
-              correctedBy: "System Admin",
-              correctedDate: new Date().toLocaleDateString("en-PH"),
-            }
-          : x
-      )
-    );
-
-    addLog(`Corrected price record: ${r.species} ${peso(r.price)} → ${peso(newPrice)}`, "Price Records");
-    notify("Record corrected.");
+    try {
+      await send(r, "PATCH", { price_per_kg: newPrice.toFixed(2) });
+      notify("Record corrected.");
+      onChanged();
+    } catch (err) {
+      notify(err.message);
+    }
   };
 
   const exportCSV = () => {
-    const header = "Date,Species,Municipality,Market,Price,Entered By,Status\n";
-    const body = visible
-      .map((r) => `"${r.date}","${r.species}","${r.municipality}","${r.market}","${r.price.toFixed(2)}","${r.enteredBy}","${r.status}"`)
-      .join("\n");
-
-    const blob = new Blob([header + body], { type: "text/csv;charset=utf-8;" });
+    const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
+    const rows = [
+      ["Date", "Species", "Municipality", "Price", "Entered By", "Status"],
+      ...visible.map((r) => [r.date, r.species, r.municipality, r.price.toFixed(2), r.enteredBy, r.status]),
+    ];
+    const blob = new Blob(["﻿" + rows.map((row) => row.map(quote).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8;" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
     a.href = url;
     a.download = "price_records.csv";
     a.click();
-    URL.revokeObjectURL(url);
+    setTimeout(() => URL.revokeObjectURL(url), 1000);
 
     notify("Price records exported.");
   };
+
+  const badgeFor = (status) => ({ Published: "success", Flagged: "flagged", Rejected: "deleted", Approved: "approved" }[status] || "pending");
 
   return (
     <>
@@ -2859,8 +2417,10 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
           <h2>Price Records</h2>
           <p>View, filter, and audit every price entry logged in the system.</p>
         </div>
-        <button className="secondary-btn" onClick={exportCSV}>↓ Export CSV</button>
+        <button className="secondary-btn" onClick={exportCSV} disabled={!visible.length}>↓ Export CSV</button>
       </div>
+
+      {error && <div className="warn-box" role="alert">{error}</div>}
 
       {missing.length > 0 && (
         <div className="notice">
@@ -2868,7 +2428,8 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
           <div>
             <strong>{missing.length} missing price record{missing.length > 1 ? "s" : ""} for today</strong>
             <p>
-              {missing.map((m) => `${m.species} at ${m.market}`).join(", ")} —
+              {missing.slice(0, 8).map((m) => `${m.species} in ${m.municipality}`).join(", ")}
+              {missing.length > 8 ? `, and ${missing.length - 8} more` : ""} —
               not yet encoded by any LGU officer.
             </p>
           </div>
@@ -2877,7 +2438,7 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
 
       <div className="panel">
         <div className="tabs">
-          {["Current", "Historical", "Corrected", "Deleted"].map((t) => (
+          {["Latest Day", "All", "Published", "In Review", "Flagged / Rejected"].map((t) => (
             <button
               key={t}
               className={tab === t ? "tab active-tab" : "tab"}
@@ -2893,7 +2454,7 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
             🔍
             <input
               type="text"
-              placeholder="Search species, market, or encoder..."
+              placeholder="Search species, municipality, or encoder..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
             />
@@ -2904,9 +2465,9 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
             {species.map((s) => <option key={s.id}>{s.name}</option>)}
           </select>
 
-          <select value={marketFilter} onChange={(e) => setMarketFilter(e.target.value)}>
-            <option>All Markets</option>
-            {markets.map((m) => <option key={m.id}>{m.name}</option>)}
+          <select value={municipalityFilter} onChange={(e) => setMunicipalityFilter(e.target.value)}>
+            <option>All Municipalities</option>
+            {municipalities.map((m) => <option key={m.id}>{m.name}</option>)}
           </select>
 
           <input
@@ -2922,7 +2483,7 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
             <tr>
               <th>DATE</th>
               <th>SPECIES</th>
-              <th>MARKET</th>
+              <th>MUNICIPALITY</th>
               <th>PRICE / KG</th>
               <th>ENTERED BY</th>
               <th>STATUS</th>
@@ -2935,31 +2496,20 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
                 <td colSpan="7" className="empty-row">No records match these filters.</td>
               </tr>
             ) : (
-              visible.map((r) => (
+              visible.slice(0, 200).map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td><strong>{r.species}</strong></td>
-                  <td>{r.market}</td>
-                  <td>
-                    <strong>{peso(r.price)}</strong>
-                    {r.status === "Corrected" && (
-                      <small className="muted-text"> (was {peso(r.previousPrice)})</small>
-                    )}
-                  </td>
+                  <td>{r.municipality}</td>
+                  <td><strong>{peso(r.price)}</strong></td>
                   <td>{r.enteredBy}</td>
                   <td>
-                    <span className={`badge ${r.status.toLowerCase()}`}>{r.status}</span>
+                    <span className={`badge ${badgeFor(r.status)}`}>{r.status}</span>
                   </td>
                   <td>
                     <div className="action-icons">
-                      {r.status !== "Deleted" ? (
-                        <>
-                          <button title="Correct price" onClick={() => correctRecord(r)}>✎</button>
-                          <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>
-                        </>
-                      ) : (
-                        <button title="Restore" onClick={() => restoreRecord(r)}>↺</button>
-                      )}
+                      <button title="Correct price" onClick={() => correctRecord(r)}>✎</button>
+                      <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>
                     </div>
                   </td>
                 </tr>
@@ -2967,6 +2517,7 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
             )}
           </tbody>
         </table>
+        {visible.length > 200 && <p className="empty-row">Showing the 200 most recent of {visible.length} records — export for the full list.</p>}
       </div>
     </>
   );
@@ -2976,158 +2527,20 @@ function PriceRecords({ priceRecords, setPriceRecords, species, markets, notify,
    SYSTEM CONFIGURATION
    ================================================================ */
 
-function SystemConfiguration({ config, setConfig, notify, addLog }) {
-  const [draft, setDraft] = useState(config);
-
-  const update = (key, value) => setDraft({ ...draft, [key]: value });
-
-  const save = () => {
-    if (Number(draft.minPrice) >= Number(draft.maxPrice)) {
-      notify("Minimum price must be lower than maximum price.");
-      return;
-    }
-    setConfig(draft);
-    addLog("Updated system configuration", "Configuration");
-    notify("Configuration saved.");
-  };
-
+function SystemConfiguration() {
   return (
     <>
       <div className="page-title">
         <div>
           <h2>System Configuration</h2>
-          <p>Configure validation rules, forecasting settings, and data retention.</p>
+          <p>Price validation bounds, forecasting, retention and security settings.</p>
         </div>
-        <button className="primary-btn" onClick={save}>Save Changes</button>
       </div>
-
-      <div className="config-grid">
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon blue">₱</div>
-            <div>
-              <h3>Price Validation</h3>
-              <p>Configure acceptable fish price ranges.</p>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Minimum Price per KG</label>
-            <div className="input-with-unit">
-              <span>₱</span>
-              <input type="number" value={draft.minPrice} onChange={(e) => update("minPrice", e.target.value)} />
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Maximum Price per KG</label>
-            <div className="input-with-unit">
-              <span>₱</span>
-              <input type="number" value={draft.maxPrice} onChange={(e) => update("maxPrice", e.target.value)} />
-            </div>
-          </div>
-
-          <div className="info-box">
-            Prices outside ₱{draft.minPrice} – ₱{draft.maxPrice} will trigger a
-            validation warning during price entry.
-          </div>
-        </div>
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon purple">◔</div>
-            <div>
-              <h3>Forecast Settings</h3>
-              <p>Configure short-term forecasting parameters.</p>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Forecast Horizon</label>
-            <select value={draft.horizon} onChange={(e) => update("horizon", e.target.value)}>
-              <option value="7">7 Days</option>
-              <option value="14">14 Days</option>
-              <option value="30">30 Days</option>
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>Forecast Method</label>
-            <select value={draft.method} onChange={(e) => update("method", e.target.value)}>
-              <option>Moving Average</option>
-              <option>SARIMAX</option>
-            </select>
-          </div>
-
-          <div className="info-box purple-info">
-            Currently using <strong>{draft.method}</strong> over a <strong>{draft.horizon}-day</strong> horizon.
-          </div>
-        </div>
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon orange">▣</div>
-            <div>
-              <h3>Data Management</h3>
-              <p>Configure historical data retention.</p>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Data Retention Period</label>
-            <select value={draft.retention} onChange={(e) => update("retention", e.target.value)}>
-              <option value="1">1 Year</option>
-              <option value="3">3 Years</option>
-              <option value="5">5 Years</option>
-              <option value="10">10 Years</option>
-            </select>
-          </div>
-
-          <div className="toggle-row">
-            <div>
-              <strong>Keep Activity Logs</strong>
-              <p>Preserve administrator activity records.</p>
-            </div>
-            <label className="switch">
-              <input type="checkbox" checked={draft.keepLogs} onChange={(e) => update("keepLogs", e.target.checked)} />
-              <span className="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon green">🔒</div>
-            <div>
-              <h3>Security Settings</h3>
-              <p>Manage basic system security controls.</p>
-            </div>
-          </div>
-
-          <div className="toggle-row">
-            <div>
-              <strong>Account Lockout</strong>
-              <p>Lock account after repeated failed attempts.</p>
-            </div>
-            <label className="switch">
-              <input type="checkbox" checked={draft.lockout} onChange={(e) => update("lockout", e.target.checked)} />
-              <span className="slider"></span>
-            </label>
-          </div>
-
-          <div className="toggle-row">
-            <div>
-              <strong>Session Timeout</strong>
-              <p>Automatically end inactive sessions.</p>
-            </div>
-            <label className="switch">
-              <input type="checkbox" checked={draft.sessionTimeout} onChange={(e) => update("sessionTimeout", e.target.checked)} />
-              <span className="slider"></span>
-            </label>
-          </div>
-        </div>
-
+      <div className="panel">
+        <p className="empty-row" style={{ padding: 24 }}>
+          System settings are not stored in the AquaTimbang database yet, so they can't be changed here.
+          The Django backend's own settings (backend/.env) control how the server runs.
+        </p>
       </div>
     </>
   );
@@ -3230,25 +2643,41 @@ function ActivityLogs({ notify }) {
    FISHERFOLK SUGGESTED PRICE MONITORING
    ================================================================ */
 
-function FisherfolkSuggestions({ suggestions, setSuggestions, notify, addLog }) {
+function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
+  const daysAgo = (n) => {
+    const d = new Date();
+    d.setDate(d.getDate() - n);
+    return d.toLocaleDateString("en-CA");
+  };
   const [speciesFilter, setSpeciesFilter] = useState("All Species");
-  const [from, setFrom] = useState("2026-09-01");
-  const [to, setTo] = useState("2026-09-16");
+  const [from, setFrom] = useState(daysAgo(30));
+  const [to, setTo] = useState(daysAgo(0));
   const [search, setSearch] = useState("");
+  const [savingId, setSavingId] = useState(null);
 
+  const speciesNames = [...new Set(suggestions.map((s) => s.species).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const stats = suggestionStats(suggestions, speciesFilter, from, to);
 
   const visible = suggestions
     .filter((s) => speciesFilter === "All Species" || s.species === speciesFilter)
     .filter((s) => s.date >= from && s.date <= to)
     .filter((s) =>
-      [s.species, s.submittedBy, s.market].join(" ").toLowerCase().includes(search.toLowerCase())
+      [s.species, s.submittedBy, s.municipality].join(" ").toLowerCase().includes(search.toLowerCase())
     );
 
-  const setStatus = (s, status) => {
-    setSuggestions((prev) => prev.map((x) => (x.id === s.id ? { ...x, status } : x)));
-    addLog(`Marked suggestion as ${status}: ${s.species} by ${s.submittedBy}`, "Fisherfolk Suggestions");
-    notify(`Suggestion marked as ${status}.`);
+  const setStatus = async (s, decision) => {
+    const feedback = window.prompt(`Optional feedback for ${s.submittedBy} (${s.species}):`, "");
+    if (feedback === null) return;
+    setSavingId(s.id);
+    try {
+      await reviewVendorSuggestion(s.id, decision, feedback.trim());
+      notify(`Suggestion marked as ${decision}.`);
+      onChanged();
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setSavingId(null);
+    }
   };
 
   const statusClass = (s) => {
@@ -3263,9 +2692,11 @@ function FisherfolkSuggestions({ suggestions, setSuggestions, notify, addLog }) 
       <div className="page-title">
         <div>
           <h2>Fisherfolk Suggested Price Monitoring</h2>
-          <p>Review prices suggested by fisherfolk and compare them against official rates.</p>
+          <p>Review prices suggested by fish vendors and compare them against official rates.</p>
         </div>
       </div>
+
+      {error && <div className="warn-box" role="alert">{error}</div>}
 
       <div className="page-title" style={{ marginBottom: 8 }}>
         <div>
@@ -3323,7 +2754,7 @@ function FisherfolkSuggestions({ suggestions, setSuggestions, notify, addLog }) 
 
           <select value={speciesFilter} onChange={(e) => setSpeciesFilter(e.target.value)}>
             <option>All Species</option>
-            {SPECIES_LIST.map((s) => <option key={s}>{s}</option>)}
+            {speciesNames.map((s) => <option key={s}>{s}</option>)}
           </select>
 
           <input className="date-input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} />
@@ -3337,7 +2768,7 @@ function FisherfolkSuggestions({ suggestions, setSuggestions, notify, addLog }) 
               <th>SPECIES</th>
               <th>SUGGESTED PRICE</th>
               <th>SUBMITTED BY</th>
-              <th>MARKET</th>
+              <th>MUNICIPALITY</th>
               <th>STATUS</th>
               <th>ACTIONS</th>
             </tr>
@@ -3354,14 +2785,18 @@ function FisherfolkSuggestions({ suggestions, setSuggestions, notify, addLog }) 
                   <td><strong>{s.species}</strong></td>
                   <td><strong>{peso(s.suggestedPrice)}</strong></td>
                   <td>{s.submittedBy}</td>
-                  <td>{s.market}</td>
+                  <td>{s.municipality}</td>
                   <td><span className={`badge ${statusClass(s.status)}`}>{s.status}</span></td>
                   <td>
-                    <div className="action-icons">
-                      <button title="Mark Reviewed" onClick={() => setStatus(s, "Reviewed")}>👁</button>
-                      <button title="Adopt" onClick={() => setStatus(s, "Adopted")}>✔</button>
-                      <button title="Reject" onClick={() => setStatus(s, "Rejected")}>✕</button>
-                    </div>
+                    {s.status === "Pending Review" ? (
+                      <div className="action-icons">
+                        <button title="Mark Reviewed" disabled={savingId === s.id} onClick={() => setStatus(s, "reviewed")}>👁</button>
+                        <button title="Adopt" disabled={savingId === s.id} onClick={() => setStatus(s, "adopted")}>✔</button>
+                        <button title="Reject" disabled={savingId === s.id} onClick={() => setStatus(s, "rejected")}>✕</button>
+                      </div>
+                    ) : (
+                      <span className="muted-text">{s.lguFeedback || "Reviewed"}</span>
+                    )}
                   </td>
                 </tr>
               ))
@@ -3377,77 +2812,65 @@ function FisherfolkSuggestions({ suggestions, setSuggestions, notify, addLog }) 
    PREDICTIVE ANALYTICS MONITORING
    ================================================================ */
 
-function PredictiveAnalytics({ species, markets, priceRecords, forecasts, setForecasts, notify, addLog }) {
-  const activeSpecies = species.filter((s) => s.status === "Active");
-  const activeMarkets = markets.filter((m) => m.status === "Active");
+function PredictiveAnalytics({ apiPriceRecords, municipalities, forecasts, setForecasts, notify }) {
+  const published = apiPriceRecords.filter(isPublished);
+  const speciesNames = [...new Set(published.map((r) => r.fish_name))].sort((a, b) => a.localeCompare(b));
 
-  const [speciesName, setSpeciesName] = useState(activeSpecies[0]?.name || "");
-  const [market, setMarket] = useState("All Markets");
+  const [speciesChoice, setSpeciesChoice] = useState("");
+  const [municipality, setMunicipality] = useState("");
   const [period, setPeriod] = useState("14");
-  const [generating, setGenerating] = useState(false);
   const [selectedForecastId, setSelectedForecastId] = useState(null);
+  const speciesName = speciesNames.includes(speciesChoice) ? speciesChoice : speciesNames[0] || "";
 
-  const preview = buildForecastSeries(priceRecords, speciesName, market, Number(period));
+  // Fit a linear trend on the last 30 days of published prices.
+  const buildForecast = (name, muni, days) => {
+    const historical = lastDays(dailySeries(published, name, muni), 30);
+    const predicted = linearForecast(historical, days) || [];
+    return { historical, predicted, lastActual: historical[historical.length - 1]?.price ?? null };
+  };
+  const preview = buildForecast(speciesName, municipality, Number(period));
+  const sufficientData = preview.predicted.length > 0;
+  const stamp = () => new Date().toLocaleString("en-PH", { month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
 
   const generate = () => {
-    if (!preview.sufficientData) {
-      notify(`Not enough historical data for ${speciesName} yet — need at least ${MIN_RECORDS_FOR_FORECAST} price records.`);
+    if (!sufficientData) {
+      notify(`Not enough published prices for ${speciesName || "this species"} yet — need at least 7 days.`);
       return;
     }
-
-    setGenerating(true);
-    setTimeout(() => {
-      const entry = {
-        id: Date.now(),
-        species: speciesName,
-        market,
-        period: Number(period),
-        generatedDate: new Date().toLocaleString("en-PH", {
-          month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
-        }),
-        ...preview,
-      };
-      setForecasts((prev) => [entry, ...prev]);
-      setSelectedForecastId(entry.id);
-      setGenerating(false);
-      addLog(`Generated forecast: ${speciesName} · ${period}-day horizon`, "Predictive Analytics");
-      notify("Forecast generated.");
-    }, 600);
+    const entry = {
+      id: Date.now(),
+      species: speciesName,
+      market: municipality || "All municipalities",
+      municipality,
+      period: Number(period),
+      generatedDate: stamp(),
+      ...preview,
+    };
+    setForecasts((prev) => [entry, ...prev]);
+    setSelectedForecastId(entry.id);
+    notify("Forecast generated.");
   };
 
   const rerun = (f) => {
-    const fresh = buildForecastSeries(priceRecords, f.species, f.market, f.period);
-    setForecasts((prev) =>
-      prev.map((x) =>
-        x.id === f.id
-          ? {
-              ...x,
-              ...fresh,
-              generatedDate: new Date().toLocaleString("en-PH", {
-                month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit",
-              }),
-            }
-          : x
-      )
-    );
-    addLog(`Re-ran forecast: ${f.species} · ${f.period}-day horizon`, "Predictive Analytics");
+    const fresh = buildForecast(f.species, f.municipality, f.period);
+    setForecasts((prev) => prev.map((x) => (x.id === f.id ? { ...x, ...fresh, generatedDate: stamp() } : x)));
     notify("Forecast re-run with latest data.");
   };
 
   const selected = forecasts.find((f) => f.id === selectedForecastId) || forecasts[0] || null;
-  const barsFor = (series, cls) =>
-    series.map((p, i) => {
-      const max = Math.max(...series.map((s) => s.price), 1);
+  const barsFor = (series, cls, max) =>
+    series.map((p) => {
       const h = 25 + (p.price / max) * 65;
-      return <div key={i} className={`bar ${cls}`} style={{ height: `${h}%` }} title={`${fmtDate(p.date)} — ${peso(p.price)}`}></div>;
+      return <div key={`${cls}${p.date}`} className={`bar ${cls}`} style={{ height: `${h}%` }} title={`${fmtDate(p.date)} — ${peso(p.price)}`}></div>;
     });
+  const selectedMax = selected ? Math.max(...selected.historical.map((p) => p.price), ...selected.predicted.map((p) => p.price), 1) : 1;
 
   return (
     <>
       <div className="page-title">
         <div>
           <h2>Predictive Analytics Monitoring</h2>
-          <p>Generate and review SARIMAX-based price forecasts across species and markets.</p>
+          <p>Simple trend projections from the last 30 days of published prices. Estimates only, not official prices.</p>
         </div>
       </div>
 
@@ -3464,16 +2887,17 @@ function PredictiveAnalytics({ species, markets, priceRecords, forecasts, setFor
 
           <div className="form-group">
             <label>Fish Species</label>
-            <select value={speciesName} onChange={(e) => setSpeciesName(e.target.value)}>
-              {activeSpecies.map((s) => <option key={s.id}>{s.name}</option>)}
+            <select value={speciesName} onChange={(e) => setSpeciesChoice(e.target.value)} disabled={!speciesNames.length}>
+              {!speciesNames.length && <option value="">No published prices yet</option>}
+              {speciesNames.map((s) => <option key={s}>{s}</option>)}
             </select>
           </div>
 
           <div className="form-group">
-            <label>Municipality / Market</label>
-            <select value={market} onChange={(e) => setMarket(e.target.value)}>
-              <option>All Markets</option>
-              {activeMarkets.map((m) => <option key={m.id}>{m.name}</option>)}
+            <label>Municipality</label>
+            <select value={municipality} onChange={(e) => setMunicipality(e.target.value)}>
+              <option value="">All municipalities</option>
+              {municipalities.map((m) => <option key={m.id}>{m.name}</option>)}
             </select>
           </div>
 
@@ -3486,20 +2910,19 @@ function PredictiveAnalytics({ species, markets, priceRecords, forecasts, setFor
             </select>
           </div>
 
-          {!preview.sufficientData ? (
+          {!sufficientData ? (
             <div className="warn-box">
-              ⚠ Only {preview.historical.length} recent records found for {speciesName}. At least{" "}
-              {MIN_RECORDS_FOR_FORECAST} historical price records are needed before a reliable
-              forecast can be generated.
+              ⚠ Only {preview.historical.length} day{preview.historical.length !== 1 ? "s" : ""} of published prices found
+              {speciesName ? ` for ${speciesName}` : ""}. At least 7 are needed to project a trend.
             </div>
           ) : (
             <div className="info-box">
-              Sufficient historical data found ({preview.historical.length} recent records) — ready to forecast.
+              {preview.historical.length} days of published prices found — ready to forecast.
             </div>
           )}
 
-          <button className="primary-btn full-btn" onClick={generate} disabled={generating}>
-            {generating ? "Generating…" : "Generate Forecast"}
+          <button className="primary-btn full-btn" onClick={generate} disabled={!sufficientData}>
+            Generate Forecast
           </button>
         </div>
 
@@ -3516,19 +2939,19 @@ function PredictiveAnalytics({ species, markets, priceRecords, forecasts, setFor
             <>
               <div className="chart-placeholder">
                 <div className="bars">
-                  {barsFor(selected.historical, "bar")}
-                  {barsFor(selected.predicted, "bar forecast-bar")}
+                  {barsFor(selected.historical.slice(-14), "", selectedMax)}
+                  {barsFor(selected.predicted, "forecast-bar", selectedMax)}
                 </div>
-                <p className="chart-note">Blue bars are historical prices, orange bars are the forecast.</p>
+                <p className="chart-note">Blue bars are published prices, orange bars are the projection.</p>
               </div>
 
               <div className="profile-grid" style={{ marginTop: 14 }}>
                 <div className="profile-field">
-                  <span>Last Historical Price</span>
+                  <span>Last Published Price</span>
                   <strong>{peso(selected.lastActual)}</strong>
                 </div>
                 <div className="profile-field">
-                  <span>Predicted End Price</span>
+                  <span>Projected End Price</span>
                   <strong>{peso(selected.predicted[selected.predicted.length - 1]?.price)}</strong>
                 </div>
               </div>
@@ -3548,7 +2971,7 @@ function PredictiveAnalytics({ species, markets, priceRecords, forecasts, setFor
         <div className="panel-header">
           <div>
             <h3>Forecast History</h3>
-            <p>All previously generated forecasts</p>
+            <p>Forecasts generated during this session</p>
           </div>
         </div>
 
@@ -3556,9 +2979,9 @@ function PredictiveAnalytics({ species, markets, priceRecords, forecasts, setFor
           <thead>
             <tr>
               <th>SPECIES</th>
-              <th>MARKET</th>
+              <th>MUNICIPALITY</th>
               <th>PERIOD</th>
-              <th>PREDICTED END PRICE</th>
+              <th>PROJECTED END PRICE</th>
               <th>GENERATED ON</th>
               <th>ACTIONS</th>
             </tr>
@@ -3596,26 +3019,28 @@ function PredictiveAnalytics({ species, markets, priceRecords, forecasts, setFor
    DATA MONITORING
    ================================================================ */
 
-function DataMonitoring({ species, markets, priceRecords, goTo }) {
+function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
   const activeSpecies = species.filter((s) => s.status === "Active");
-  const activeMarkets = markets.filter((m) => m.status === "Active");
-  const [speciesName, setSpeciesName] = useState(activeSpecies[0]?.name || "");
+  const activeMarkets = municipalities.filter((m) => m.status === "Active");
+  const [speciesChoice, setSpeciesChoice] = useState("");
+  const speciesName = activeSpecies.some((s) => s.name === speciesChoice) ? speciesChoice : activeSpecies[0]?.name || "";
 
-  const activeRecords = priceRecords.filter((r) => r.status !== "Deleted");
-  const today = activeRecords.length ? activeRecords[0].date : null;
+  const activeRecords = priceRecords.filter((r) => r.status === "Published");
+  const today = new Date().toLocaleDateString("en-CA");
 
   const expectedToday = activeSpecies.length * activeMarkets.length;
   const presentToday = today
     ? activeSpecies.reduce((sum, sp) => {
         return sum + activeMarkets.filter((mk) =>
-          priceRecords.some((r) => r.species === sp.name && r.market === mk.name && r.date === today && r.status !== "Deleted")
+          priceRecords.some((r) => r.species === sp.name && r.municipality === mk.name && r.date === today)
         ).length;
       }, 0)
     : 0;
   const completeness = expectedToday ? Math.round((presentToday / expectedToday) * 100) : 0;
 
   const speciesHistory = priceRecords
-    .filter((r) => r.species === speciesName && r.status !== "Deleted")
+    .filter((r) => r.species === speciesName)
+    .sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : b.id - a.id))
     .slice(0, 12);
 
   return (
@@ -3633,7 +3058,7 @@ function DataMonitoring({ species, markets, priceRecords, goTo }) {
           <div>
             <span>Total Price Records</span>
             <h2>{priceRecords.length}</h2>
-            <small>{activeRecords.length} active</small>
+            <small>{activeRecords.length} published</small>
           </div>
         </div>
         <div className="stat-card">
@@ -3641,23 +3066,23 @@ function DataMonitoring({ species, markets, priceRecords, goTo }) {
           <div>
             <span>Today's Completeness</span>
             <h2>{completeness}%</h2>
-            <small>{presentToday} of {expectedToday} expected entries</small>
+            <small>{presentToday} of {expectedToday} species × municipality entries</small>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon orange">⚠</div>
           <div>
-            <span>Corrected Records</span>
-            <h2>{priceRecords.filter((r) => r.status === "Corrected").length}</h2>
-            <small>Audit-flagged corrections</small>
+            <span>Flagged Records</span>
+            <h2>{priceRecords.filter((r) => r.status === "Flagged").length}</h2>
+            <small>Need another look</small>
           </div>
         </div>
         <div className="stat-card">
           <div className="stat-icon purple">✕</div>
           <div>
-            <span>Deleted Records</span>
-            <h2>{priceRecords.filter((r) => r.status === "Deleted").length}</h2>
-            <small>Removed but retained for audit</small>
+            <span>Rejected Records</span>
+            <h2>{priceRecords.filter((r) => r.status === "Rejected").length}</h2>
+            <small>Not published</small>
           </div>
         </div>
       </div>
@@ -3668,7 +3093,7 @@ function DataMonitoring({ species, markets, priceRecords, goTo }) {
             <h3>Species Price History</h3>
             <p>Most recent 12 records for the selected species</p>
           </div>
-          <select value={speciesName} onChange={(e) => setSpeciesName(e.target.value)}>
+          <select value={speciesName} onChange={(e) => setSpeciesChoice(e.target.value)}>
             {activeSpecies.map((s) => <option key={s.id}>{s.name}</option>)}
           </select>
         </div>
@@ -3677,7 +3102,7 @@ function DataMonitoring({ species, markets, priceRecords, goTo }) {
           <thead>
             <tr>
               <th>DATE</th>
-              <th>MARKET</th>
+              <th>MUNICIPALITY</th>
               <th>PRICE / KG</th>
               <th>ENTERED BY</th>
               <th>STATUS</th>
@@ -3692,7 +3117,7 @@ function DataMonitoring({ species, markets, priceRecords, goTo }) {
               speciesHistory.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
-                  <td>{r.market}</td>
+                  <td>{r.municipality}</td>
                   <td><strong>{peso(r.price)}</strong></td>
                   <td>{r.enteredBy}</td>
                   <td><span className={`badge ${r.status.toLowerCase()}`}>{r.status}</span></td>
@@ -3861,214 +3286,19 @@ function ReportsManagement({ users, species, logs, priceRecords, notify }) {
    SYSTEM ANNOUNCEMENTS
    ================================================================ */
 
-function SystemAnnouncements({ announcements, setAnnouncements, notify, addLog }) {
-  const [showForm, setShowForm] = useState(false);
-  const [editing, setEditing] = useState(null);
-  const [form, setForm] = useState({ title: "", message: "" });
-
-  const openAdd = () => {
-    setEditing(null);
-    setForm({ title: "", message: "" });
-    setShowForm(true);
-  };
-
-  const openEdit = (a) => {
-    setEditing(a);
-    setForm({ title: a.title, message: a.message });
-    setShowForm(true);
-  };
-
-  const save = () => {
-    if (!form.title.trim() || !form.message.trim()) {
-      notify("Title and message are required.");
-      return;
-    }
-
-    if (editing) {
-      setAnnouncements((prev) => prev.map((x) => (x.id === editing.id ? { ...x, ...form } : x)));
-      addLog(`Updated announcement: ${form.title}`, "System Announcements");
-      notify("Announcement updated.");
-    } else {
-      setAnnouncements((prev) => [
-        { ...form, id: Date.now(), date: new Date().toLocaleDateString("en-PH"), status: "Active" },
-        ...prev,
-      ]);
-      addLog(`Posted announcement: ${form.title}`, "System Announcements");
-      notify("Announcement posted.");
-    }
-
-    setShowForm(false);
-  };
-
-  const toggleStatus = (a) => {
-    const next = a.status === "Active" ? "Expired" : "Active";
-    setAnnouncements((prev) => prev.map((x) => (x.id === a.id ? { ...x, status: next } : x)));
-    addLog(`Marked announcement as ${next}: ${a.title}`, "System Announcements");
-    notify(`Announcement marked as ${next.toLowerCase()}.`);
-  };
-
-  const remove = (a) => {
-    if (!window.confirm(`Delete the announcement "${a.title}"?`)) return;
-    setAnnouncements((prev) => prev.filter((x) => x.id !== a.id));
-    addLog(`Deleted announcement: ${a.title}`, "System Announcements");
-    notify("Announcement deleted.");
-  };
-
+function SystemAnnouncements() {
   return (
     <>
       <div className="page-title">
         <div>
           <h2>System Announcements</h2>
-          <p>Post updates and notices visible to LGU Officers and Fish Vendors.</p>
+          <p>Messages shown to AquaTimbang users.</p>
         </div>
-        <button className="primary-btn" onClick={openAdd}>+ New Announcement</button>
       </div>
-
-      {showForm && (
-        <div className="modal-backdrop" onClick={() => setShowForm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
-            <div className="modal-head">
-              <h3>{editing ? "Edit Announcement" : "New Announcement"}</h3>
-              <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
-            </div>
-
-            <div className="form-group">
-              <label>Title</label>
-              <input value={form.title} onChange={(e) => setForm({ ...form, title: e.target.value })} />
-            </div>
-
-            <div className="form-group">
-              <label>Message</label>
-              <input value={form.message} onChange={(e) => setForm({ ...form, message: e.target.value })} />
-            </div>
-
-            <div className="button-row">
-              <button className="secondary-btn" onClick={() => setShowForm(false)}>Cancel</button>
-              <button className="primary-btn" onClick={save}>{editing ? "Save Changes" : "Post Announcement"}</button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <div className="panel">
-        <table>
-          <thead>
-            <tr>
-              <th>TITLE</th>
-              <th>MESSAGE</th>
-              <th>DATE</th>
-              <th>STATUS</th>
-              <th>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {announcements.length === 0 ? (
-              <tr>
-                <td colSpan="5" className="empty-row">No announcements yet.</td>
-              </tr>
-            ) : (
-              announcements.map((a) => (
-                <tr key={a.id}>
-                  <td><strong>{a.title}</strong></td>
-                  <td>{a.message}</td>
-                  <td>{a.date}</td>
-                  <td><span className={`badge ${a.status === "Active" ? "success" : "inactive"}`}>{a.status}</span></td>
-                  <td>
-                    <div className="action-icons">
-                      <button title="Edit" onClick={() => openEdit(a)}>✎</button>
-                      <button title={a.status === "Active" ? "Mark Expired" : "Reactivate"} onClick={() => toggleStatus(a)}>◉</button>
-                      <button title="Delete" onClick={() => remove(a)}>✕</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
-}
-
-/* ================================================================
-   ADMIN PROFILE
-   ================================================================ */
-
-function AdminProfilePage({ profile, setProfile, notify, addLog }) {
-  const [draft, setDraft] = useState(profile);
-
-  const update = (key, value) => setDraft({ ...draft, [key]: value });
-
-  const save = () => {
-    if (!draft.name.trim() || !draft.email.trim()) {
-      notify("Name and email are required.");
-      return;
-    }
-    setProfile(draft);
-    addLog("Updated own profile details", "Admin Profile");
-    notify("Profile saved.");
-  };
-
-  return (
-    <>
-      <div className="page-title">
-        <div>
-          <h2>Admin Profile</h2>
-          <p>Your own account details.</p>
-        </div>
-        <button className="primary-btn" onClick={save}>Save Changes</button>
-      </div>
-
-      <div className="config-grid">
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon blue">👤</div>
-            <div>
-              <h3>Profile Information</h3>
-              <p>Editable account details</p>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Full Name</label>
-            <input value={draft.name} onChange={(e) => update("name", e.target.value)} />
-          </div>
-
-          <div className="form-group">
-            <label>Email Address</label>
-            <input value={draft.email} onChange={(e) => update("email", e.target.value)} />
-          </div>
-        </div>
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon purple">🔒</div>
-            <div>
-              <h3>Account Details</h3>
-              <p>Read-only system information</p>
-            </div>
-          </div>
-
-          <div className="profile-grid">
-            <div className="profile-field">
-              <span>Username</span>
-              <strong>{draft.username}</strong>
-            </div>
-            <div className="profile-field">
-              <span>Role</span>
-              <strong>{draft.role}</strong>
-            </div>
-            <div className="profile-field" style={{ gridColumn: "1 / -1" }}>
-              <span>Last Login</span>
-              <strong>{draft.lastLogin}</strong>
-            </div>
-          </div>
-
-          <div className="info-box" style={{ marginTop: 14 }}>
-            Username and role can only be changed by another administrator, from
-            User Management.
-          </div>
-        </div>
+        <p className="empty-row" style={{ padding: 24 }}>
+          Announcements are not stored in the AquaTimbang database yet, so none can be published here.
+        </p>
       </div>
     </>
   );
