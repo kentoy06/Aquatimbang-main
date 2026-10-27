@@ -1,0 +1,411 @@
+/* =========================
+   VENDOR — EXTRA STYLES
+   (layers on top of App.css)
+========================= */
+
+.up {
+  color: #229b54;
+  font-weight: bold;
+}
+
+.down {
+  color: #d84e4e;
+  font-weight: bold;
+}
+
+/* TRUST BANNER */
+
+.trust-banner {
+  background: #eaf8ef;
+  border: 1px solid #b9e4cb;
+  border-radius: 9px;
+  padding: 14px 17px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+}
+
+.trust-icon {
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  background: #229b54;
+  color: white;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: bold;
+  font-size: 15px;
+}
+
+/* QUICK CALCULATOR */
+
+.quick-calc {
+  padding: 18px 20px 20px;
+  border-top: 1px solid #eef1f5;
+}
+
+.calc-result {
+  background: #E3F6F8;
+  border-radius: 9px;
+  padding: 16px;
+  text-align: center;
+  margin-bottom: 15px;
+}
+
+.calc-result span {
+  display: block;
+  font-size: 10px;
+  color: #56798f;
+  letter-spacing: .6px;
+}
+
+.calc-result strong {
+  display: block;
+  font-size: 31px;
+  color: #0E7C86;
+  margin: 5px 0;
+}
+
+.calc-result small {
+  display: block;
+  font-size: 10px;
+  color: #6f8496;
+}
+
+/* SPECIES GRID (Current Fish Prices) */
+
+.species-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.species-card {
+  background: white;
+  border: 1px solid #e7ebf1;
+  border-radius: 11px;
+  padding: 16px;
+  display: flex;
+  gap: 13px;
+  align-items: flex-start;
+}
+
+.species-card-icon {
+  font-size: 30px;
+  width: 44px;
+  height: 44px;
+  min-width: 44px;
+  border-radius: 10px;
+  background: #E3F6F8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.species-card strong {
+  display: block;
+  font-size: 15px;
+  color: #253044;
+}
+
+.species-card p {
+  font-size: 10px;
+  color: #9aa3af;
+  font-style: italic;
+  margin-top: 2px;
+}
+
+.species-card-price {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+  font-size: 18px;
+  font-weight: bold;
+  color: #0E7C86;
+}
+
+.species-card-price span {
+  font-size: 12px;
+  font-weight: bold;
+}
+
+/* CHART AREA */
+
+.chart-area {
+  padding: 18px 20px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.chart-placeholder {
+  background: #f8fafc;
+  border: 1px dashed #d8e0e9;
+  border-radius: 9px;
+  padding: 16px;
+}
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 150px;
+}
+
+.bar {
+  flex: 1;
+  background: linear-gradient(180deg, #4FC3D9, #0E7C86);
+  border-radius: 4px 4px 0 0;
+  min-width: 6px;
+}
+
+.forecast-bar {
+  background: linear-gradient(180deg, #f0b45e, #d9911d);
+}
+
+.chart-note {
+  font-size: 10px;
+  color: #98a2b0;
+  text-align: center;
+  margin-top: 11px;
+}
+
+/* CALCULATOR RESULT */
+
+.error-box {
+  background: #fff0f0;
+  border: 1px solid #f3c9c9;
+  color: #c14444;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 10px;
+  margin-bottom: 16px;
+}
+
+.warn-box {
+  background: #fff9ed;
+  border: 1px solid #f5dfad;
+  color: #9b7726;
+  border-radius: 6px;
+  padding: 11px;
+  font-size: 10px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+.locked-field {
+  height: 36px;
+  border: 1px solid #dfe4eb;
+  background: #f6f8fa;
+  border-radius: 6px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: bold;
+  color: #3f4b5e;
+}
+
+.big-result {
+  background: linear-gradient(105deg, #0E7C86, #06AED5);
+  border-radius: 11px;
+  padding: 25px 20px;
+  text-align: center;
+  color: white;
+  margin-bottom: 20px;
+}
+
+.big-result span {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1.2px;
+  opacity: .85;
+}
+
+.big-result strong {
+  display: block;
+  font-size: 43px;
+  margin: 8px 0;
+}
+
+.big-result small {
+  display: block;
+  font-size: 12px;
+  opacity: .88;
+}
+
+.breakdown {
+  border: 1px solid #eef1f5;
+  border-radius: 8px;
+  margin-bottom: 18px;
+}
+
+.breakdown-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 11px 14px;
+  border-bottom: 1px solid #eef1f5;
+  font-size: 12px;
+  color: #77808f;
+}
+
+.breakdown-row:last-child {
+  border-bottom: none;
+}
+
+.breakdown-row strong {
+  color: #253044;
+  font-size: 13px;
+}
+
+/* INSIGHT */
+
+.insight-box {
+  margin: 18px 20px;
+  background: #f5f1ff;
+  border: 1px solid #ddd2f5;
+  border-radius: 9px;
+  padding: 14px 16px;
+}
+
+.insight-box strong {
+  font-size: 13px;
+  color: #6b56a8;
+}
+
+.insight-box p {
+  font-size: 12px;
+  color: #6f6889;
+  margin-top: 5px;
+  line-height: 1.6;
+}
+
+/* INLINE COMMENT INPUT (My Suggested Prices) */
+
+.inline-input {
+  width: 100%;
+  border: 1px solid #dfe4eb;
+  border-radius: 5px;
+  padding: 5px 8px;
+  font-size: 12px;
+}
+
+/* GROUPED SIDEBAR NAV */
+
+.group-label {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eef1f5;
+}
+
+.nav-item {
+  position: relative;
+}
+
+.nav-badge {
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #d84e4e;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.notif-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d84e4e;
+  border: 2px solid white;
+}
+
+.notification {
+  position: relative;
+}
+
+/* PROFILE (My Profile) */
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.profile-field {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.profile-field span {
+  display: block;
+  font-size: 10px;
+  color: #8993a3;
+  margin-bottom: 4px;
+}
+
+.profile-field strong {
+  font-size: 13px;
+  color: #253044;
+}
+
+/* HISTORY LIST (My Profile activity, Community info) */
+
+.history-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #eef1f5;
+  border-radius: 8px;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-item strong {
+  font-size: 12px;
+  color: #253044;
+}
+
+.history-item small {
+  font-size: 10px;
+  color: #9aa3af;
+  white-space: nowrap;
+}
+
+/* EXTRA BADGE STATES */
+
+.badge.deleted {
+  background: #fff0f0;
+  color: #d84e4e;
+}
+
+.badge.corrected {
+  background: #fff4df;
+  color: #c58216;
+}

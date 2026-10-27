@@ -1,0 +1,566 @@
+/* =========================
+   LOGIN / ROLE SELECT
+========================= */
+
+.login-page {
+  min-height: 100vh;
+  background: #eef2f8;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 30px 20px;
+}
+
+.login-card {
+  width: 100%;
+  max-width: 940px;
+  background: white;
+  border-radius: 15px;
+  overflow: hidden;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  box-shadow: 0 18px 45px rgba(24, 45, 74, .12);
+}
+
+/* LEFT PANEL */
+
+.login-left {
+  background: linear-gradient(150deg, #0E7C86, #06AED5);
+  color: white;
+  padding: 40px 36px;
+  position: relative;
+  overflow: hidden;
+}
+
+.login-brand {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  margin-bottom: 45px;
+}
+
+.login-brand .brand-icon {
+  background: rgba(255, 255, 255, .22);
+}
+
+.login-brand h2 {
+  font-size: 20px;
+  color: white;
+}
+
+.login-brand span {
+  font-size: 10px;
+  color: rgba(255, 255, 255, .8);
+}
+
+.login-left h1 {
+  font-size: 34px;
+  line-height: 1.25;
+  margin-bottom: 14px;
+}
+
+.login-left > p {
+  font-size: 13px;
+  line-height: 1.7;
+  opacity: .9;
+  max-width: 300px;
+}
+
+.login-points {
+  margin-top: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+}
+
+.login-point {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  font-size: 13px;
+  opacity: .95;
+}
+
+.login-point span {
+  width: 19px;
+  height: 19px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, .22);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+}
+
+.login-fish {
+  position: absolute;
+  right: -18px;
+  bottom: -22px;
+  font-size: 161px;
+  opacity: .13;
+}
+
+/* RIGHT PANEL */
+
+.login-right {
+  padding: 40px 36px;
+}
+
+.login-head {
+  margin-bottom: 22px;
+}
+
+.login-head h3 {
+  font-size: 21px;
+}
+
+.login-head p {
+  font-size: 13px;
+  color: #8993a3;
+  margin-top: 5px;
+}
+
+/* ROLE CARDS */
+
+.role-select {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 22px;
+}
+
+.role-card {
+  width: 100%;
+  border: 1px solid #e2e7ee;
+  background: white;
+  border-radius: 9px;
+  padding: 12px 13px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+}
+
+.role-card:hover {
+  border-color: #9fcde6;
+  background: #fafdff;
+}
+
+.role-card-active {
+  border-color: #0E7C86;
+  background: #EAFAFB;
+}
+
+.role-card-icon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 8px;
+  background: #E3F6F8;
+  color: #0E7C86;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 17px;
+}
+
+.role-card-active .role-card-icon {
+  background: #0E7C86;
+  color: white;
+}
+
+.role-card-text {
+  flex: 1;
+}
+
+.role-card-text strong {
+  display: block;
+  font-size: 14px;
+  color: #253044;
+}
+
+.role-card-text small {
+  display: block;
+  font-size: 10px;
+  color: #8993a3;
+  margin-top: 3px;
+  line-height: 1.5;
+}
+
+.role-radio {
+  width: 17px;
+  height: 17px;
+  min-width: 17px;
+  border: 1px solid #ccd4de;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #0E7C86;
+  font-size: 12px;
+}
+
+.role-card-active .role-radio {
+  border-color: #0E7C86;
+}
+
+/* FORM */
+
+.login-right .form-group input {
+  height: 39px;
+  font-size: 13px;
+}
+
+.login-error {
+  background: #fff0f0;
+  border: 1px solid #f3c9c9;
+  color: #c14444;
+  border-radius: 6px;
+  padding: 10px;
+  font-size: 10px;
+  margin-bottom: 14px;
+}
+
+.login-right .primary-btn {
+  height: 41px;
+  font-size: 14px;
+}
+
+.full-btn {
+  width: 100%;
+}
+
+.login-hint {
+  margin-top: 18px;
+  background: #f6f8fa;
+  border-radius: 7px;
+  padding: 11px;
+  font-size: 10px;
+  color: #7d8797;
+  line-height: 1.6;
+  text-align: center;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 860px) {
+
+  .login-card {
+    grid-template-columns: 1fr;
+    max-width: 440px;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .login-left {
+    padding: 28px 26px;
+  }
+
+  .login-brand {
+    margin-bottom: 24px;
+  }
+
+  .login-left h1 {
+    font-size: 26px;
+  }
+
+  .login-points {
+    margin-top: 20px;
+  }
+
+  .login-fish {
+    font-size: 104px;
+    opacity: .1;
+  }
+
+  .login-right {
+    padding: 28px 26px;
+  }
+}
+
+/* BACK BUTTON */
+
+.login-back-btn {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  z-index: 2;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 7px 12px;
+  border-radius: 16px;
+}
+
+.login-back-btn:hover {
+  background: rgba(255, 255, 255, 0.22);
+  border-color: white;
+}
+
+/* INLINE LINK BUTTON (Register <-> Login) */
+
+.login-inline-link {
+  border: none;
+  background: none;
+  color: #0E7C86;
+  font-weight: bold;
+  font-size: 10px;
+  padding: 0;
+  text-decoration: underline;
+}
+
+/* REGISTRATION CONFIRMATION */
+
+.register-confirm-card {
+  grid-template-columns: 1fr;
+  padding: 48px 40px;
+  text-align: center;
+  max-width: 420px;
+}
+
+.register-confirm-icon {
+  width: 52px;
+  height: 52px;
+  border-radius: 50%;
+  background: #e8f7ee;
+  color: #229b54;
+  font-size: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 18px;
+}
+
+.register-confirm-card h3 {
+  font-size: 21px;
+  margin-bottom: 10px;
+}
+
+.register-confirm-card p {
+  font-size: 13.5px;
+  color: #6f7b8d;
+  line-height: 1.8;
+}
+
+/* SPACING FIX — brand vs back button */
+
+.login-brand-spaced {
+  margin-top: 34px;
+}
+
+/* AUTH TABS (Login <-> Register) */
+
+.auth-tabs {
+  display: flex;
+  gap: 4px;
+  background: #f2f4f7;
+  border-radius: 10px;
+  padding: 4px;
+  margin-bottom: 22px;
+}
+
+.auth-tab {
+  flex: 1;
+  border: none;
+  background: transparent;
+  color: #6b7686;
+  font-size: 14px;
+  font-weight: bold;
+  padding: 9px;
+  border-radius: 8px;
+}
+
+.auth-tab:hover {
+  color: #0E7C86;
+}
+
+.auth-tab-active {
+  background: white;
+  color: #0E7C86;
+  box-shadow: 0 2px 6px rgba(23, 32, 51, .08);
+}
+
+/* ADMIN MONITORING NOTE */
+
+.admin-watch-note {
+  display: flex;
+  gap: 9px;
+  align-items: flex-start;
+  background: #eaf6f7;
+  border: 1px solid #cdeaec;
+  border-radius: 9px;
+  padding: 11px 13px;
+  margin-bottom: 18px;
+}
+
+.admin-watch-note span {
+  font-size: 16px;
+}
+
+.admin-watch-note p {
+  font-size: 12.5px;
+  color: #2c5b60;
+  line-height: 1.6;
+}
+
+/* COMPACT ROLE SELECT (Register) */
+
+.role-select-compact {
+  margin-bottom: 10px;
+}
+
+.registering-as-note {
+  font-size: 13px;
+  color: #536074;
+  background: #f6f8fa;
+  border-radius: 8px;
+  padding: 8px 12px;
+  margin-bottom: 18px;
+}
+
+.registering-as-note strong {
+  color: #0E7C86;
+}
+
+/* FORM ROW (two fields side by side) */
+
+.form-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+}
+
+.form-row .form-group {
+  min-width: 0;
+}
+
+/* CONSENT CHECKBOX */
+
+.consent-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 9px;
+  margin-bottom: 18px;
+  cursor: pointer;
+}
+
+.consent-row input {
+  margin-top: 2px;
+  width: 15px;
+  height: 15px;
+  accent-color: #0E7C86;
+  cursor: pointer;
+}
+
+.consent-row span {
+  font-size: 12.5px;
+  color: #5d6879;
+  line-height: 1.6;
+}
+
+/* BIGGER "ALREADY HAVE AN ACCOUNT" HINT */
+
+.login-hint-big {
+  font-size: 14px;
+  padding: 13px;
+}
+
+.login-inline-link-big {
+  font-size: 14px;
+}
+
+/* SIMPLE LOGIN ROLE DROPDOWN (compact, non-card) */
+
+.simple-role-select {
+  margin-bottom: 18px;
+}
+
+.simple-role-select label {
+  display: block;
+  font-size: 12px;
+  font-weight: bold;
+  color: #5d6879;
+  margin-bottom: 6px;
+}
+
+.simple-role-select select {
+  width: 100%;
+  height: 39px;
+  border: 1px solid #dfe4eb;
+  border-radius: 6px;
+  padding: 0 10px;
+  font-size: 14px;
+  color: #4f5b6d;
+  background: white;
+}
+
+/* ROLE TOGGLE (Register — simple two-way choice) */
+
+.role-toggle-label {
+  font-size: 11px;
+  font-weight: bold;
+  color: #5d6879;
+  margin-bottom: 8px;
+}
+
+.role-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.role-toggle-btn {
+  flex: 1;
+  border: 1px solid #dfe4eb;
+  background: white;
+  color: #536074;
+  font-size: 12px;
+  font-weight: bold;
+  padding: 11px;
+  border-radius: 8px;
+}
+
+.role-toggle-btn:hover {
+  border-color: #0E7C86;
+  color: #0E7C86;
+}
+
+.role-toggle-btn-active {
+  background: #0E7C86;
+  border-color: #0E7C86;
+  color: white;
+}
+
+.role-toggle-btn-active:hover {
+  color: white;
+}
+
+/* FORGOT PASSWORD */
+
+.forgot-link-row {
+  display: flex;
+  justify-content: flex-end;
+  margin: -10px 0 16px;
+}
+
+.forgot-link {
+  border: none;
+  background: none;
+  color: #0E7C86;
+  font-size: 10.5px;
+  font-weight: bold;
+  padding: 0;
+}
+
+.forgot-link:hover {
+  text-decoration: underline;
+}
+
+.forgot-hint {
+  text-align: center;
+  margin-top: 10px;
+}

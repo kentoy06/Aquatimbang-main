@@ -8,7 +8,7 @@ export default defineConfig({
   // Enable React/JSX.
   plugins: [react()],
 
-  // Your GitHub repository is named "Aquatimbang".
-  // GitHub Pages will serve the website from /Aquatimbang/.
-  base: "/Aquatimbang/",
+  // This repository is named "Aquatimbang-main", so
+  // GitHub Pages serves the website from /Aquatimbang-main/.
+  base: "/Aquatimbang-main/",
 });

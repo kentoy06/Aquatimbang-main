@@ -1,0 +1,401 @@
+/* =========================
+   LGU OFFICER — EXTRA STYLES
+   (layers on top of App.css)
+========================= */
+
+.up {
+  color: #229b54;
+  font-weight: bold;
+}
+
+.down {
+  color: #d84e4e;
+  font-weight: bold;
+}
+
+.flag-price {
+  color: #d84e4e;
+}
+
+.badge.accent {
+  background: #fff3df;
+  color: #d9911d;
+}
+
+.badge.deleted {
+  background: #fff0f0;
+  color: #d84e4e;
+}
+
+.badge.corrected {
+  background: #fff4df;
+  color: #c58216;
+}
+
+/* CHART AREA */
+
+.chart-area {
+  padding: 18px 20px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.chart-placeholder {
+  background: #f8fafc;
+  border: 1px dashed #d8e0e9;
+  border-radius: 9px;
+  padding: 16px;
+}
+
+.bars {
+  display: flex;
+  align-items: flex-end;
+  gap: 5px;
+  height: 150px;
+}
+
+.bar {
+  flex: 1;
+  background: linear-gradient(180deg, #4FC3D9, #0E7C86);
+  border-radius: 4px 4px 0 0;
+  min-width: 6px;
+}
+
+.forecast-bar {
+  background: linear-gradient(180deg, #f0b45e, #d9911d);
+}
+
+.chart-note {
+  font-size: 10px;
+  color: #98a2b0;
+  text-align: center;
+  margin-top: 11px;
+}
+
+/* INSIGHT */
+
+.insight-box {
+  margin: 18px 20px;
+  background: #f5f1ff;
+  border: 1px solid #ddd2f5;
+  border-radius: 9px;
+  padding: 14px 16px;
+}
+
+.insight-box strong {
+  font-size: 13px;
+  color: #6b56a8;
+}
+
+.insight-box p {
+  font-size: 12px;
+  color: #6f6889;
+  margin-top: 5px;
+  line-height: 1.6;
+}
+
+/* LOCKED FIELD */
+
+.locked-field {
+  height: 36px;
+  border: 1px solid #dfe4eb;
+  background: #f6f8fa;
+  border-radius: 6px;
+  padding: 0 10px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 14px;
+  font-weight: bold;
+  color: #3f4b5e;
+}
+
+/* WARNING BOX */
+
+.warn-box {
+  background: #fff9ed;
+  border: 1px solid #f5dfad;
+  color: #9b7726;
+  border-radius: 6px;
+  padding: 11px;
+  font-size: 10px;
+  line-height: 1.6;
+  margin-bottom: 16px;
+}
+
+/* INNER TABLE (inside config cards) */
+
+.inner-table {
+  border: 1px solid #eef1f5;
+  border-radius: 8px;
+  overflow: hidden;
+  margin-bottom: 16px;
+}
+
+.inner-table th {
+  padding: 9px 12px;
+  border-top: none;
+}
+
+.inner-table td {
+  padding: 10px 12px;
+}
+
+/* GROUPED SIDEBAR NAV */
+
+.group-label {
+  margin-top: 14px;
+  padding-top: 14px;
+  border-top: 1px solid #eef1f5;
+}
+
+.nav-item {
+  position: relative;
+}
+
+.nav-badge {
+  position: absolute;
+  right: 13px;
+  top: 50%;
+  transform: translateY(-50%);
+  background: #d84e4e;
+  color: white;
+  font-size: 10px;
+  font-weight: bold;
+  min-width: 16px;
+  height: 16px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0 4px;
+}
+
+.notif-dot {
+  position: absolute;
+  top: 6px;
+  right: 6px;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #d84e4e;
+  border: 2px solid white;
+}
+
+.notification {
+  position: relative;
+}
+
+/* PROFILE MODAL (Fisherfolk Management) & PROFILE PAGE (My Profile) */
+
+.profile-modal {
+  max-width: 460px;
+}
+
+.profile-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding-bottom: 18px;
+  border-bottom: 1px solid #eef1f5;
+  margin-bottom: 18px;
+}
+
+.profile-avatar {
+  width: 46px;
+  height: 46px;
+  font-size: 15px;
+}
+
+.profile-head strong {
+  display: block;
+  font-size: 16px;
+  color: #172033;
+}
+
+.profile-head p {
+  font-size: 12px;
+  color: #8993a3;
+  margin-top: 3px;
+}
+
+.profile-badges {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.profile-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.profile-field {
+  background: #f8fafc;
+  border-radius: 8px;
+  padding: 10px 12px;
+}
+
+.profile-field span {
+  display: block;
+  font-size: 10px;
+  color: #8993a3;
+  margin-bottom: 4px;
+}
+
+.profile-field strong {
+  font-size: 13px;
+  color: #253044;
+}
+
+/* HISTORY LIST (activity feeds) */
+
+.history-list {
+  max-height: 260px;
+  overflow-y: auto;
+  border: 1px solid #eef1f5;
+  border-radius: 8px;
+}
+
+.history-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 10px 12px;
+  border-bottom: 1px solid #eef1f5;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-item strong {
+  font-size: 12px;
+  color: #253044;
+}
+
+.history-item small {
+  font-size: 10px;
+  color: #9aa3af;
+  white-space: nowrap;
+}
+
+/* BUTTON ROW / FILTER ROW (shared small layout helpers) */
+
+.button-row {
+  display: flex;
+  gap: 9px;
+}
+
+.button-row button {
+  flex: 1;
+}
+
+.full-btn {
+  width: 100%;
+}
+
+.filter-row {
+  display: flex;
+  gap: 9px;
+  align-items: center;
+}
+
+.mini-head {
+  font-size: 10px;
+  font-weight: bold;
+  letter-spacing: .8px;
+  color: #9ba4b3;
+  margin: 18px 0 9px;
+}
+
+.species-cell small {
+  display: block;
+  font-size: 10px;
+  color: #9aa3af;
+  margin-top: 3px;
+  font-style: italic;
+}
+
+/* RESPONSIVE */
+
+@media (max-width: 800px) {
+  .filter-row { flex-wrap: wrap; }
+  .button-row { flex-wrap: wrap; }
+}
+
+/* =========================
+   USER TABLE CELLS & MODALS
+   (needed by Fisherfolk Management)
+========================= */
+
+.user-cell {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.user-cell small {
+  display: block;
+  font-size: 10px;
+  color: #9aa3af;
+  margin-top: 3px;
+}
+
+.table-avatar {
+  width: 31px;
+  height: 31px;
+  background: #E3F6F8;
+  color: #0E7C86;
+  border-radius: 50%;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  font-size: 10px;
+  font-weight: bold;
+}
+
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(23, 32, 51, .35);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 150;
+  padding: 20px;
+}
+
+.modal {
+  background: white;
+  border-radius: 12px;
+  padding: 24px;
+  width: 100%;
+  max-width: 420px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 18px 45px rgba(23, 32, 51, .22);
+}
+
+.modal-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-head h3 {
+  font-size: 18px;
+}
+
+.modal-close {
+  border: none;
+  background: #f2f4f7;
+  width: 27px;
+  height: 27px;
+  border-radius: 6px;
+  color: #6b7686;
+  font-size: 14px;
+}
