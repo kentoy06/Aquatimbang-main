@@ -813,3 +813,153 @@ class VendorPriceSuggestion(models.Model):
 
     def __str__(self):
         return f"{self.vendor.username} - {self.fish_species.name}" 
+
+
+# ============================================================
+# PREDICTIVE ANALYTICS — EXTERNAL FACTORS AND FORECASTS
+# ============================================================
+
+class ExternalFactor(models.Model):
+    """
+    Daily market conditions used as SARIMAX exogenous regressors:
+    fuel price, weather and local holidays.
+    """
+
+    WEATHER_SUNNY = "sunny"
+    WEATHER_CLOUDY = "cloudy"
+    WEATHER_RAINY = "rainy"
+    WEATHER_STORMY = "stormy"
+
+    WEATHER_CHOICES = [
+        (WEATHER_SUNNY, "Sunny"),
+        (WEATHER_CLOUDY, "Cloudy"),
+        (WEATHER_RAINY, "Rainy"),
+        (WEATHER_STORMY, "Stormy"),
+    ]
+
+    # One record per calendar day.
+    date = models.DateField(unique=True)
+
+    # Diesel price per liter, which drives fishing trip costs.
+    fuel_price = models.DecimalField(max_digits=8, decimal_places=2, null=True, blank=True)
+
+    weather = models.CharField(max_length=10, choices=WEATHER_CHOICES, default=WEATHER_SUNNY)
+
+    is_holiday = models.BooleanField(default=False)
+
+    notes = models.CharField(max_length=200, blank=True)
+
+    recorded_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="recorded_external_factors",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-date"]
+
+    def __str__(self):
+        return f"{self.date} - {self.get_weather_display()}"
+
+
+class ForecastRun(models.Model):
+    """
+    One generated forecast for a fish species (and optionally a
+    municipality), with the fitted model and its accuracy.
+    """
+
+    MODEL_SARIMAX = "sarimax"
+    MODEL_TREND = "trend"
+
+    MODEL_TYPE_CHOICES = [
+        (MODEL_SARIMAX, "SARIMAX"),
+        (MODEL_TREND, "Linear trend (fallback)"),
+    ]
+
+    fish_species = models.ForeignKey(FishSpecies, on_delete=models.CASCADE, related_name="forecast_runs")
+
+    # Empty means the forecast covers all municipalities.
+    municipality = models.ForeignKey(
+        Municipality,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="forecast_runs",
+    )
+
+    horizon_days = models.PositiveSmallIntegerField()
+
+    model_type = models.CharField(max_length=10, choices=MODEL_TYPE_CHOICES)
+
+    # e.g. "SARIMAX(1,0,0)(1,0,1,7)"
+    model_used = models.CharField(max_length=60)
+
+    # Exogenous regressors used and their fitted effect on price.
+    exogenous = models.JSONField(default=list, blank=True)
+    coefficients = models.JSONField(default=dict, blank=True)
+
+    # Accuracy on the hold-out days (Mean Absolute Percentage Error, Root Mean Square Error).
+    mape = models.FloatField(null=True, blank=True)
+    rmse = models.FloatField(null=True, blank=True)
+    holdout_days = models.PositiveSmallIntegerField(default=0)
+
+    training_start = models.DateField(null=True, blank=True)
+    training_end = models.DateField(null=True, blank=True)
+    observations = models.PositiveIntegerField(default=0)
+
+    warnings = models.JSONField(default=list, blank=True)
+
+    # Latest change to the input data when this run was made; a newer
+    # change means the run is out of date.
+    data_signature = models.CharField(max_length=100)
+
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="forecast_runs",
+    )
+
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.fish_species.name} - {self.model_used} - {self.created_at:%Y-%m-%d}"
+
+
+class Prediction(models.Model):
+    """One forecast day: predicted price per kg with a 95% confidence interval."""
+
+    run = models.ForeignKey(ForecastRun, on_delete=models.CASCADE, related_name="predictions")
+
+    fish_species = models.ForeignKey(FishSpecies, on_delete=models.CASCADE, related_name="predictions")
+
+    municipality = models.ForeignKey(
+        Municipality,
+        on_delete=models.CASCADE,
+        null=True,
+        blank=True,
+        related_name="predictions",
+    )
+
+    forecast_date = models.DateField()
+
+    forecast_price = models.DecimalField(max_digits=10, decimal_places=2)
+    lower_bound = models.DecimalField(max_digits=10, decimal_places=2)
+    upper_bound = models.DecimalField(max_digits=10, decimal_places=2)
+
+    model_used = models.CharField(max_length=60)
+
+    class Meta:
+        ordering = ["forecast_date"]
+
+    def __str__(self):
+        return f"{self.fish_species.name} {self.forecast_date}: {self.forecast_price}"

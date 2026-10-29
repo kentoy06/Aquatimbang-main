@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, lazy, Suspense } from "react";
 import "./App.css";
 import "./Vendor.css";
 
@@ -9,6 +9,9 @@ import {
 import { API_BASE_URL } from "./api/config.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+
+// Loaded only when the forecast page opens (the chart library is large).
+const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
 
 /* ================================================================
    HELPERS
@@ -41,6 +44,7 @@ function Vendor({ onLogout, currentUser }) {
 
   const [publishedPrices, setPublishedPrices] = useState([]);
   const [priceMunicipalities, setPriceMunicipalities] = useState([]);
+  const [municipalityOptions, setMunicipalityOptions] = useState([]);
   const [registeredFishSpecies, setRegisteredFishSpecies] = useState([]);
   const [speciesLoadError, setSpeciesLoadError] = useState("");
   const [selectedPriceMunicipality, setSelectedPriceMunicipality] = useState(identity.municipality || "");
@@ -89,6 +93,7 @@ function Vendor({ onLogout, currentUser }) {
         const rows = Array.isArray(data) ? data : data?.results;
         if (Array.isArray(rows) && !cancelled) {
           setPriceMunicipalities(rows.map((row) => row.name).filter(Boolean));
+          setMunicipalityOptions(rows.filter((row) => row.is_active !== false).map((row) => ({ id: row.id, name: row.name })));
         }
       } catch (_) {
         // Keep the assigned municipality and published-price locations available.
@@ -236,7 +241,7 @@ useEffect(() => {
       case "Price Trends":
         return <PriceTrends registeredSpecies={registeredFishSpecies} speciesLoadError={speciesLoadError} records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} />;
       case "Price Forecast":
-        return <PriceForecast records={publishedPrices} registeredSpecies={registeredFishSpecies} speciesLoadError={speciesLoadError} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} />;
+        return <Suspense fallback={<div className="panel" style={{ padding: 24 }}>Loading forecast…</div>}><ForecastView species={registeredFishSpecies} municipalities={municipalityOptions} defaultMunicipalityId={currentUser?.municipality_id} notify={notify} description="Short-term price estimates to help you decide when to sell." /></Suspense>;
       case "Submit Suggested Price":
         return (
           <SubmitSuggestedPrice
@@ -520,94 +525,6 @@ function PublishedPriceLineChart({ rows }) {
     </svg>
     <p className="chart-note" style={{ textAlign: "center" }}>Only dates with published records are plotted. Hover over points for details; the table below shows every date.</p>
   </div>;
-}
-
-/* ================================================================
-   PRICE FORECAST
-   ================================================================ */
-
-function PriceForecast({ records = [], registeredSpecies = [], speciesLoadError = "", loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "" }) {
-  const [speciesId, setSpeciesId] = useState("");
-  const [windowDays, setWindowDays] = useState("180");
-  const [horizon, setHorizon] = useState("7");
-  const options = Array.from(new Map([
-    ...records.filter(r => r.status === "published" || r.status === undefined)
-      .map(r => [String(r.fish_species), { id: String(r.fish_species), name: r.fish_name || `Species #${r.fish_species}` }]),
-    ...registeredSpecies.map(r => [String(r.id), { id: String(r.id), name: r.name }]),
-  ]).values()).sort((a, b) => a.name.localeCompare(b.name));
-  const selected = options.some(s => s.id === speciesId) ? speciesId : (options[0]?.id || "");
-  const speciesName = options.find(s => s.id === selected)?.name || "Selected species";
-  const today = new Date();
-  const localDate = d => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
-  const endDate = localDate(today);
-  const begin = new Date(today.getFullYear(), today.getMonth(), today.getDate() - Number(windowDays) + 1);
-  const startDate = localDate(begin);
-  const filtered = records.filter(r => {
-    const date = String(r.recorded_date || "").slice(0, 10);
-    const price = Number(r.price_per_kg);
-    return (r.status === "published" || r.status === undefined)
-      && String(r.fish_species) === selected
-      && municipality && String(r.municipality_name || "").toLowerCase() === municipality.toLowerCase()
-      && date >= startDate && date <= endDate && Number.isFinite(price) && price > 0;
-  });
-  const byDate = new Map();
-  filtered.forEach(r => {
-    const date = String(r.recorded_date).slice(0, 10);
-    const old = byDate.get(date) || { date, sum: 0, count: 0 };
-    old.sum += Number(r.price_per_kg);
-    old.count += 1;
-    byDate.set(date, old);
-  });
-  const daily = [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date))
-    .map(r => ({ date: r.date, price: r.sum / r.count, count: r.count }));
-  const enough = daily.length >= 7;
-  // Simple least-squares linear regression using elapsed calendar days.
-  // This is a baseline projection, not a validated statistical prediction interval.
-  const origin = daily.length ? new Date(`${daily[0].date}T00:00:00`).getTime() : 0;
-  const dayMs = 86400000;
-  const xs = daily.map(r => (new Date(`${r.date}T00:00:00`).getTime() - origin) / dayMs);
-  const ys = daily.map(r => r.price);
-  const meanX = xs.length ? xs.reduce((a, b) => a + b, 0) / xs.length : 0;
-  const meanY = ys.length ? ys.reduce((a, b) => a + b, 0) / ys.length : 0;
-  const denom = xs.reduce((sum, x) => sum + (x - meanX) ** 2, 0);
-  const slope = denom ? xs.reduce((sum, x, i) => sum + (x - meanX) * (ys[i] - meanY), 0) / denom : 0;
-  const intercept = meanY - slope * meanX;
-  const lastObservedDate = daily.length ? daily[daily.length - 1].date : "";
-  const forecast = enough && municipality ? Array.from({ length: Number(horizon) }, (_, i) => {
-    const future = new Date(`${endDate}T00:00:00`);
-    future.setDate(future.getDate() + i + 1);
-    const date = localDate(future);
-    const x = (future.getTime() - origin) / dayMs;
-    return { date, price: Math.max(0, intercept + slope * x) };
-  }) : [];
-  return <>
-    <div className="page-title"><div><h2>Price Forecast</h2><p>Short-term estimates based only on LGU-published historical prices.</p></div></div>
-    <div className="notice"><div className="notice-icon">!</div><div><strong>Estimates only — not official LGU prices</strong><p>Simple linear trend projections are exploratory and may be inaccurate. No confidence intervals are claimed.</p></div></div>
-    <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
-    <div className="panel" style={{ padding: 18, marginTop: 16 }}><div className="filter-row" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-      <label>Fish species <select className="date-input" value={selected} onChange={e => setSpeciesId(e.target.value)} disabled={!options.length}>{!options.length && <option value="">No registered species</option>}{options.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}</select></label>
-      <label>Historical window <select className="date-input" value={windowDays} onChange={e => setWindowDays(e.target.value)}><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="180">Last 180 days</option><option value="365">Last 365 days</option></select></label>
-      <label>Forecast horizon <select className="date-input" value={horizon} onChange={e => setHorizon(e.target.value)}><option value="7">Next 7 days</option><option value="14">Next 14 days</option></select></label>
-    </div></div>
-    {speciesLoadError && <p style={{ color: "#a16207", fontSize: 13 }}>Fish species registry unavailable ({speciesLoadError}). Using species found in published prices.</p>}
-    {loading ? <div className="panel" style={{ padding: 24 }}>Loading published prices…</div>
-      : error ? <div className="panel" style={{ padding: 24, color: "#b91c1c" }}>Unable to load published prices: {error}</div>
-      : !municipality ? <div className="panel" style={{ padding: 24 }}>Choose a specific municipality to forecast. Combining prices from different municipalities would produce a misleading trend.</div>
-      : !selected ? <div className="panel" style={{ padding: 24 }}>No fish species available.</div>
-      : !enough ? <div className="panel" style={{ padding: 24 }}><strong>Insufficient Historical Data — {daily.length} of 7 required recorded days.</strong><p style={{ marginTop: 8 }}>Publish prices for {speciesName} in {municipality} on at least 7 distinct dates within the selected historical window. Only published LGU records count.</p></div>
-      : <>
-        <div className="stats-grid">
-          <div className="stat-card"><div className="stat-icon blue">₱</div><div><span>Latest Published Daily Price</span><h2>{peso(daily[daily.length - 1].price)}</h2><small>{lastObservedDate}</small></div></div>
-          <div className="stat-card"><div className="stat-icon green">📈</div><div><span>Projected Price on {forecast[forecast.length - 1].date}</span><h2>{peso(forecast[forecast.length - 1].price)}</h2><small>Estimate, not an official rate</small></div></div>
-          <div className="stat-card"><div className="stat-icon purple">◷</div><div><span>Historical Recorded Days</span><h2>{daily.length}</h2><small>{filtered.length} published records</small></div></div>
-          <div className="stat-card"><div className="stat-icon orange">↗</div><div><span>Estimated Daily Trend</span><h2>{slope >= 0 ? "+" : ""}{peso(slope)}</h2><small>Per calendar day, linear model</small></div></div>
-        </div>
-        <div className="panel"><div className="panel-header"><div><h3>{speciesName} — Published Historical Prices in {municipality}</h3><p>{startDate} to {endDate} · {daily.length} recorded days</p></div></div><PublishedPriceLineChart rows={daily} /></div>
-        <div className="panel"><div className="panel-header"><div><h3>{speciesName} — {horizon}-Day Estimated Forecast</h3><p>Future dates begin tomorrow. Forecasts use calendar-day linear regression; no fabricated observations.</p></div></div>
-          <div style={{ overflowX: "auto" }}><table><thead><tr><th>DATE</th><th>ESTIMATED PRICE / KG</th><th>STATUS</th></tr></thead><tbody>{forecast.map(r => <tr key={r.date}><td>{r.date}</td><td><strong>{peso(r.price)}</strong></td><td>Estimated — not official</td></tr>)}</tbody></table></div>
-        </div>
-      </>}
-  </>;
 }
 
 /* ================================================================

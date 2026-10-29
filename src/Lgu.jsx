@@ -1,5 +1,5 @@
 // useEffect lets us load data from Django when the LGU dashboard opens.
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, lazy, Suspense } from "react";
 import "./App.css";
 import "./Lgu.css";
 import {
@@ -13,11 +13,14 @@ import {
   isPublished,
   lastDays,
   latestBy,
-  linearForecast,
   municipalityNames,
   speciesNames as recordSpeciesNames,
 } from "./api/priceData.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
+
+// Loaded only when the forecast page opens (the chart library is large).
+const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
 
 
 // Read-only audit records supplied by Django. This endpoint enforces role visibility.
@@ -187,6 +190,12 @@ function downloadCsv(filename, header, rows) {
   a.download = filename;
   a.click();
   setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
+// Unique { id, name } options from records, sorted by name.
+function uniqueOptions(records, idKey, nameKey) {
+  return [...new Map(records.map((r) => [r[idKey], { id: r[idKey], name: r[nameKey] }])).values()]
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 function EmptyPanel({ children }) {
@@ -437,7 +446,7 @@ useEffect(() => {
       case "Fish Species Management":
         return <LGUFishSpeciesManagement notify={notify} />;
       case "External Factors":
-        return <ExternalFactors />;
+        return <ExternalFactorsPage notify={notify} />;
       case "Fisherfolk Management":
         return <FisherfolkManagement fisherfolk={fisherfolk} suggestions={suggestions} loading={fisherfolkLoading} error={fisherfolkError} />;
       case "Price Suggestions":
@@ -451,7 +460,17 @@ useEffect(() => {
       case "Price Anomalies":
         return <PriceAnomalies priceRecords={priceRecords} suggestions={suggestions} />;
       case "Price Forecast":
-        return <PriceForecast priceRecords={priceRecords} loading={pricesLoading} error={pricesError} notify={notify} />;
+        return (
+          <Suspense fallback={<div className="panel" style={{ padding: 24 }}>Loading forecast…</div>}>
+            <ForecastView
+              species={uniqueOptions(priceRecords.filter(isPublished), "fish_species", "fish_name")}
+              municipalities={uniqueOptions(priceRecords.filter(isPublished), "municipality", "municipality_name")}
+              defaultMunicipalityId={currentUser?.municipality_id}
+              notify={notify}
+              description="Short-term SARIMAX forecasts from published prices and logged external factors, for market guidance."
+            />
+          </Suspense>
+        );
       case "Reports":
         return <Reports priceRecords={priceRecords} notify={notify} />;
       case "Validation History":
@@ -2503,24 +2522,6 @@ console.log("Bangus #8 comparison:", {
 }
 
 /* ================================================================
-   EXTERNAL FACTORS
-   ================================================================ */
-
-function ExternalFactors() {
-  return (
-    <>
-      <div className="page-title">
-        <div><h2>External Factors</h2><p>Fuel prices, weather, and holidays that affect fish supply.</p></div>
-      </div>
-      <EmptyPanel>
-        External factors are not stored in the AquaTimbang database yet, so there is nothing to show here.
-        Forecasts are currently based only on LGU-published price history.
-      </EmptyPanel>
-    </>
-  );
-}
-
-/* ================================================================
    FISHERFOLK MANAGEMENT
    ================================================================ */
 
@@ -3392,102 +3393,6 @@ function PriceAnomalies({ priceRecords, suggestions }) {
           </tbody>
         </table>
       </div>
-    </>
-  );
-}
-
-/* ================================================================
-   PRICE FORECAST
-   ================================================================ */
-
-function PriceForecast({ priceRecords, loading, error, notify }) {
-  const published = priceRecords.filter(isPublished);
-  const species = recordSpeciesNames(published);
-  const [selected, setSelected] = useState("");
-  const [days, setDays] = useState("7");
-  const current = species.includes(selected) ? selected : species[0] || "";
-
-  // Fit the trend on the last 30 days of published prices.
-  const history = lastDays(dailySeries(published, current), 30);
-  const forecast = linearForecast(history, days);
-  const last = history[history.length - 1];
-  const pct = forecast && last ? ((forecast[forecast.length - 1].price - last.price) / last.price) * 100 : 0;
-  const recent = history.slice(-8);
-  const max = Math.max(...recent.map((r) => r.price), ...(forecast || []).map((f) => f.high), 1);
-
-  const exportForecast = () => {
-    downloadCsv(
-      `${current}_forecast.csv`,
-      ["Date", "Projected Price", "Low", "High"],
-      forecast.map((f) => [f.date, f.price.toFixed(2), f.low.toFixed(2), f.high.toFixed(2)])
-    );
-    notify("Forecast exported.");
-  };
-
-  return (
-    <>
-      <div className="page-title">
-        <div>
-          <h2>Price Forecast</h2>
-          <p>A simple trend projection from the last 30 days of published prices. Not an official price.</p>
-        </div>
-        <div className="filter-row">
-          <select className="date-input" value={current} onChange={(e) => setSelected(e.target.value)} disabled={!species.length}>
-            {!species.length && <option value="">No published prices</option>}
-            {species.map((s) => <option key={s}>{s}</option>)}
-          </select>
-          <select className="date-input" value={days} onChange={(e) => setDays(e.target.value)}>
-            <option value="7">Next 7 days</option>
-            <option value="14">Next 14 days</option>
-            <option value="30">Next 30 days</option>
-          </select>
-        </div>
-      </div>
-
-      {loading ? <EmptyPanel>Loading published prices…</EmptyPanel> : error ? <EmptyPanel>{error}</EmptyPanel> : !forecast ? (
-        <EmptyPanel>At least 7 days of published prices are needed to project a trend{current ? ` for ${current}` : ""}.</EmptyPanel>
-      ) : (
-        <div className="panel">
-          <div className="panel-header">
-            <div><h3>{current} — Forecast</h3><p>Recent published prices with projected values</p></div>
-            <button className="secondary-btn" onClick={exportForecast}>↓ Export Forecast</button>
-          </div>
-
-          <div className="chart-area">
-            <div className="chart-placeholder">
-              <div className="bars">
-                {recent.map((r) => <div key={`h${r.date}`} className="bar" style={{ height: `${20 + (r.price / max) * 75}%` }} title={`${fmtDate(r.date)} — ${peso(r.price)}`}></div>)}
-                {forecast.map((f) => (
-                  <div key={`f${f.date}`} className="bar forecast-bar" style={{ height: `${20 + (f.price / max) * 75}%` }} title={`${fmtDate(f.date)} — ${peso(f.price)}`}></div>
-                ))}
-              </div>
-              <p className="chart-note">Blue bars are published prices, orange bars are projected values.</p>
-            </div>
-          </div>
-
-          <div className="insight-box">
-            <strong>📈 Insight</strong>
-            <p>
-              {current} prices are projected to {pct >= 0 ? "rise" : "fall"} by about {Math.abs(pct).toFixed(1)}%
-              over the next {days} days, ending near {peso(forecast[forecast.length - 1].price)} per kilogram.
-            </p>
-          </div>
-
-          <table>
-            <thead><tr><th>DATE</th><th>PROJECTED PRICE</th><th>EXPECTED RANGE</th><th>TREND</th></tr></thead>
-            <tbody>
-              {forecast.map((f) => (
-                <tr key={f.date}>
-                  <td>{fmtDate(f.date)}</td>
-                  <td><strong>{peso(f.price)}</strong></td>
-                  <td>{peso(f.low)} – {peso(f.high)}</td>
-                  <td className={f.up ? "up" : "down"}>{f.up ? "▲ Rising" : "▼ Easing"}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      )}
     </>
   );
 }

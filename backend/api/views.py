@@ -1618,3 +1618,218 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
         )
 
         return Response(self.get_serializer(suggestion).data)
+
+
+# ============================================================
+# PREDICTIVE ANALYTICS (SARIMAX) — EXTERNAL FACTORS AND FORECASTS
+# ============================================================
+from .forecasting import NotEnoughData, data_signature, daily_series, generate_forecast
+from .models import ExternalFactor, ForecastRun, Prediction
+from .serializers import ExternalFactorSerializer, ForecastRunSerializer
+
+# Longest forecast a user can request, in days.
+MAX_FORECAST_HORIZON = 30
+# Days of price history returned with a forecast for the chart.
+FORECAST_HISTORY_DAYS = 60
+
+
+def approved_role(user):
+    """Role name of an approved, active account, otherwise None."""
+    profile = getattr(user, "aquatimbang_profile", None)
+    if (
+        not user.is_active
+        or profile is None
+        or not profile.is_active
+        or profile.account_status != UserProfile.STATUS_APPROVED
+    ):
+        return None
+    return profile.role.name
+
+
+def log_activity(user, action, target_type, target_id, target_name, details=None):
+    ActivityLog.objects.create(
+        actor=user,
+        actor_username=user.username,
+        actor_role=approved_role(user) or "Unknown",
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        target_name=target_name,
+        details=details or {},
+    )
+
+
+class ExternalFactorViewSet(viewsets.ModelViewSet):
+    """
+    Daily fuel price, weather and holiday records.
+    Every approved user can read them; LGU Officers and Administrators
+    can add, edit and delete them.
+    """
+
+    serializer_class = ExternalFactorSerializer
+    authentication_classes = [TokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    queryset = ExternalFactor.objects.select_related("recorded_by").all()
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        role = approved_role(request.user)
+        if role is None:
+            raise PermissionDenied("An approved account is required.")
+        if request.method not in ("GET", "HEAD", "OPTIONS") and role not in ("LGU Officer", "Administrator"):
+            raise PermissionDenied("Only LGU Officers and Administrators can change external factors.")
+
+    def get_queryset(self):
+        queryset = super().get_queryset()
+        start = self.request.query_params.get("from")
+        end = self.request.query_params.get("to")
+        if start:
+            queryset = queryset.filter(date__gte=start)
+        if end:
+            queryset = queryset.filter(date__lte=end)
+        return queryset
+
+    def _details(self, factor):
+        return {
+            "fuel_price": str(factor.fuel_price) if factor.fuel_price is not None else None,
+            "weather": factor.get_weather_display(),
+            "is_holiday": factor.is_holiday,
+        }
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        factor = serializer.save(recorded_by=self.request.user)
+        log_activity(self.request.user, "created", "ExternalFactor", factor.pk, str(factor.date), self._details(factor))
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        factor = serializer.save()
+        log_activity(self.request.user, "updated", "ExternalFactor", factor.pk, str(factor.date), self._details(factor))
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        log_activity(self.request.user, "deleted", "ExternalFactor", instance.pk, str(instance.date), self._details(instance))
+        instance.delete()
+
+
+def forecast_response(run, species_id, municipality_id, cached):
+    series, _ = daily_series(species_id, municipality_id)
+    history = [
+        {"date": day.date(), "price": round(float(price), 2)}
+        for day, price in series.tail(FORECAST_HISTORY_DAYS).items()
+    ]
+    data = ForecastRunSerializer(run).data
+    data["history"] = history
+    data["confidence_level"] = 95
+    data["cached"] = cached
+    return data
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def price_forecast(request):
+    """
+    Forecast prices for ?species=<id>[&municipality=<id>][&horizon=<days>].
+    A saved forecast is reused until new prices or external factors are
+    recorded.
+    """
+    if approved_role(request.user) is None:
+        return Response({"message": "An approved account is required."}, status=status.HTTP_403_FORBIDDEN)
+
+    try:
+        species = FishSpecies.objects.get(pk=int(request.query_params.get("species", "")))
+    except (ValueError, FishSpecies.DoesNotExist):
+        return Response({"message": "Choose a valid fish species."}, status=status.HTTP_400_BAD_REQUEST)
+
+    municipality = None
+    if request.query_params.get("municipality"):
+        try:
+            municipality = Municipality.objects.get(pk=int(request.query_params["municipality"]))
+        except (ValueError, Municipality.DoesNotExist):
+            return Response({"message": "Choose a valid municipality."}, status=status.HTTP_400_BAD_REQUEST)
+
+    try:
+        horizon = int(request.query_params.get("horizon", 7))
+    except ValueError:
+        horizon = 0
+    if not 1 <= horizon <= MAX_FORECAST_HORIZON:
+        return Response(
+            {"message": f"Forecast period must be between 1 and {MAX_FORECAST_HORIZON} days."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    municipality_id = municipality.pk if municipality else None
+    signature = data_signature(species.pk, municipality_id)
+    run = (
+        ForecastRun.objects.filter(
+            fish_species=species,
+            municipality=municipality,
+            horizon_days=horizon,
+            data_signature=signature,
+        )
+        .select_related("fish_species", "municipality", "created_by")
+        .prefetch_related("predictions")
+        .first()
+    )
+    if run:
+        return Response(forecast_response(run, species.pk, municipality_id, cached=True))
+
+    try:
+        result = generate_forecast(species.pk, municipality_id, horizon)
+    except NotEnoughData as error:
+        return Response({"message": str(error), "not_enough_data": True}, status=status.HTTP_200_OK)
+
+    with transaction.atomic():
+        run = ForecastRun.objects.create(
+            fish_species=species,
+            municipality=municipality,
+            horizon_days=horizon,
+            model_type=result["model_type"],
+            model_used=result["model_used"],
+            exogenous=result["exogenous"],
+            coefficients=result["coefficients"],
+            mape=result["mape"],
+            rmse=result["rmse"],
+            holdout_days=result["holdout_days"],
+            training_start=result["training_start"],
+            training_end=result["training_end"],
+            observations=result["observations"],
+            warnings=result["warnings"],
+            data_signature=signature,
+            created_by=request.user,
+        )
+        Prediction.objects.bulk_create([
+            Prediction(
+                run=run,
+                fish_species=species,
+                municipality=municipality,
+                forecast_date=point["date"],
+                forecast_price=round(point["price"], 2),
+                lower_bound=round(point["lower"], 2),
+                upper_bound=round(point["upper"], 2),
+                model_used=result["model_used"],
+            )
+            for point in result["forecast"]
+        ])
+        log_activity(
+            request.user, "generated", "ForecastRun", run.pk, species.name,
+            {"model": run.model_used, "days": horizon, "municipality": municipality.name if municipality else "All"},
+        )
+
+    run = ForecastRun.objects.prefetch_related("predictions").select_related(
+        "fish_species", "municipality", "created_by"
+    ).get(pk=run.pk)
+    return Response(forecast_response(run, species.pk, municipality_id, cached=False))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def forecast_history(request):
+    """The 30 most recently generated forecasts."""
+    if approved_role(request.user) is None:
+        return Response({"message": "An approved account is required."}, status=status.HTTP_403_FORBIDDEN)
+    runs = (
+        ForecastRun.objects.select_related("fish_species", "municipality", "created_by")
+        .prefetch_related("predictions")[:30]
+    )
+    return Response(ForecastRunSerializer(runs, many=True).data)

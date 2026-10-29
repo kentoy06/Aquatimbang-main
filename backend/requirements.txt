@@ -2,5 +2,10 @@ Django>=6.1,<6.2
 djangorestframework>=3.18,<4
 django-cors-headers>=4.9,<5
 Pillow>=13,<14
+# Predictive Analytics Module (SARIMAX forecasting)
+numpy>=2.2
+pandas>=2.3
+statsmodels>=0.14.5
+pmdarima>=2.1
 # Only needed when DB_ENGINE=mysql in backend/.env
 mysqlclient>=2.2

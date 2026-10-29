@@ -32,8 +32,8 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Real-time (latest) price display | ✅ | Vendor, LGU and Admin dashboards. |
 | Historical price visualization | ✅ | Price Trends pages. |
 | Filters: species, date range, municipality | 🟡 | Species and municipality yes; date-range filter not on every view. |
-| Interactive charts (Chart.js / Recharts in the paper) | 🟡 | Simple built-in bar/line charts; no charting library. |
-| Forecast integration (SARIMAX) | 🟡 | Forecast shown, but uses a simple linear trend (see Module 5). |
+| Interactive charts (Chart.js / Recharts in the paper) | 🟡 | Forecast pages use Recharts (hover tooltips, confidence band); trend pages still use simple charts. |
+| Forecast integration (SARIMAX) | ✅ | Vendor, LGU and Admin forecast pages use the SARIMAX API. |
 | Data export & sharing (LGU, Admin) | ✅ | CSV export. |
 | Responsive interface | 🟡 | Login/Register checked on phone width; dashboards not yet checked. |
 | "No data available for the selected filters" message | ✅ | |
@@ -57,19 +57,19 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Audit & logging | ✅ | Every create/edit/submit/approve/publish/flag/reject is logged. |
 | Configurable min/max price bounds | 🟡 | Fixed ₱50–₱1,000 in the LGU front-end; not configurable, not enforced by the backend. |
 | Corrections keep the original record (IsCorrection / OriginalPriceID, Table 19) | 🟡 | Edits overwrite the record; the change is only kept in the activity log. |
-| External factor integration (fuel, weather, holidays) | ❌ | No database table or entry screen yet. |
+| External factor integration (fuel, weather, holidays) | ✅ | External Factors page for LGU Officers and Administrators (`/api/external-factors/`). |
 
 ## 5. Predictive Analytics Module — SARIMAX (UC-6, Table 27)
 
 | Function | Status | Notes |
 |---|---|---|
-| SARIMAX forecasting core (statsmodels + pmdarima auto_arima) | ❌ | System uses a simple linear trend in the browser. |
-| External regressors (fuel price, weather, holidays) | ❌ | Depends on external factor data (Module 4). |
-| Confidence intervals | 🟡 | Shows a ± range from the trend's error, not true model intervals. |
-| Store forecasts (Predictions table, Table 21) | ❌ | Forecasts are recalculated and not saved. |
-| Accuracy evaluation (MAPE, RMSE) | ❌ | |
-| Require ≥ 4 weeks of data; fall back to trend if the model fails | 🟡 | Requires 7 days today; no model to fall back from. |
-| Visualization & insights | ✅ | Forecast chart, table and text insight. |
+| SARIMAX forecasting core (statsmodels + pmdarima auto_arima) | ✅ | `backend/api/forecasting.py`; auto_arima picks the order with weekly seasonality (m=7). |
+| External regressors (fuel price, weather, holidays) | ✅ | Used when logged on at least half of the training days; each factor's effect is shown. |
+| Confidence intervals | ✅ | 95% intervals from the SARIMAX model, drawn as a band on the chart. |
+| Store forecasts (Predictions table, Table 21) | ✅ | `ForecastRun` + `Prediction` tables; reused until new prices or factors are recorded. |
+| Accuracy evaluation (MAPE, RMSE) | ✅ | Measured on the last 7 days held out from training. |
+| Require ≥ 4 weeks of data; fall back to trend if the model fails | ✅ | Under 28 days or on a model error, a trend line is shown with the UC-6 warning. |
+| Visualization & insights | ✅ | Forecast chart, daily table, insight text, CSV export, forecast history (Admin). |
 
 ## 6. Reports Module (UC-5)
 
@@ -80,7 +80,7 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | User activity logs (Admin) | ✅ | Admin Activity Logs. |
 | Export CSV | ✅ | |
 | Export PDF | 🟡 | Uses the browser's Print → Save as PDF. |
-| External factor summaries | ❌ | Depends on external factor data. |
+| External factor summaries | ❌ | External factor data now exists; a report for it is not built yet. |
 | Log generated reports (Reports table, Table 22) | ❌ | |
 
 ## 7. User Management Module (UC-7)
@@ -138,9 +138,8 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 ## Suggested build order
 
 1. Settle the contradictions above.
-2. **Predictive Analytics (SARIMAX)** — the core of the title. Add external factor data,
-   a backend forecasting endpoint (statsmodels/pmdarima), confidence intervals, a
-   Predictions table and MAPE/RMSE.
+2. ~~**Predictive Analytics (SARIMAX)**~~ — done: external factors, SARIMAX forecast API,
+   confidence intervals, saved predictions, MAPE/RMSE.
 3. **User Management** — create, edit, deactivate, role assignment, password reset; let
    LGU Officers approve vendors.
 4. **Authentication security** — clear pending/rejected messages, lockout after 5 failed

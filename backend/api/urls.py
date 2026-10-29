@@ -4,7 +4,7 @@ from django.urls import include, path
 # DefaultRouter automatically generates REST API routes
 # for registered ViewSets.
 from rest_framework.routers import DefaultRouter
-from .views import ActivityLogViewSet, VendorPriceSuggestionViewSet
+from .views import ActivityLogViewSet, VendorPriceSuggestionViewSet, ExternalFactorViewSet, price_forecast, forecast_history
 
 # Import AquaTimbang API views.
 from .views import (
@@ -107,6 +107,12 @@ router.register(
 )
 
 router.register(
+    r"external-factors",
+    ExternalFactorViewSet,
+    basename="external-factor",
+)
+
+router.register(
     r"vendor-suggestions",
     VendorPriceSuggestionViewSet,
     basename="vendor-suggestion",
@@ -161,6 +167,20 @@ urlpatterns = [
         "auth/fisherfolk/",
         list_fisherfolk,
         name="list-fisherfolk"
+    ),
+
+    # SARIMAX price forecast: ?species=<id>&municipality=<id>&horizon=<days>
+    path(
+        "forecasts/",
+        price_forecast,
+        name="price-forecast"
+    ),
+
+    # Recently generated forecasts.
+    path(
+        "forecasts/history/",
+        forecast_history,
+        name="forecast-history"
     ),
 
     # Live counts for the public landing page.

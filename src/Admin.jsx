@@ -1,11 +1,15 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, lazy, Suspense } from "react";
 import "./App.css";
 import "./Admin.css";
 import { API_BASE_URL, apiUrl, authHeaders, fetchAll } from "./api/config.js";
 import { fullName as profileName, useMyProfile } from "./api/account.js";
 import { listVendorSuggestions, reviewVendorSuggestion } from "./api/vendorSuggestions.js";
-import { dailySeries, isPublished, lastDays, linearForecast } from "./api/priceData.js";
+import { getForecastHistory } from "./api/forecast.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
+
+// Loaded only when the forecast page opens (the chart library is large).
+const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
 
 
 // Read-only audit records supplied by Django. This endpoint enforces role visibility.
@@ -561,7 +565,6 @@ useEffect(() => {
   const { records: activityLogs } = useDjangoActivityLogs(`${activePage}-${reloadKey}`);
   const logs = activityLogs.map(toLogRow);
 
-  const [forecasts, setForecasts] = useState([]);
   const [dismissedNotifs, setDismissedNotifs] = useState([]);
 
   /* ---------- HELPERS ---------- */
@@ -588,6 +591,7 @@ useEffect(() => {
       items: [
         { name: "Fisherfolk Suggestions", icon: "💬" },
         { name: "Predictive Analytics", icon: "📈" },
+        { name: "External Factors", icon: "☁" },
         { name: "Data Monitoring", icon: "🗄" },
         { name: "Notifications", icon: "🔔" },
       ],
@@ -661,11 +665,13 @@ useEffect(() => {
       case "Predictive Analytics":
         return (
           <PredictiveAnalytics
-            apiPriceRecords={apiPriceRecords} municipalities={municipalities}
-            forecasts={forecasts} setForecasts={setForecasts}
+            species={species} municipalities={municipalities}
+            defaultMunicipalityId={account.profile?.municipality_id}
             notify={notify}
           />
         );
+      case "External Factors":
+        return <ExternalFactorsPage notify={notify} />;
       case "Data Monitoring":
         return (
           <DataMonitoring
@@ -2812,204 +2818,81 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
    PREDICTIVE ANALYTICS MONITORING
    ================================================================ */
 
-function PredictiveAnalytics({ apiPriceRecords, municipalities, forecasts, setForecasts, notify }) {
-  const published = apiPriceRecords.filter(isPublished);
-  const speciesNames = [...new Set(published.map((r) => r.fish_name))].sort((a, b) => a.localeCompare(b));
+function PredictiveAnalytics({ species, municipalities, defaultMunicipalityId, notify }) {
+  const [history, setHistory] = useState([]);
+  const [historyError, setHistoryError] = useState("");
+  const [historyKey, setHistoryKey] = useState(0);
 
-  const [speciesChoice, setSpeciesChoice] = useState("");
-  const [municipality, setMunicipality] = useState("");
-  const [period, setPeriod] = useState("14");
-  const [selectedForecastId, setSelectedForecastId] = useState(null);
-  const speciesName = speciesNames.includes(speciesChoice) ? speciesChoice : speciesNames[0] || "";
+  useEffect(() => {
+    let cancelled = false;
+    getForecastHistory()
+      .then((rows) => { if (!cancelled) { setHistory(rows); setHistoryError(""); } })
+      .catch((err) => { if (!cancelled) setHistoryError(err.message); });
+    return () => { cancelled = true; };
+  }, [historyKey]);
 
-  // Fit a linear trend on the last 30 days of published prices.
-  const buildForecast = (name, muni, days) => {
-    const historical = lastDays(dailySeries(published, name, muni), 30);
-    const predicted = linearForecast(historical, days) || [];
-    return { historical, predicted, lastActual: historical[historical.length - 1]?.price ?? null };
-  };
-  const preview = buildForecast(speciesName, municipality, Number(period));
-  const sufficientData = preview.predicted.length > 0;
-  const stamp = () => new Date().toLocaleString("en-PH", { month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" });
-
-  const generate = () => {
-    if (!sufficientData) {
-      notify(`Not enough published prices for ${speciesName || "this species"} yet — need at least 7 days.`);
-      return;
-    }
-    const entry = {
-      id: Date.now(),
-      species: speciesName,
-      market: municipality || "All municipalities",
-      municipality,
-      period: Number(period),
-      generatedDate: stamp(),
-      ...preview,
-    };
-    setForecasts((prev) => [entry, ...prev]);
-    setSelectedForecastId(entry.id);
-    notify("Forecast generated.");
-  };
-
-  const rerun = (f) => {
-    const fresh = buildForecast(f.species, f.municipality, f.period);
-    setForecasts((prev) => prev.map((x) => (x.id === f.id ? { ...x, ...fresh, generatedDate: stamp() } : x)));
-    notify("Forecast re-run with latest data.");
-  };
-
-  const selected = forecasts.find((f) => f.id === selectedForecastId) || forecasts[0] || null;
-  const barsFor = (series, cls, max) =>
-    series.map((p) => {
-      const h = 25 + (p.price / max) * 65;
-      return <div key={`${cls}${p.date}`} className={`bar ${cls}`} style={{ height: `${h}%` }} title={`${fmtDate(p.date)} — ${peso(p.price)}`}></div>;
-    });
-  const selectedMax = selected ? Math.max(...selected.historical.map((p) => p.price), ...selected.predicted.map((p) => p.price), 1) : 1;
+  const activeSpecies = species.filter((s) => s.status === "Active").map((s) => ({ id: s.id, name: s.name }));
+  const activeMunicipalities = municipalities.filter((m) => m.status === "Active");
 
   return (
     <>
-      <div className="page-title">
-        <div>
-          <h2>Predictive Analytics Monitoring</h2>
-          <p>Simple trend projections from the last 30 days of published prices. Estimates only, not official prices.</p>
-        </div>
-      </div>
-
-      <div className="config-grid">
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon blue">📈</div>
-            <div>
-              <h3>Generate a Forecast</h3>
-              <p>Select the parameters, then generate</p>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Fish Species</label>
-            <select value={speciesName} onChange={(e) => setSpeciesChoice(e.target.value)} disabled={!speciesNames.length}>
-              {!speciesNames.length && <option value="">No published prices yet</option>}
-              {speciesNames.map((s) => <option key={s}>{s}</option>)}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>Municipality</label>
-            <select value={municipality} onChange={(e) => setMunicipality(e.target.value)}>
-              <option value="">All municipalities</option>
-              {municipalities.map((m) => <option key={m.id}>{m.name}</option>)}
-            </select>
-          </div>
-
-          <div className="form-group">
-            <label>Forecast Period</label>
-            <select value={period} onChange={(e) => setPeriod(e.target.value)}>
-              <option value="7">7 Days</option>
-              <option value="14">14 Days</option>
-              <option value="30">30 Days</option>
-            </select>
-          </div>
-
-          {!sufficientData ? (
-            <div className="warn-box">
-              ⚠ Only {preview.historical.length} day{preview.historical.length !== 1 ? "s" : ""} of published prices found
-              {speciesName ? ` for ${speciesName}` : ""}. At least 7 are needed to project a trend.
-            </div>
-          ) : (
-            <div className="info-box">
-              {preview.historical.length} days of published prices found — ready to forecast.
-            </div>
-          )}
-
-          <button className="primary-btn full-btn" onClick={generate} disabled={!sufficientData}>
-            Generate Forecast
-          </button>
-        </div>
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon purple">👁</div>
-            <div>
-              <h3>{selected ? `${selected.species} — Forecast Graph` : "No Forecast Selected"}</h3>
-              <p>{selected ? `${selected.market} · ${selected.period}-day horizon · generated ${selected.generatedDate}` : "Generate a forecast to see it here"}</p>
-            </div>
-          </div>
-
-          {selected ? (
-            <>
-              <div className="chart-placeholder">
-                <div className="bars">
-                  {barsFor(selected.historical.slice(-14), "", selectedMax)}
-                  {barsFor(selected.predicted, "forecast-bar", selectedMax)}
-                </div>
-                <p className="chart-note">Blue bars are published prices, orange bars are the projection.</p>
-              </div>
-
-              <div className="profile-grid" style={{ marginTop: 14 }}>
-                <div className="profile-field">
-                  <span>Last Published Price</span>
-                  <strong>{peso(selected.lastActual)}</strong>
-                </div>
-                <div className="profile-field">
-                  <span>Projected End Price</span>
-                  <strong>{peso(selected.predicted[selected.predicted.length - 1]?.price)}</strong>
-                </div>
-              </div>
-
-              <button className="secondary-btn full-btn" style={{ marginTop: 14 }} onClick={() => rerun(selected)}>
-                ↻ Re-run This Forecast
-              </button>
-            </>
-          ) : (
-            <p className="empty-row">Nothing generated yet.</p>
-          )}
-        </div>
-
-      </div>
+      <Suspense fallback={<div className="panel" style={{ padding: 24 }}>Loading forecast…</div>}>
+        <ForecastView
+          species={activeSpecies}
+          municipalities={activeMunicipalities}
+          defaultMunicipalityId={defaultMunicipalityId}
+          notify={notify}
+          onGenerated={() => setHistoryKey((k) => k + 1)}
+          description="SARIMAX forecasts with external factors, accuracy (MAPE/RMSE) and 95% confidence intervals."
+        />
+      </Suspense>
 
       <div className="panel" style={{ marginTop: 18 }}>
         <div className="panel-header">
           <div>
             <h3>Forecast History</h3>
-            <p>Forecasts generated during this session</p>
+            <p>The 30 most recently generated forecasts, saved in the database</p>
           </div>
+          <button className="secondary-btn" onClick={() => setHistoryKey((k) => k + 1)}>↻ Refresh</button>
         </div>
 
-        <table>
-          <thead>
-            <tr>
-              <th>SPECIES</th>
-              <th>MUNICIPALITY</th>
-              <th>PERIOD</th>
-              <th>PROJECTED END PRICE</th>
-              <th>GENERATED ON</th>
-              <th>ACTIONS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {forecasts.length === 0 ? (
+        {historyError && <div className="warn-box" role="alert">{historyError}</div>}
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead>
               <tr>
-                <td colSpan="6" className="empty-row">No forecasts generated yet.</td>
+                <th>GENERATED</th>
+                <th>SPECIES</th>
+                <th>MUNICIPALITY</th>
+                <th>MODEL</th>
+                <th>DAYS</th>
+                <th>MAPE</th>
+                <th>RMSE</th>
+                <th>END PRICE</th>
+                <th>BY</th>
               </tr>
-            ) : (
-              forecasts.map((f) => (
-                <tr key={f.id}>
-                  <td><strong>{f.species}</strong></td>
-                  <td>{f.market}</td>
-                  <td>{f.period} days</td>
-                  <td>{peso(f.predicted[f.predicted.length - 1]?.price)}</td>
-                  <td>{f.generatedDate}</td>
-                  <td>
-                    <div className="action-icons">
-                      <button title="View" onClick={() => setSelectedForecastId(f.id)}>👁</button>
-                      <button title="Re-run" onClick={() => rerun(f)}>↻</button>
-                    </div>
-                  </td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
+            </thead>
+            <tbody>
+              {history.length === 0 ? (
+                <tr><td colSpan="9" className="empty-row">No forecasts generated yet.</td></tr>
+              ) : (
+                history.map((run) => (
+                  <tr key={run.id}>
+                    <td>{formatAuditTimestamp(run.created_at)}</td>
+                    <td><strong>{run.fish_name}</strong></td>
+                    <td>{run.municipality_name || "All municipalities"}</td>
+                    <td>{run.model_used}</td>
+                    <td>{run.horizon_days}</td>
+                    <td>{run.mape !== null ? `${run.mape}%` : "—"}</td>
+                    <td>{run.rmse !== null ? peso(run.rmse) : "—"}</td>
+                    <td>{peso(run.forecast[run.forecast.length - 1]?.price)}</td>
+                    <td>{run.created_by_name || "—"}</td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </div>
     </>
   );
