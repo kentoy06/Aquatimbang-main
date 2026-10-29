@@ -722,3 +722,46 @@
   font-size: 12px;
   color: #667085;
 }
+
+/* Side-by-side fields: line the input boxes up even if one label wraps. */
+.login-page .form-row {
+  align-items: end;
+}
+
+/* =========================
+   PASSWORD SHOW / HIDE
+========================= */
+
+.password-field {
+  position: relative;
+}
+
+.login-page .password-field input {
+  padding-right: 42px;
+}
+
+.password-toggle {
+  position: absolute;
+  top: 50%;
+  right: 6px;
+  transform: translateY(-50%);
+  width: 32px;
+  height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: #667085;
+}
+
+.password-toggle:hover {
+  color: #0E7C86;
+  background: #eef7f8;
+}
+
+.password-toggle:focus-visible {
+  outline: 2px solid #0E7C86;
+  outline-offset: 1px;
+}
