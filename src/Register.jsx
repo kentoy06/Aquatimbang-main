@@ -487,7 +487,7 @@ if (role === "LGU Officer") {
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="reg-official-email">Official Work Email <span className="optional">(optional)</span></label>
+                    <label htmlFor="reg-official-email">Work Email <span className="optional">(optional)</span></label>
                     <input id="reg-official-email" type="email" placeholder="name@lgu.gov.ph" value={form.official_email} onChange={(e) => update("official_email", e.target.value)} />
                   </div>
                   <div className="form-group">
