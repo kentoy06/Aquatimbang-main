@@ -1,9 +1,19 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./App.css";
 import "./Landing.css";
+import { apiUrl } from "./api/config.js";
 
 function Landing({ onGetStarted, onRegister }) {
   const [section, setSection] = useState("home");
+  const [summary, setSummary] = useState(null);
+
+  // Load live counts from Django for the stats row.
+  useEffect(() => {
+    fetch(apiUrl("/public/summary/"))
+      .then((response) => (response.ok ? response.json() : null))
+      .then(setSummary)
+      .catch(() => setSummary(null));
+  }, []);
 
   const audiences = [
     { icon: "🐟", title: "Fisherfolk & Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price if something looks off." },
@@ -18,10 +28,11 @@ function Landing({ onGetStarted, onRegister }) {
     { icon: "📈", label: "Trends & Forecasts" },
   ];
 
+  const count = (value) => (summary ? String(value ?? 0) : "—");
   const stats = [
-    { value: "5", label: "Fish Species Tracked" },
-    { value: "3", label: "Markets Covered" },
-    { value: "Daily", label: "LGU-Validated Updates" },
+    { value: count(summary?.species_count), label: "Fish Species Tracked" },
+    { value: count(summary?.municipality_count), label: "Municipalities Covered" },
+    { value: count(summary?.published_price_count), label: "LGU-Validated Prices" },
   ];
 
   return (
@@ -89,16 +100,18 @@ function Landing({ onGetStarted, onRegister }) {
             </div>
 
             <div className="landing-home-visual">
-              <div className="landing-price-card">
-                <span>Galunggong · Pasil Fish Market</span>
-                <strong>₱180.00</strong>
-                <small className="up">▲ 2.3% vs last week · LGU Validated</small>
-              </div>
-              <div className="landing-price-card landing-price-card-2">
-                <span>Tulingan · Pasil Fish Market</span>
-                <strong>₱160.00</strong>
-                <small className="down">▼ 1.1% vs last week · LGU Validated</small>
-              </div>
+              {(summary?.featured_prices || []).map((item, index) => {
+                const change = item.weekly_change_percent;
+                return (
+                  <div className={`landing-price-card${index === 1 ? " landing-price-card-2" : ""}`} key={`${item.fish_name}-${item.municipality_name}`}>
+                    <span>{item.fish_name} · {item.municipality_name}</span>
+                    <strong>₱{Number(item.price_per_kg).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
+                    <small className={change === null ? "" : change >= 0 ? "up" : "down"}>
+                      {change === null ? "" : `${change >= 0 ? "▲" : "▼"} ${Math.abs(change).toFixed(1)}% vs last week · `}LGU Validated
+                    </small>
+                  </div>
+                );
+              })}
             </div>
           </div>
         )}

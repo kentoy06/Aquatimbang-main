@@ -757,3 +757,59 @@ class ActivityLog(models.Model):
 
     def __str__(self):
         return f"{self.actor_username}: {self.action} {self.target_name}"
+
+class VendorPriceSuggestion(models.Model):
+    STATUS_PENDING = "pending"
+    STATUS_REVIEWED = "reviewed"
+    STATUS_ADOPTED = "adopted"
+    STATUS_REJECTED = "rejected"
+
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Pending Review"),
+        (STATUS_REVIEWED, "Reviewed"),
+        (STATUS_ADOPTED, "Adopted"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    vendor = models.ForeignKey(
+        "auth.User",
+        on_delete=models.PROTECT,
+        related_name="fish_price_suggestions",
+    )
+    fish_species = models.ForeignKey(
+        FishSpecies,
+        on_delete=models.PROTECT,
+        related_name="vendor_suggestions",
+    )
+    municipality = models.ForeignKey(
+        Municipality,
+        on_delete=models.PROTECT,
+        related_name="vendor_suggestions",
+    )
+    suggested_price = models.DecimalField(
+        max_digits=10,
+        decimal_places=2,
+    )
+    comment = models.TextField(blank=True)
+    status = models.CharField(
+        max_length=20,
+        choices=STATUS_CHOICES,
+        default=STATUS_PENDING,
+    )
+    lgu_feedback = models.TextField(blank=True)
+    reviewed_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="reviewed_vendor_suggestions",
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.vendor.username} - {self.fish_species.name}" 

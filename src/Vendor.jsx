@@ -1,27 +1,19 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import "./App.css";
 import "./Vendor.css";
-import { useEffect } from "react";
 
 import {
   listVendorSuggestions,
   createVendorSuggestion,
 } from "./api/vendorSuggestions";
+import { API_BASE_URL } from "./api/config.js";
+import { fullName, useMyProfile } from "./api/account.js";
+import AccountProfile from "./components/AccountProfile.jsx";
 
 /* ================================================================
-   CONSTANTS & MOCK DATA
+   HELPERS
    ================================================================ */
 
-const SPECIES = [
-  { id: "galunggong", name: "Galunggong", icon: "🐟", sci: "Decapterus macarellus", base: 180 },
-  { id: "tulingan", name: "Tulingan", icon: "🐠", sci: "Euthynnus affinis", base: 160 },
-  { id: "bolinaw", name: "Bolinaw", icon: "🐡", sci: "Stolephorus spp.", base: 120 },
-  { id: "tamarong", name: "Tamarong", icon: "🐟", sci: "Local catch", base: 150 },
-  { id: "anduhaw", name: "Anduhaw", icon: "🐠", sci: "Rastrelliger spp.", base: 170 },
-];
-
-const SPECIES_NAMES = SPECIES.map((s) => s.name);
-const MARKET = "Pasil Fish Market – Cebu City";
 // Resolve the signed-in vendor rather than displaying a demo identity.
 function getVendorIdentity(currentUser) {
   let stored = {};
@@ -32,83 +24,21 @@ function getVendorIdentity(currentUser) {
   const initials = name.trim().split(/\s+/).slice(0, 2).map((part) => part[0]?.toUpperCase() || "").join("");
   return { name, initials: initials || "FV", email: user.email || "", contact: user.contact_number || user.contact || "", municipality: user.municipality_name || user.municipality || "" };
 }
-const OTHER_VENDORS = ["Ronald Ceniza", "Juan Dela Cruz", "Pedro Santos", "Maria Garcia"];
-
 const peso = (n) => {
   if (n === null || n === undefined || isNaN(n)) return "—";
   return `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 };
-
-function buildPriceHistory() {
-  const TODAY = new Date(2026, 8, 16);
-  const records = {};
-  SPECIES.forEach((sp) => {
-    const rows = [];
-    let price = sp.base;
-    for (let d = 29; d >= 0; d--) {
-      const date = new Date(TODAY);
-      date.setDate(date.getDate() - d);
-      const weekday = date.getDay();
-      const bump = weekday === 0 || weekday === 6 ? 4 : 0;
-      const pseudo = Math.abs(Math.sin(d * 12.9898 + sp.base) * 10000) % 1;
-      price = sp.base + bump + (pseudo - 0.5) * 12;
-      rows.push({
-        date: date.toISOString().slice(0, 10),
-        label: date.toLocaleDateString("en-PH", { month: "short", day: "numeric" }),
-        price: Math.max(40, Number(price.toFixed(2))),
-      });
-    }
-    records[sp.name] = rows;
-  });
-  return records;
-}
-
-function buildCommunitySuggestions() {
-  const TODAY = new Date(2026, 8, 16);
-  const rows = [];
-  let id = 1;
-  for (let d = 9; d >= 0; d--) {
-    const date = new Date(TODAY);
-    date.setDate(date.getDate() - d);
-    const dateStr = date.toISOString().slice(0, 10);
-    SPECIES.forEach((sp) => {
-      OTHER_VENDORS.forEach((v, i) => {
-        if ((id + i) % 3 === 0) return; // not everyone submits every day
-        const pseudo = Math.abs(Math.sin((id + i) * 8.31) * 10000) % 1;
-        rows.push({
-          id: id++,
-          species: sp.name,
-          suggestedPrice: Math.max(40, Number((sp.base + (pseudo - 0.5) * 18).toFixed(2))),
-          submittedBy: v,
-          date: dateStr,
-        });
-      });
-    });
-  }
-  return rows;
-}
-
-function speciesStats(records, name) {
-  const rows = records[name] || [];
-  if (!rows.length) return { avg: null, high: null, low: null };
-  const prices = rows.map((r) => r.price);
-  return {
-    avg: prices.reduce((a, b) => a + b, 0) / prices.length,
-    high: Math.max(...prices),
-    low: Math.min(...prices),
-  };
-}
 
 /* ================================================================
    ROOT VENDOR COMPONENT
    ================================================================ */
 
 function Vendor({ onLogout, currentUser }) {
-  const identity = getVendorIdentity(currentUser);
+  const account = useMyProfile();
+  const identity = getVendorIdentity(account.profile ? { ...currentUser, ...account.profile, name: fullName(account.profile) } : currentUser);
   const [activePage, setActivePage] = useState("Dashboard");
   const [toast, setToast] = useState("");
 
-  const [priceHistory] = useState(() => buildPriceHistory());
   const [publishedPrices, setPublishedPrices] = useState([]);
   const [priceMunicipalities, setPriceMunicipalities] = useState([]);
   const [registeredFishSpecies, setRegisteredFishSpecies] = useState([]);
@@ -123,7 +53,7 @@ function Vendor({ onLogout, currentUser }) {
       setPublishedLoading(true);
       setPublishedError("");
       try {
-        const base = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
+        const base = API_BASE_URL;
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Please log in again.");
         const response = await fetch(`${base}/prices/published/`, {
@@ -148,7 +78,7 @@ function Vendor({ onLogout, currentUser }) {
     let cancelled = false;
     async function loadMunicipalities() {
       try {
-        const base = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
+        const base = API_BASE_URL;
         const token = localStorage.getItem("authToken");
         if (!token) return;
         const response = await fetch(`${base}/municipalities/`, {
@@ -172,7 +102,7 @@ function Vendor({ onLogout, currentUser }) {
     let cancelled = false;
     async function loadFishSpecies() {
       try {
-        const base = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
+        const base = API_BASE_URL;
         const token = localStorage.getItem("authToken");
         if (!token) return;
         const response = await fetch(`${base}/fish-species/`, { headers: { Authorization: `Token ${token}` } });
@@ -198,7 +128,7 @@ function Vendor({ onLogout, currentUser }) {
       setCommunityLoading(true);
       setCommunityError("");
       try {
-        const base = (import.meta.env.VITE_API_BASE_URL || "http://127.0.0.1:8000/api").replace(/\/$/, "");
+        const base = API_BASE_URL;
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Please log in again.");
         const response = await fetch(`${base}/vendor-suggestions/community-average/`, {
@@ -254,28 +184,6 @@ useEffect(() => {
   };
 }, []);
 
-  const [profile, setProfile] = useState({
-    name: identity.name,
-    email: identity.email,
-    contact: identity.contact,
-    municipality: identity.municipality,
-    market: MARKET,
-    registeredDate: "01/18/2026",
-    lastLogin: "09/16/2026 07:45 AM",
-    priceAlerts: true,
-    forecastAlerts: false,
-  });
-
-  useEffect(() => {
-    setProfile((prev) => ({ ...prev, name: identity.name, email: identity.email, contact: identity.contact, municipality: identity.municipality }));
-  }, [currentUser]);
-
-  const [activity, setActivity] = useState([
-    { id: 1, date: "09/16/2026 07:45 AM", action: "Logged in" },
-    { id: 2, date: "09/15/2026 04:10 PM", action: "Submitted suggested price for Bolinaw" },
-    { id: 3, date: "09/14/2026 09:02 AM", action: "Used Fair Price Calculator for Galunggong" },
-  ]);
-
   const [dismissedNotifs, setDismissedNotifs] = useState([]);
 
   const notify = (message) => {
@@ -283,14 +191,7 @@ useEffect(() => {
     setTimeout(() => setToast(""), 2600);
   };
 
-  const logActivity = (action) => {
-    setActivity((prev) => [
-      { id: Date.now(), date: new Date().toLocaleString("en-PH", { month: "2-digit", day: "2-digit", year: "numeric", hour: "2-digit", minute: "2-digit" }), action },
-      ...prev,
-    ]);
-  };
-
-  const notifications = buildVendorNotifications(mySuggestions);
+  const notifications = buildVendorNotifications(mySuggestions, publishedPrices);
   const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
 
   const menuGroups = [
@@ -339,9 +240,10 @@ useEffect(() => {
       case "Submit Suggested Price":
         return (
           <SubmitSuggestedPrice
-            priceHistory={priceHistory}
+            registeredSpecies={registeredFishSpecies}
+            records={publishedPrices}
             setMySuggestions={setMySuggestions}
-            notify={notify} logActivity={logActivity}
+            notify={notify}
           />
         );
       case "My Suggested Prices":
@@ -362,7 +264,6 @@ useEffect(() => {
           mySuggestions={mySuggestions}
           setMySuggestions={setMySuggestions}
           notify={notify}
-          logActivity={logActivity}
         />
       )}
     </>
@@ -370,13 +271,13 @@ useEffect(() => {
       case "Community Average":
         return <CommunityAverage averages={communityAverages} publishedPrices={publishedPrices} loading={communityLoading || publishedLoading} error={communityError || publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} onRefresh={() => setCommunityRefresh((n) => n + 1)} />;
       case "Fair Price Calculator":
-        return <FairPriceCalculator records={publishedPrices} registeredSpecies={registeredFishSpecies} speciesLoadError={speciesLoadError} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} notify={notify} logActivity={logActivity} />;
+        return <FairPriceCalculator records={publishedPrices} registeredSpecies={registeredFishSpecies} speciesLoadError={speciesLoadError} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} notify={notify} />;
       case "Export Reports":
         return <ExportReports mySuggestions={mySuggestions} suggestionsLoading={suggestionsLoading} suggestionsError={suggestionsError} records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} registeredSpecies={registeredFishSpecies} notify={notify} />;
       case "Notifications":
         return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} goTo={setActivePage} />;
       case "My Profile":
-        return <MyProfile profile={profile} setProfile={setProfile} activity={activity} notify={notify} />;
+        return <AccountProfile account={account} notify={notify} description="Manage your vendor details and see your recent activity." />;
       case "Help / How to Use":
         return <HelpPage />;
       default:
@@ -462,7 +363,7 @@ useEffect(() => {
   );
 }
 
-function buildVendorNotifications(mySuggestions) {
+function buildVendorNotifications(mySuggestions, publishedPrices = []) {
   const notifs = [];
   let id = 1;
 
@@ -478,242 +379,16 @@ function buildVendorNotifications(mySuggestions) {
     }
   });
 
-  notifs.push({
-    id: id++, type: "info", page: "Current Fish Prices",
-    title: "Today's official prices are published",
-    detail: "Validated by the LGU as of 6:00 AM.",
-  });
+  const latest = publishedPrices.reduce((max, r) => (r.recorded_date > max ? r.recorded_date : max), "");
+  if (latest) {
+    notifs.push({
+      id: id++, type: "info", page: "Current Fish Prices",
+      title: "Official prices are published",
+      detail: `Latest LGU-validated prices are dated ${latest}.`,
+    });
+  }
 
   return notifs;
-}
-
-/* ================================================================
-   DASHBOARD
-   ================================================================ */
-
-function VendorDashboard({ priceHistory, communitySuggestions, mySuggestions, vendorName, goTo, notify, logActivity }) {
-  const [weight, setWeight] = useState("2.5");
-  const [species, setSpecies] = useState(SPECIES[0].name);
-
-  const current = priceHistory[species][priceHistory[species].length - 1];
-  const weekAgo = priceHistory[species][priceHistory[species].length - 8];
-  const delta = current.price - weekAgo.price;
-  const pct = (delta / weekAgo.price) * 100;
-  const up = delta >= 0;
-
-  const parsed = parseFloat(weight);
-  const valid = !isNaN(parsed) && parsed > 0;
-  const total = valid ? parsed * current.price : 0;
-
-  const pendingCount = mySuggestions.filter((s) => s.status === "Pending Review").length;
-
-  return (
-    <>
-      <div className="welcome-card">
-        <div>
-          <span className="eyebrow">FISH VENDOR</span>
-          <h2>Magandang umaga, {vendorName.split(" ")[0]}!</h2>
-          <p>Today's official prices are validated by the LGU and updated as of 6:00 AM.</p>
-        </div>
-        <div className="welcome-fish">🐟</div>
-      </div>
-
-      <div className="trust-banner">
-        <div className="trust-icon">✔</div>
-        <div>
-          <strong>Prices are LGU-validated</strong>
-          <p>All prices shown are reviewed and published by authorized LGU officers.</p>
-        </div>
-      </div>
-
-      <div className="stats-grid">
-        {SPECIES.slice(0, 4).map((sp) => {
-          const rows = priceHistory[sp.name];
-          const now = rows[rows.length - 1];
-          const prev = rows[rows.length - 8];
-          const d = now.price - prev.price;
-          return (
-            <div key={sp.id} className="stat-card clickable" onClick={() => goTo("Current Fish Prices")}>
-              <div className="stat-icon blue">{sp.icon}</div>
-              <div>
-                <span>{sp.name}</span>
-                <h2>{peso(now.price)}</h2>
-                <small className={d >= 0 ? "up" : "down"}>
-                  {d >= 0 ? "▲" : "▼"} {Math.abs((d / prev.price) * 100).toFixed(1)}% vs last week
-                </small>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="dashboard-grid">
-        <div className="panel">
-          <div className="panel-header">
-            <div>
-              <h3>Today's Official Prices</h3>
-              <p>Pasil Fish Market – Cebu City</p>
-            </div>
-            <button className="text-button" onClick={() => goTo("Current Fish Prices")}>View All →</button>
-          </div>
-
-          <table>
-            <thead>
-              <tr>
-                <th>SPECIES</th>
-                <th>PRICE / KG</th>
-                <th>7-DAY CHANGE</th>
-                <th>STATUS</th>
-              </tr>
-            </thead>
-            <tbody>
-              {SPECIES.map((sp) => {
-                const rows = priceHistory[sp.name];
-                const now = rows[rows.length - 1];
-                const prev = rows[rows.length - 8];
-                const d = now.price - prev.price;
-                return (
-                  <tr key={sp.id} className="clickable-row" onClick={() => goTo("Current Fish Prices")}>
-                    <td><strong>{sp.icon} {sp.name}</strong></td>
-                    <td><strong>{peso(now.price)}</strong></td>
-                    <td className={d >= 0 ? "up" : "down"}>{d >= 0 ? "▲" : "▼"} {peso(Math.abs(d))}</td>
-                    <td><span className="badge success">Validated</span></td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-
-        <div className="panel">
-          <div className="panel-header">
-            <div>
-              <h3>Quick Calculator</h3>
-              <p>Compute your selling amount instantly</p>
-            </div>
-          </div>
-
-          <div className="quick-calc">
-            <div className="form-group">
-              <label>Fish Species</label>
-              <select value={species} onChange={(e) => setSpecies(e.target.value)}>
-                {SPECIES.map((s) => <option key={s.id}>{s.name}</option>)}
-              </select>
-            </div>
-
-            <div className="form-group">
-              <label>Weight</label>
-              <div className="input-with-unit">
-                <input type="number" value={weight} min="0" step="0.01" onChange={(e) => setWeight(e.target.value)} />
-                <span>kg</span>
-              </div>
-            </div>
-
-            <div className="calc-result">
-              <span>FAIR PRICE</span>
-              <strong>{peso(total)}</strong>
-              <small>{valid ? `${parsed} kg × ${peso(current.price)} per kg` : "Enter a valid weight"}</small>
-            </div>
-
-            <button className="primary-btn full-btn" onClick={() => goTo("Fair Price Calculator")}>
-              Open Full Calculator
-            </button>
-          </div>
-        </div>
-      </div>
-
-      {pendingCount > 0 && (
-        <div className="notice">
-          <div className="notice-icon">!</div>
-          <div>
-            <strong>{pendingCount} suggested price{pendingCount > 1 ? "s" : ""} awaiting LGU review</strong>
-            <p>Check "My Suggested Prices" for status updates.</p>
-          </div>
-        </div>
-      )}
-    </>
-  );
-}
-
-/* ================================================================
-   CURRENT FISH PRICES
-   ================================================================ */
-
-function CurrentFishPrices({ priceHistory }) {
-  const [market] = useState(MARKET);
-
-  return (
-    <>
-      <div className="page-title">
-        <div>
-          <h2>Current Fish Prices</h2>
-          <p>Today's LGU-validated prices for every tracked species.</p>
-        </div>
-      </div>
-
-      <div className="species-grid">
-        {SPECIES.map((sp) => {
-          const rows = priceHistory[sp.name];
-          const now = rows[rows.length - 1];
-          const prev = rows[rows.length - 8];
-          const d = now.price - prev.price;
-          return (
-            <div className="species-card" key={sp.id}>
-              <div className="species-card-icon">{sp.icon}</div>
-              <div>
-                <strong>{sp.name}</strong>
-                <p>{sp.sci}</p>
-                <div className="species-card-price">
-                  {peso(now.price)}
-                  <span className={d >= 0 ? "up" : "down"}>
-                    {d >= 0 ? "▲" : "▼"} {Math.abs((d / prev.price) * 100).toFixed(1)}%
-                  </span>
-                </div>
-              </div>
-            </div>
-          );
-        })}
-      </div>
-
-      <div className="panel">
-        <div className="panel-header">
-          <div>
-            <h3>Today's Price List</h3>
-            <p>{market}</p>
-          </div>
-        </div>
-
-        <table>
-          <thead>
-            <tr>
-              <th>SPECIES</th>
-              <th>PRICE / KG</th>
-              <th>7-DAY CHANGE</th>
-              <th>MARKET</th>
-              <th>STATUS</th>
-            </tr>
-          </thead>
-          <tbody>
-            {SPECIES.map((sp) => {
-              const rows = priceHistory[sp.name];
-              const now = rows[rows.length - 1];
-              const prev = rows[rows.length - 8];
-              const d = now.price - prev.price;
-              return (
-                <tr key={sp.id}>
-                  <td><strong>{sp.icon} {sp.name}</strong></td>
-                  <td><strong>{peso(now.price)}</strong></td>
-                  <td className={d >= 0 ? "up" : "down"}>{d >= 0 ? "▲" : "▼"} {peso(Math.abs(d))}</td>
-                  <td>{market}</td>
-                  <td><span className="badge success">Validated</span></td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </>
-  );
 }
 
 /* ================================================================
@@ -940,21 +615,34 @@ function PriceForecast({ records = [], registeredSpecies = [], speciesLoadError 
    ================================================================ */
 
 function SubmitSuggestedPrice({
-  priceHistory,
+  registeredSpecies = [],
+  records = [],
   setMySuggestions,
   notify,
-  logActivity,
 }) {
-  const [species, setSpecies] = useState(SPECIES[0]?.name || "");
+  const [speciesId, setSpeciesId] = useState("");
   const [price, setPrice] = useState("");
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
 
-  const history = priceHistory?.[species] || [];
-  const officialNow = history.length
-    ? Number(history[history.length - 1].price)
-    : null;
+  // Suggestions are filed for the vendor's assigned municipality.
+  let savedUser = null;
+  try { savedUser = JSON.parse(localStorage.getItem("user") || "null"); } catch { /* ignore invalid storage */ }
+  const municipalityId = savedUser?.municipality_id;
+
+  // Default to the first registered species once the list loads.
+  useEffect(() => {
+    if (!speciesId && registeredSpecies.length) setSpeciesId(registeredSpecies[0].id);
+  }, [registeredSpecies, speciesId]);
+
+  const selectedSpecies = registeredSpecies.find((s) => s.id === speciesId);
+
+  // Latest published price for this species in the vendor's municipality.
+  const latest = records
+    .filter((r) => String(r.fish_species) === String(speciesId) && String(r.municipality) === String(municipalityId))
+    .reduce((best, r) => (!best || r.recorded_date > best.recorded_date ? r : best), null);
+  const officialNow = latest ? Number(latest.price_per_kg) : null;
 
   const parsed = Number(price);
   const valid =
@@ -980,95 +668,32 @@ function SubmitSuggestedPrice({
       return;
     }
 
+    if (!selectedSpecies) {
+      notify("Select a fish species first.");
+      return;
+    }
+
+    if (municipalityId === null || municipalityId === undefined) {
+      setError("Your account has no assigned municipality. Please contact the administrator.");
+      return;
+    }
+
     setSubmitting(true);
     setError("");
 
     try {
-      const token = localStorage.getItem("authToken");
-
-      if (!token) {
-        throw new Error("Please log in again.");
-      }
-
-      // Retrieve actual database IDs instead of using
-      // frontend display names.
-      const [speciesResponse, municipalitiesResponse] =
-        await Promise.all([
-          fetch("http://127.0.0.1:8000/api/fish-species/", {
-            headers: {
-              Authorization: `Token ${token}`,
-            },
-          }),
-          fetch("http://127.0.0.1:8000/api/municipalities/", {
-            headers: {
-              Authorization: `Token ${token}`,
-            },
-          }),
-        ]);
-
-      if (!speciesResponse.ok || !municipalitiesResponse.ok) {
-        throw new Error(
-          "Unable to load fish species or municipality information."
-        );
-      }
-
-      const speciesData = await speciesResponse.json();
-      const municipalityData = await municipalitiesResponse.json();
-
-      const fishSpeciesList = Array.isArray(speciesData)
-        ? speciesData
-        : speciesData.results || [];
-
-      const municipalityList = Array.isArray(municipalityData)
-        ? municipalityData
-        : municipalityData.results || [];
-
-      const selectedFish = fishSpeciesList.find(
-        (fish) =>
-          fish.name?.trim().toLowerCase() ===
-          species.trim().toLowerCase()
-      );
-
-      if (!selectedFish) {
-        throw new Error(
-          `${species} was not found in the fish species database.`
-        );
-      }
-
-      // Use the logged-in vendor's actual municipality database ID.
-      const savedUser = JSON.parse(localStorage.getItem("user") || "null");
-      const assignedMunicipalityId = savedUser?.municipality_id;
-
-      if (assignedMunicipalityId === null || assignedMunicipalityId === undefined) {
-        throw new Error("Your account has no assigned municipality. Please contact the administrator.");
-      }
-
-      const selectedMunicipality = municipalityList.find(
-        (municipality) => String(municipality.id) === String(assignedMunicipalityId)
-      );
-
-      if (!selectedMunicipality) {
-        throw new Error("Your assigned municipality was not found. Please contact the administrator.");
-      }
-
-      const payload = {
-        fish_species: selectedFish.id,
-        municipality: selectedMunicipality.id,
+      const savedSuggestion = await createVendorSuggestion({
+        fish_species: Number(selectedSpecies.id),
+        municipality: municipalityId,
         suggested_price: parsed.toFixed(2),
         comment: comment.trim(),
-      };
-
-      const savedSuggestion = await createVendorSuggestion(payload);
+      });
 
       // Only update the UI after Django confirms the save.
       setMySuggestions((prev) => [
         savedSuggestion,
         ...prev,
       ]);
-
-      logActivity?.(
-        `Submitted suggested price for ${species}: ${peso(parsed)}`
-      );
 
       notify("Suggested price saved and submitted for LGU review.");
 
@@ -1112,12 +737,13 @@ function SubmitSuggestedPrice({
           <div className="form-group">
             <label>Fish Species</label>
             <select
-              value={species}
-              onChange={(e) => setSpecies(e.target.value)}
-              disabled={submitting}
+              value={speciesId}
+              onChange={(e) => setSpeciesId(e.target.value)}
+              disabled={submitting || !registeredSpecies.length}
             >
-              {SPECIES.map((s) => (
-                <option key={s.id} value={s.name}>
+              {!registeredSpecies.length && <option value="">No fish species registered</option>}
+              {registeredSpecies.map((s) => (
+                <option key={s.id} value={s.id}>
                   {s.name}
                 </option>
               ))}
@@ -1200,7 +826,7 @@ function SubmitSuggestedPrice({
    MY SUGGESTED PRICES
    ================================================================ */
 
-function MySuggestedPrices({ mySuggestions, setMySuggestions, notify, logActivity }) {
+function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
   const [editingId, setEditingId] = useState(null);
   const [draftComment, setDraftComment] = useState("");
 
@@ -1364,7 +990,7 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
    FAIR PRICE CALCULATOR
    ================================================================ */
 
-function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoadError = "", loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", notify, logActivity }) {
+function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoadError = "", loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", notify }) {
   const [speciesId, setSpeciesId] = useState("");
   const [weight, setWeight] = useState("");
   const [history, setHistory] = useState([]);
@@ -1401,7 +1027,6 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoad
       return;
     }
     setHistory((prev) => [{ id: Date.now(), species: speciesName, municipality, weight: parsed, unit, date: String(latest.recorded_date).slice(0, 10), total }, ...prev].slice(0, 5));
-    logActivity?.(`Calculated ${parsed} kg of ${speciesName} in ${municipality} using a published price`);
     notify?.("Computation saved for this session.");
   };
 
@@ -1604,109 +1229,6 @@ function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goT
             </div>
           ))
         )}
-      </div>
-    </>
-  );
-}
-
-/* ================================================================
-   MY PROFILE
-   ================================================================ */
-
-function MyProfile({ profile, setProfile, activity, notify }) {
-  const [draft, setDraft] = useState(profile);
-  const update = (key, value) => setDraft({ ...draft, [key]: value });
-
-  const save = () => {
-    if (!draft.name.trim() || !draft.email.trim()) {
-      notify("Name and email are required.");
-      return;
-    }
-    setProfile(draft);
-    notify("Profile saved.");
-  };
-
-  return (
-    <>
-      <div className="page-title">
-        <div>
-          <h2>My Profile</h2>
-          <p>Manage your vendor profile, preferences, and see your recent activity.</p>
-        </div>
-        <button className="primary-btn" onClick={save}>Save Changes</button>
-      </div>
-
-      <div className="config-grid">
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon blue">♙</div>
-            <div>
-              <h3>Profile Information</h3>
-              <p>Your registered vendor details</p>
-            </div>
-          </div>
-
-          <div className="form-group">
-            <label>Full Name</label>
-            <input value={draft.name} onChange={(e) => update("name", e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>Email Address</label>
-            <input value={draft.email} onChange={(e) => update("email", e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>Contact Number</label>
-            <input value={draft.contact} onChange={(e) => update("contact", e.target.value)} />
-          </div>
-          <div className="form-group">
-            <label>Municipality</label>
-            <select value={draft.municipality} onChange={(e) => update("municipality", e.target.value)}>
-              <option>Cebu City</option>
-              <option>Mandaue City</option>
-            </select>
-          </div>
-
-          <div className="profile-grid" style={{ marginTop: 14 }}>
-            <div className="profile-field">
-              <span>Registered Date</span>
-              <strong>{draft.registeredDate}</strong>
-            </div>
-            <div className="profile-field">
-              <span>Last Login</span>
-              <strong>{draft.lastLogin}</strong>
-            </div>
-          </div>
-
-          <div className="toggle-row">
-            <div>
-              <strong>Daily Price Alerts</strong>
-              <p>Notify me when new prices are published.</p>
-            </div>
-            <label className="switch">
-              <input type="checkbox" checked={draft.priceAlerts} onChange={(e) => update("priceAlerts", e.target.checked)} />
-              <span className="slider"></span>
-            </label>
-          </div>
-        </div>
-
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon orange">◷</div>
-            <div>
-              <h3>My Activity</h3>
-              <p>Your recent actions in AquaTimbang</p>
-            </div>
-          </div>
-
-          <div className="history-list">
-            {activity.map((a) => (
-              <div className="history-item" key={a.id}>
-                <div><strong>{a.action}</strong></div>
-                <small>{a.date}</small>
-              </div>
-            ))}
-          </div>
-        </div>
       </div>
     </>
   );

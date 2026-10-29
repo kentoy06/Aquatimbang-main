@@ -1,16 +1,50 @@
-# React + Vite
+# AquaTimbang
 
-This template provides a minimal setup to get React working in Vite with HMR and some Oxlint rules.
+Predictive analytics-driven fish price transparency system.
 
-Currently, two official plugins are available:
+- `src/` — React front-end (Vite), published to GitHub Pages.
+- `backend/` — Django REST API.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Oxc](https://oxc.rs)
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/)
+## Run the backend
 
-## React Compiler
+```bash
+cd backend
+python -m venv .venv
+source .venv/bin/activate          # Windows: .venv\Scripts\activate
+pip install -r requirements.txt
+cp .env.example .env               # then edit .env with your own values
+python manage.py migrate
+python manage.py createsuperuser   # optional, for Django admin
+python manage.py runserver
+```
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+All secrets and machine-specific settings (secret key, MySQL password, allowed
+hosts, CORS origins) are read from `backend/.env`, which git ignores. Leave
+`DB_ENGINE` empty in `.env` to use a local SQLite file instead of MySQL.
 
-## Expanding the Oxlint configuration
+## Run the front-end
 
-If you are developing a production application, we recommend using TypeScript with type-aware lint rules enabled. Check out the [TS template](https://github.com/vitejs/vite/tree/main/packages/create-vite/template-react-ts) for information on how to integrate TypeScript and Oxlint's TypeScript related rules in your project.
+```bash
+npm install
+npm run dev
+```
+
+The API address comes from `VITE_API_BASE_URL` in `.env`
+(default `http://127.0.0.1:8000/api`). Put a different value in `.env.local`
+to override it on your computer only.
+
+## Deploy to GitHub Pages
+
+Pushing to `main` runs `.github/workflows/deploy.yml`, which builds the site and
+publishes it to `https://kentoy06.github.io/Aquatimbang-main/`.
+
+To make the published site talk to a hosted backend, set the repository variable
+`VITE_API_BASE_URL` (Settings → Secrets and variables → Actions → Variables) to
+that backend's `/api` address, and add `https://kentoy06.github.io` to
+`CORS_ALLOWED_ORIGINS` in the backend's `.env`.
+
+## Tests
+
+```bash
+cd backend && python manage.py test api
+```

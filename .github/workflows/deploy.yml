@@ -27,6 +27,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # Set this repository variable to your hosted Django API address
+          # (Settings → Secrets and variables → Actions → Variables).
+          # Without it, the site expects Django on the visitor's own computer.
+          VITE_API_BASE_URL: ${{ vars.VITE_API_BASE_URL || 'http://127.0.0.1:8000/api' }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist
