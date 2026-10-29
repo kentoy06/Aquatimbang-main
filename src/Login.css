@@ -564,3 +564,161 @@
   text-align: center;
   margin-top: 10px;
 }
+/* =========================
+   AUTH PAGES — TYPOGRAPHY
+========================= */
+
+.login-page,
+.login-page button,
+.login-page input,
+.login-page select {
+  font-family: "Inter", "Segoe UI", Roboto, Arial, sans-serif;
+}
+
+.login-page .form-group label,
+.login-page .file-field-label {
+  display: block;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #344054;
+  margin-bottom: 6px;
+}
+
+.login-page .form-group input,
+.login-page .form-group select {
+  height: 40px;
+  font-size: 13.5px;
+  color: #1d2939;
+  border-color: #d0d5dd;
+  border-radius: 8px;
+  padding: 0 12px;
+}
+
+.login-page .form-group input::placeholder {
+  color: #98a2b3;
+}
+
+.login-page .form-group input:focus,
+.login-page .form-group select:focus {
+  border-color: #0E7C86;
+  box-shadow: 0 0 0 3px rgba(14, 124, 134, .12);
+}
+
+.login-page .optional {
+  font-weight: 400;
+  color: #98a2b3;
+}
+
+/* =========================
+   REGISTER — FORM SECTIONS
+========================= */
+
+.register-section {
+  padding-top: 18px;
+  margin-top: 4px;
+  border-top: 1px solid #eaecf0;
+}
+
+.register-section:first-child {
+  border-top: none;
+  padding-top: 4px;
+}
+
+.register-section-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #0E7C86;
+  margin-bottom: 14px;
+}
+
+.register-section-desc {
+  font-size: 13px;
+  line-height: 1.6;
+  color: #667085;
+  margin: -6px 0 16px;
+}
+
+.register-section-verify {
+  background: #f8fafc;
+  border: 1px solid #eaecf0;
+  border-radius: 12px;
+  padding: 18px 18px 4px;
+  margin: 8px 0 18px;
+}
+
+/* =========================
+   REGISTER — FILE UPLOAD BOX
+========================= */
+
+.login-page .form-group .file-field {
+  position: relative;
+  display: flex;
+  margin-bottom: 0;
+  font-weight: 400;
+  align-items: center;
+  gap: 12px;
+  border: 1.5px dashed #d0d5dd;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: white;
+  cursor: pointer;
+  transition: border-color .18s ease, background .18s ease;
+}
+
+.login-page .form-group .file-field:hover {
+  border-color: #0E7C86;
+  background: #f3fbfb;
+}
+
+.login-page .form-group .file-field-filled {
+  border-style: solid;
+  border-color: #9fd6da;
+  background: #f3fbfb;
+}
+
+.login-page .file-field input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  border: 0;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.file-field-icon {
+  width: 34px;
+  height: 34px;
+  min-width: 34px;
+  border-radius: 8px;
+  background: #e6f4f5;
+  color: #0E7C86;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.file-field-text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.file-field-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: #1d2939;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.file-field-text small {
+  font-size: 12px;
+  color: #667085;
+}

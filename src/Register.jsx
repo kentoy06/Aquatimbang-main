@@ -7,7 +7,8 @@ function Register({ onBack, onGoToLogin }) {
   const [role, setRole] = useState("Fish Vendor");
   const [form, setForm] = useState({
   // Basic account information
-  name: "",
+  first_name: "",
+  last_name: "",
   username: "",
   password: "",
   confirmPassword: "",
@@ -86,7 +87,8 @@ function Register({ onBack, onGoToLogin }) {
 
   // Validate the registration form.
   if (
-    !form.name.trim() ||
+    !form.first_name.trim() ||
+    !form.last_name.trim() ||
     !form.username.trim() ||
     !form.password.trim() ||
     !form.contact.trim() ||
@@ -136,13 +138,17 @@ function Register({ onBack, onGoToLogin }) {
     return;
   }
 
-    // Separate the full name into first and last names.
-  const nameParts = form.name.trim().split(/\s+/);
-  const firstName = nameParts.shift();
-  const lastName = nameParts.join(" ");
+  const firstName = form.first_name.trim();
+  const lastName = form.last_name.trim();
 
-  if (!lastName) {
-    setError("Please enter both your first and last name.");
+  // Required verification details for the selected role.
+  if (role === "Fish Vendor" && (!form.market_name.trim() || !form.stall_number.trim())) {
+    setError("Please enter your public market name and stall number.");
+    return;
+  }
+
+  if (role === "LGU Officer" && (!form.department.trim() || !form.position.trim() || !form.authorization_document)) {
+    setError("Please enter your department, position, and upload your proof of employment.");
     return;
   }
 
@@ -230,7 +236,7 @@ if (role === "LGU Officer") {
           <div className="register-confirm-icon">✔</div>
           <h3>Registration submitted</h3>
           <p>
-            Thanks, {form.name.split(" ")[0]}! Your {role} account is pending
+            Thanks, {form.first_name.trim()}! Your {role} account is pending
             approval from an Administrator. You'll be able to log in once
             it's reviewed and approved.
           </p>
@@ -320,308 +326,223 @@ if (role === "LGU Officer") {
             )}
           </div>
 
-          <form onSubmit={handleSubmit}>
-            <div className="form-row">
-              <div className="form-group">
-                <label>Full Name</label>
-                <input value={form.name} placeholder="Enter your full name" onChange={(e) => update("name", e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Date of Birth</label>
-                <input type="date" value={form.dob} onChange={(e) => update("dob", e.target.value)} />
-              </div>
-            </div>
+          <form onSubmit={handleSubmit} noValidate>
 
-            <div className="form-row">
+            {/* PERSONAL INFORMATION */}
+            <section className="register-section">
+              <h4 className="register-section-title">Personal Information</h4>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="reg-first-name">First Name</label>
+                  <input id="reg-first-name" value={form.first_name} placeholder="e.g. Juan" autoComplete="given-name" onChange={(e) => update("first_name", e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reg-last-name">Last Name</label>
+                  <input id="reg-last-name" value={form.last_name} placeholder="e.g. Dela Cruz" autoComplete="family-name" onChange={(e) => update("last_name", e.target.value)} />
+                </div>
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="reg-dob">Date of Birth</label>
+                  <input id="reg-dob" type="date" value={form.dob} autoComplete="bday" onChange={(e) => update("dob", e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reg-sex">Sex</label>
+                  <select id="reg-sex" value={form.sex} onChange={(e) => update("sex", e.target.value)}>
+                    <option value="">Select</option>
+                    <option>Male</option>
+                    <option>Female</option>
+                    <option>Prefer not to say</option>
+                  </select>
+                </div>
+              </div>
+            </section>
+
+            {/* ACCOUNT DETAILS */}
+            <section className="register-section">
+              <h4 className="register-section-title">Account Details</h4>
+
               <div className="form-group">
-                <label>Sex</label>
-                <select value={form.sex} onChange={(e) => update("sex", e.target.value)}>
-                  <option value="">Select</option>
-                  <option>Male</option>
-                  <option>Female</option>
-                  <option>Prefer not to say</option>
+                <label htmlFor="reg-username">Username</label>
+                <input id="reg-username" value={form.username} placeholder="Choose a username" autoComplete="username" onChange={(e) => update("username", e.target.value)} />
+              </div>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="reg-password">Password</label>
+                  <input id="reg-password" type="password" value={form.password} placeholder="At least 8 characters" autoComplete="new-password" onChange={(e) => update("password", e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reg-confirm">Confirm Password</label>
+                  <input id="reg-confirm" type="password" value={form.confirmPassword} placeholder="Re-enter your password" autoComplete="new-password" onChange={(e) => update("confirmPassword", e.target.value)} />
+                </div>
+              </div>
+            </section>
+
+            {/* CONTACT & LOCATION */}
+            <section className="register-section">
+              <h4 className="register-section-title">Contact &amp; Location</h4>
+
+              <div className="form-row">
+                <div className="form-group">
+                  <label htmlFor="reg-email">Email Address</label>
+                  <input id="reg-email" type="email" value={form.email} placeholder="you@email.com" autoComplete="email" onChange={(e) => update("email", e.target.value)} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="reg-contact">Contact Number</label>
+                  <input id="reg-contact" type="tel" value={form.contact} placeholder="e.g. 0917 555 0198" autoComplete="tel" onChange={(e) => update("contact", e.target.value)} />
+                </div>
+              </div>
+
+              <div className="form-group">
+                <label htmlFor="reg-municipality">Municipality</label>
+                <select
+                  id="reg-municipality"
+                  value={form.municipality}
+                  onChange={(e) => update("municipality", e.target.value)}
+                  disabled={loadingOptions || municipalities.length === 0}
+                >
+                  {loadingOptions ? (
+                    <option value="">Loading municipalities...</option>
+                  ) : municipalities.length === 0 ? (
+                    <option value="">No municipalities available</option>
+                  ) : (
+                    municipalities.map((municipality) => (
+                      <option key={municipality.id} value={String(municipality.id)}>
+                        {municipality.name}
+                      </option>
+                    ))
+                  )}
                 </select>
               </div>
-              <div className="form-group">
-                <label>Username</label>
-                <input value={form.username} placeholder="Choose a username" onChange={(e) => update("username", e.target.value)} />
-              </div>
-            </div>
+            </section>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Password</label>
-                <input type="password" value={form.password} placeholder="At least 8 characters" onChange={(e) => update("password", e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Confirm Password</label>
-                <input type="password" value={form.confirmPassword} placeholder="Re-enter your password" onChange={(e) => update("confirmPassword", e.target.value)} />
-              </div>
-            </div>
+            {/* FISH VENDOR VERIFICATION */}
+            {role === "Fish Vendor" && (
+              <section className="register-section register-section-verify">
+                <h4 className="register-section-title">Fish Vendor Verification</h4>
+                <p className="register-section-desc">
+                  Tell us where you sell so an Administrator can confirm you are a registered fish vendor.
+                </p>
 
-            <div className="form-row">
-              <div className="form-group">
-                <label>Contact Number</label>
-                <input value={form.contact} placeholder="e.g. 0917 555 0198" onChange={(e) => update("contact", e.target.value)} />
-              </div>
-              <div className="form-group">
-                <label>Email Address</label>
-                <input type="email" value={form.email} placeholder="you@email.com" onChange={(e) => update("email", e.target.value)} />
-              </div>
-            </div>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="reg-market">Public Market Name</label>
+                    <input id="reg-market" type="text" placeholder="e.g. Carbon Market" value={form.market_name} onChange={(e) => update("market_name", e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="reg-stall">Stall Number</label>
+                    <input id="reg-stall" type="text" placeholder="e.g. A-15" value={form.stall_number} onChange={(e) => update("stall_number", e.target.value)} />
+                  </div>
+                </div>
 
-            <div className="form-group">
-  <label>Municipality</label>
+                <div className="form-group">
+                  <label htmlFor="reg-permit-number">Vendor Permit Number <span className="optional">(optional)</span></label>
+                  <input id="reg-permit-number" type="text" placeholder="Enter your vendor permit number" value={form.permit_number} onChange={(e) => update("permit_number", e.target.value)} />
+                </div>
 
-  <select
-    value={form.municipality}
-    onChange={(e) => update("municipality", e.target.value)}
-    disabled={loadingOptions || municipalities.length === 0}
-  >
-    {loadingOptions ? (
-      <option value="">Loading municipalities...</option>
-    ) : municipalities.length === 0 ? (
-      <option value="">No municipalities available</option>
-    ) : (
-      municipalities.map((municipality) => (
-        <option
-          key={municipality.id}
-          value={String(municipality.id)}
-        >
-          {municipality.name}
-        </option>
-      ))
-    )}
-  </select>
-</div>
+                <FileField
+                  id="reg-permit-document"
+                  label="Vendor Permit or Market Certification"
+                  optional
+                  hint="PDF, JPG or PNG"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  file={form.permit_document}
+                  onChange={(file) => update("permit_document", file)}
+                />
 
-{
-/* =====================================================
-    FISH VENDOR VERIFICATION
-===================================================== */}
+                <FileField
+                  id="reg-stall-photo"
+                  label="Photo of Your Market Stall"
+                  optional
+                  hint="JPG or PNG"
+                  accept=".jpg,.jpeg,.png"
+                  file={form.stall_photo}
+                  onChange={(file) => update("stall_photo", file)}
+                />
+              </section>
+            )}
 
-{role === "Fish Vendor" && (
-  <div className="vendor-verification-section">
+            {/* LGU OFFICER VERIFICATION */}
+            {role === "LGU Officer" && (
+              <section className="register-section register-section-verify">
+                <h4 className="register-section-title">LGU Officer Verification</h4>
+                <p className="register-section-desc">
+                  Provide your official employment details. Your account stays pending until an
+                  Administrator has reviewed your credentials.
+                </p>
 
-    <h3>Fish Vendor Verification</h3>
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="reg-department">Department / Office</label>
+                    <input id="reg-department" type="text" placeholder="e.g. Agriculture Office" value={form.department} onChange={(e) => update("department", e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="reg-position">Official Position</label>
+                    <input id="reg-position" type="text" placeholder="e.g. Fisheries Officer" value={form.position} onChange={(e) => update("position", e.target.value)} />
+                  </div>
+                </div>
 
-    <p>
-      Please provide your market and stall information.
-      These details will help the AquaTimbang Administrator
-      verify that you are a legitimate fish vendor.
+                <div className="form-row">
+                  <div className="form-group">
+                    <label htmlFor="reg-official-email">Official Work Email <span className="optional">(optional)</span></label>
+                    <input id="reg-official-email" type="email" placeholder="name@lgu.gov.ph" value={form.official_email} onChange={(e) => update("official_email", e.target.value)} />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="reg-employee-id">Employee ID <span className="optional">(optional)</span></label>
+                    <input id="reg-employee-id" type="text" placeholder="e.g. 2024-0153" value={form.employee_id} onChange={(e) => update("employee_id", e.target.value)} />
+                  </div>
+                </div>
 
-    </p>
+                <FileField
+                  id="reg-authorization"
+                  label="Proof of Employment or Authorization"
+                  hint="Official employment certificate or authorization letter · PDF, JPG or PNG"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  file={form.authorization_document}
+                  onChange={(file) => update("authorization_document", file)}
+                />
+              </section>
+            )}
 
-    {/* Public Market and Stall Number */}
-    <div className="form-row">
-
-      <div className="form-group">
-        <label>Public Market Name *</label>
-        <input
-          type="text"
-          placeholder="e.g. Carbon Public Market"
-          value={form.market_name}
-          onChange={(e) =>
-            update("market_name", e.target.value)
-          }
-          required
-        />
-      </div>
-
-      <div className="form-group">
-        <label>Stall Number *</label>
-        <input
-          type="text"
-          placeholder="e.g. A-15"
-          value={form.stall_number}
-          onChange={(e) =>
-            update("stall_number", e.target.value)
-          }
-          required
-        />
-      </div>
-
-    </div>
-
-    {/* Vendor Permit Number */}
-    <div className="form-group">
-      <label>Vendor Permit Number (Optional)</label>
-      <input
-        type="text"
-        placeholder="Enter your vendor permit number"
-        value={form.permit_number}
-        onChange={(e) =>
-          update("permit_number", e.target.value)
-        }
-      />
-    </div>
-
-    {/* Supporting Documents */}
-    <div className="form-row">
-
-      <div className="form-group">
-        <label>Vendor Permit / Market Certification</label>
-        <input
-          type="file"
-          accept=".pdf,.jpg,.jpeg,.png"
-          onChange={(e) =>
-            update(
-              "permit_document",
-              e.target.files?.[0] || null
-            )
-          }
-        />
-      </div>
-
-      <div className="form-group">
-        <label>Photo of Your Market Stall</label>
-        <input
-          type="file"
-          accept=".jpg,.jpeg,.png"
-          onChange={(e) =>
-            update(
-              "stall_photo",
-              e.target.files?.[0] || null
-            )
-          }
-        />
-      </div>
-
-    </div>
-
-    <p className="verification-note">
-      Your registration will be reviewed by an Administrator
-      before your account is activated.
-    </p>
-
-  </div>
-)} 
-
-{/* =====================================================
-    LGU OFFICER VERIFICATION
-===================================================== */}
-
-{role === "LGU Officer" && (
-  <div className="vendor-verification-section">
-
-    <h3>LGU Officer Verification</h3>
-
-    <p>
-      Please provide your official government employment
-      information. The AquaTimbang Administrator will
-      review these details before approving your account.
-    </p>
-
-    {/* Department and Position */}
-    <div className="form-row">
-
-      <div className="form-group">
-        <label>Department / Office *</label>
-        <input
-          type="text"
-          placeholder="e.g. City Agriculture Office"
-          value={form.department}
-          onChange={(e) =>
-            update("department", e.target.value)
-          }
-          required
-        />
-      </div>
-
-      <div className="form-group">
-        <label>Official Position *</label>
-        <input
-          type="text"
-          placeholder="e.g. Fisheries Officer"
-          value={form.position}
-          onChange={(e) =>
-            update("position", e.target.value)
-          }
-          required
-        />
-      </div>
-
-    </div>
-
-    {/* Official Email and Employee ID */}
-    <div className="form-row">
-
-      <div className="form-group">
-        <label>Official Government / Work Email</label>
-        <input
-          type="email"
-          placeholder="e.g. officer@cebu.gov.ph"
-          value={form.official_email}
-          onChange={(e) =>
-            update("official_email", e.target.value)
-          }
-        />
-      </div>
-
-      <div className="form-group">
-        <label>Employee ID / Reference Number</label>
-        <input
-          type="text"
-          placeholder="Enter employee reference number"
-          value={form.employee_id}
-          onChange={(e) =>
-            update("employee_id", e.target.value)
-          }
-        />
-      </div>
-
-    </div>
-
-    {/* Authorization Document */}
-    <div className="form-group">
-      <label>Proof of Employment / Authorization *</label>
-      <input
-        type="file"
-        accept=".pdf,.jpg,.jpeg,.png"
-        onChange={(e) =>
-          update(
-            "authorization_document",
-            e.target.files?.[0] || null
-          )
-        }
-        required
-      />
-      <small>
-        Upload an official employment certification or
-        authorization letter from your LGU office.
-      </small>
-    </div>
-
-    <p className="verification-note">
-      Your application will remain pending until your
-      official credentials have been reviewed.
-    </p>
-
-  </div>
-)}
-
-            {error && <div className="login-error">⚠ {error}</div>}
+            {error && <div className="login-error" role="alert">⚠ {error}</div>}
 
             <label className="consent-row">
               <input type="checkbox" checked={form.agree} onChange={(e) => update("agree", e.target.checked)} />
               <span>I agree to AquaTimbang's Privacy Policy and Terms of Use, and consent to my data being processed for account verification.</span>
             </label>
 
-            <button type="submit" className="primary-btn full-btn">Register</button>
+            <button type="submit" className="primary-btn full-btn">Create Account</button>
           </form>
 
           <div className="login-hint login-hint-big">
             Already have an account?{" "}
             <button className="login-inline-link login-inline-link-big" onClick={onGoToLogin}>Log in instead</button>
           </div>
-
-          <div className="login-hint forgot-hint">
-            Forgot your password?{" "}
-            <button className="login-inline-link" onClick={onGoToLogin}>Reset it from the Login page</button>
-          </div>
         </div>
 
       </div>
+    </div>
+  );
+}
+
+// File picker styled as an upload box that shows the chosen file name.
+function FileField({ id, label, hint, accept, file, onChange, optional = false }) {
+  return (
+    <div className="form-group">
+      <span className="file-field-label">
+        {label} {optional && <span className="optional">(optional)</span>}
+      </span>
+      <label htmlFor={id} className={`file-field ${file ? "file-field-filled" : ""}`}>
+        <span className="file-field-icon">{file ? "✓" : "⇪"}</span>
+        <span className="file-field-text">
+          <strong>{file ? file.name : "Click to upload a file"}</strong>
+          <small>{file ? "Click to choose a different file" : hint}</small>
+        </span>
+        <input id={id} type="file" accept={accept} onChange={(e) => onChange(e.target.files?.[0] || null)} />
+      </label>
     </div>
   );
 }
