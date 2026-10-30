@@ -1061,3 +1061,64 @@ class SystemSetting(models.Model):
 
     def __str__(self):
         return f"Price range {self.min_price_per_kg}-{self.max_price_per_kg}"
+
+
+# ============================================================
+# FAIR PRICE CALCULATIONS AND GENERATED REPORTS
+# ============================================================
+
+class WeightEntry(models.Model):
+    """
+    A fair price calculation a Fish Vendor saved to their history
+    (Table 20): weight × the LGU-validated price per kg.
+    """
+
+    user = models.ForeignKey("auth.User", on_delete=models.CASCADE, related_name="weight_entries")
+    fish_species = models.ForeignKey(FishSpecies, on_delete=models.PROTECT, related_name="weight_entries")
+    municipality = models.ForeignKey(Municipality, on_delete=models.PROTECT, related_name="weight_entries")
+
+    # The published price the calculation used.
+    price_record = models.ForeignKey(
+        PriceRecord,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="weight_entries",
+    )
+    weight_kg = models.DecimalField(max_digits=10, decimal_places=2)
+    price_per_kg = models.DecimalField(max_digits=10, decimal_places=2)
+    computed_price = models.DecimalField(max_digits=12, decimal_places=2)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return f"{self.user.username}: {self.weight_kg} kg {self.fish_species.name} = {self.computed_price}"
+
+
+class ReportLog(models.Model):
+    """Every report exported by an LGU Officer or Administrator (Table 22)."""
+
+    FORMAT_PDF = "PDF"
+    FORMAT_CSV = "CSV"
+    FORMAT_CHOICES = [(FORMAT_PDF, "PDF"), (FORMAT_CSV, "CSV")]
+
+    generated_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        related_name="generated_reports",
+    )
+    report_type = models.CharField(max_length=100)
+    # Filters used, e.g. {"species": "Galunggong", "from": "2026-10-01"}.
+    parameters = models.JSONField(default=dict, blank=True)
+    format = models.CharField(max_length=3, choices=FORMAT_CHOICES)
+    row_count = models.PositiveIntegerField(default=0)
+    generated_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["-generated_at", "-id"]
+
+    def __str__(self):
+        return f"{self.report_type} ({self.format}) by {self.generated_by_id}"

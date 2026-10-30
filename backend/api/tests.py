@@ -1165,3 +1165,71 @@ class PriceCorrectionAndSettingsTests(TestCase):
             "recorded_date": "2030-01-01",
         }, format="json")
         self.assertEqual(response.status_code, 201, response.data)
+
+
+# ============================================================
+# FAIR PRICE CALCULATOR HISTORY AND REPORT LOG
+# ============================================================
+from .models import ReportLog, WeightEntry
+
+
+class CalculatorAndReportTests(TestCase):
+
+    def setUp(self):
+        cache.clear()
+        roles = {name: Role.objects.create(name=name) for name in ("Administrator", "LGU Officer", "Fish Vendor")}
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.species = FishSpecies.objects.create(name="Galunggong")
+        self.other_species = FishSpecies.objects.create(name="Bangus")
+        self.users = {}
+        for username, role in (("cr_admin", "Administrator"), ("cr_lgu", "LGU Officer"), ("cr_vendor", "Fish Vendor"), ("cr_vendor2", "Fish Vendor")):
+            user = User.objects.create_user(username, f"{username}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=user, role=roles["Fish Vendor" if username == "cr_vendor2" else role], municipality=self.cebu, account_status="approved", is_active=True)
+            self.users[username] = user
+        PriceRecord.objects.create(fish_species=self.species, municipality=self.cebu, price_per_kg=Decimal("180.00"),
+                                   recorded_date=timezone.localdate() - _timedelta(days=1), status="published")
+        PriceRecord.objects.create(fish_species=self.species, municipality=self.cebu, price_per_kg=Decimal("190.00"),
+                                   recorded_date=timezone.localdate(), status="pending")
+
+    def client_for(self, username):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=self.users[username])[0].key}")
+        return client
+
+    def test_save_calculation_uses_latest_published_price(self):
+        response = self.client_for("cr_vendor").post("/api/weight-entries/", {
+            "fish_species": self.species.pk, "municipality": self.cebu.pk, "weight_kg": "2.5",
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        # The pending ₱190 price is ignored; 2.5 × ₱180 = ₱450.
+        self.assertEqual(response.data["price_per_kg"], "180.00")
+        self.assertEqual(response.data["computed_price"], "450.00")
+
+    def test_calculation_messages_from_uc3(self):
+        client = self.client_for("cr_vendor")
+        zero = client.post("/api/weight-entries/", {"fish_species": self.species.pk, "municipality": self.cebu.pk, "weight_kg": "0"}, format="json")
+        self.assertEqual(zero.data["weight_kg"], "Weight must be greater than zero.")
+        no_price = client.post("/api/weight-entries/", {"fish_species": self.other_species.pk, "municipality": self.cebu.pk, "weight_kg": "1"}, format="json")
+        self.assertIn("No current price found", no_price.data["message"])
+
+    def test_history_is_private_and_deletable(self):
+        mine = self.client_for("cr_vendor").post("/api/weight-entries/", {
+            "fish_species": self.species.pk, "municipality": self.cebu.pk, "weight_kg": "1",
+        }, format="json").data
+        self.assertEqual(self.client_for("cr_vendor2").get("/api/weight-entries/").data, [])
+        self.assertEqual(self.client_for("cr_vendor2").delete(f"/api/weight-entries/{mine['id']}/").status_code, 404)
+        self.assertEqual(self.client_for("cr_vendor").delete(f"/api/weight-entries/{mine['id']}/").status_code, 200)
+        self.assertFalse(WeightEntry.objects.exists())
+
+    def test_report_log(self):
+        payload = {"report_type": "Price History Report", "format": "pdf", "row_count": 12, "parameters": {"species": "Galunggong"}}
+        self.assertEqual(self.client_for("cr_vendor").post("/api/reports/", payload, format="json").status_code, 403)
+        created = self.client_for("cr_lgu").post("/api/reports/", payload, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertEqual(created.data["format"], "PDF")
+        self.assertEqual(created.data["generated_by_role"], "LGU Officer")
+        self.client_for("cr_admin").post("/api/reports/", {**payload, "format": "CSV"}, format="json")
+        self.assertEqual(len(self.client_for("cr_lgu").get("/api/reports/").data), 1)
+        self.assertEqual(len(self.client_for("cr_admin").get("/api/reports/").data), 2)
+        bad = self.client_for("cr_lgu").post("/api/reports/", {**payload, "format": "DOCX"}, format="json")
+        self.assertEqual(bad.status_code, 400)
