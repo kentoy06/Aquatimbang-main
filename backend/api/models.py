@@ -963,3 +963,38 @@ class Prediction(models.Model):
 
     def __str__(self):
         return f"{self.fish_species.name} {self.forecast_date}: {self.forecast_price}"
+
+
+# ============================================================
+# LOGIN SECURITY (UC-1 3d, Tables 24 and 41)
+# ============================================================
+
+class LoginLockout(models.Model):
+    """
+    Failed login attempts per username. After too many failures the
+    username is locked for a while, even with the right password.
+    """
+
+    # Stored in lowercase so "Admin" and "admin" share one counter.
+    username = models.CharField(max_length=150, unique=True)
+    failed_attempts = models.PositiveSmallIntegerField(default=0)
+    last_failed_at = models.DateTimeField(null=True, blank=True)
+    locked_until = models.DateTimeField(null=True, blank=True)
+
+    def __str__(self):
+        return f"{self.username}: {self.failed_attempts} failed"
+
+
+class TokenActivity(models.Model):
+    """When a login token was last used, so idle sessions can expire."""
+
+    token = models.OneToOneField(
+        "authtoken.Token",
+        on_delete=models.CASCADE,
+        primary_key=True,
+        related_name="activity",
+    )
+    last_seen = models.DateTimeField()
+
+    def __str__(self):
+        return f"{self.token.user.username} last seen {self.last_seen}"

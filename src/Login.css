@@ -765,3 +765,15 @@
   outline: 2px solid #0E7C86;
   outline-offset: 1px;
 }
+
+/* Shown on the login page after a session ends on its own. */
+.session-notice {
+  background: #eef4ff;
+  border: 1px solid #c7d7fe;
+  color: #2a4a9e;
+  border-radius: 8px;
+  padding: 10px 12px;
+  font-size: 13px;
+  line-height: 1.5;
+  margin-bottom: 14px;
+}

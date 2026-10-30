@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import "./App.css";
 import "./Login.css";
 
@@ -8,6 +8,7 @@ import Admin from "./Admin.jsx";
 import Vendor from "./Vendor.jsx";
 import LGU from "./Lgu.jsx";
 import { API_BASE_URL } from "./api/config.js";
+import { logout, SESSION_ENDED_EVENT, useIdleLogout } from "./api/session.js";
 
 
 function App() {
@@ -42,14 +43,31 @@ function App() {
 });
 
 
-  // Navigation functions.
-  const handleLogout = () => {
-    // Remove saved login information when the user logs out.
-    localStorage.removeItem("authToken");
-    localStorage.removeItem("user");
+  // Message shown on the login page after the session ends on its own.
+  const [loginNotice, setLoginNotice] = useState("");
 
+  // Navigation functions.
+  const handleLogout = async () => {
+    // End the session on the server and forget the saved login.
+    await logout();
+    setLoginNotice("");
     setPage("landing");
   };
+
+  // Session expired, logged out elsewhere, or account disabled.
+  const showSessionEnded = useCallback((message) => {
+    setLoginNotice(message);
+    setPage("login");
+  }, []);
+
+  useEffect(() => {
+    const onEnded = (event) => showSessionEnded(event.detail?.message || "Please log in again.");
+    window.addEventListener(SESSION_ENDED_EVENT, onEnded);
+    return () => window.removeEventListener(SESSION_ENDED_EVENT, onEnded);
+  }, [showSessionEnded]);
+
+  // Automatic logout after inactivity on any dashboard.
+  useIdleLogout(["Admin", "Vendor", "LGU"].includes(page), showSessionEnded);
 
   const goLanding = () => setPage("landing");
   const goLogin = () => setPage("login");
@@ -97,7 +115,8 @@ function App() {
   if (page === "login") {
     return (
       <Login
-        onLogin={setPage}
+        onLogin={(next) => { setLoginNotice(""); setPage(next); }}
+        notice={loginNotice}
         onBack={goLanding}
         onRegister={goRegister}
       />
@@ -118,7 +137,7 @@ function App() {
    LOGIN
 ========================= */
 
-function Login({ onLogin, onBack, onRegister }) {
+function Login({ onLogin, onBack, onRegister, notice = "" }) {
   // Login form values.
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -196,6 +215,7 @@ function Login({ onLogin, onBack, onRegister }) {
 
       // Save the token so other API requests can use it.
       localStorage.setItem("authToken", data.token);
+      localStorage.setItem("sessionIdleMinutes", String(data.session_idle_minutes || 30));
 
       // Save basic information about the logged-in user.
       localStorage.setItem(
@@ -379,6 +399,12 @@ function Login({ onLogin, onBack, onRegister }) {
 
               </div>
 
+
+              {notice && !error && (
+                <div className="session-notice" role="status">
+                  🔒 {notice}
+                </div>
+              )}
 
               <form onSubmit={handleSubmit}>
 

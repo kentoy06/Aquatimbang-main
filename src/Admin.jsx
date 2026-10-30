@@ -110,6 +110,7 @@ function AuditActionBadge({ action }) {
 }
 function auditModule(log) {
   const type = String(log.target_type || "").toLowerCase().replaceAll("_", " ");
+  if (type.includes("authentication")) return "Authentication";
   if (type.includes("suggestion")) return "Fisherfolk Suggestions";
   if (type.includes("price")) return "Price Records";
   if (type.includes("species") || type.includes("fishspecies")) return "Fish Species";
