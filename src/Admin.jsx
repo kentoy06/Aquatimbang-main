@@ -621,6 +621,7 @@ useEffect(() => {
         return (
           <UserManagement
             notify={notify}
+            municipalities={municipalities.filter((m) => m.status === "Active")}
             loading={usersLoading || databaseUsersLoading}
             loadError={usersError || databaseUsersError}
             activityLogs={activityLogs}
@@ -1062,12 +1063,173 @@ function Dashboard({
   );
 }
 
+/* ---------------- USER ACCOUNT FORMS ---------------- */
+
+const ACCOUNT_ROLES = ["Fish Vendor", "LGU Officer", "Administrator"];
+
+// Send JSON to the API; throws an Error with the server's message(s).
+async function sendJson(path, method, body) {
+  const response = await fetch(apiUrl(path), {
+    method,
+    headers: authHeaders(body ? { "Content-Type": "application/json" } : {}),
+    body: body ? JSON.stringify(body) : undefined,
+  });
+  const data = await response.json().catch(() => null);
+  if (!response.ok) {
+    const error = new Error(
+      data?.message || data?.detail ||
+      (data && typeof data === "object" ? Object.values(data).flat().map(String).join(" ") : "") ||
+      `Request failed (HTTP ${response.status}).`
+    );
+    error.fields = data && typeof data === "object" && !data.message ? data : {};
+    throw error;
+  }
+  return data;
+}
+
+// Add or edit an account (UC-7). `account` is null when adding.
+function UserFormModal({ account, municipalities, onClose, onSaved, notify }) {
+  const editing = Boolean(account);
+  const [form, setForm] = useState(() => ({
+    first_name: account?.firstName || "",
+    last_name: account?.lastName || "",
+    username: account?.username || "",
+    email: account?.email || "",
+    contact_number: account?.contact || "",
+    role: account?.role || "LGU Officer",
+    municipality: account?.municipalityId ? String(account.municipalityId) : String(municipalities[0]?.id ?? ""),
+    password: "",
+  }));
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const save = async () => {
+    if (editing && form.role !== account.role && !window.confirm(
+      `Change ${account.name}'s role from ${account.role} to ${form.role}? They will be logged out and get ${form.role} access at their next login.`
+    )) return;
+
+    const body = {
+      first_name: form.first_name,
+      last_name: form.last_name,
+      username: form.username,
+      email: form.email,
+      contact_number: form.contact_number,
+      role: form.role,
+      municipality: form.role === "Administrator" && !form.municipality ? null : form.municipality || null,
+    };
+    if (!editing) body.password = form.password;
+
+    setSaving(true);
+    setErrors({});
+    try {
+      const row = editing
+        ? await sendJson(`/auth/users/${account.id}/`, "PATCH", body)
+        : await sendJson("/auth/users/", "POST", body);
+      notify(editing ? `${row.username} updated.` : `${row.username} created.`);
+      onSaved(row);
+    } catch (error) {
+      setErrors(error.fields || {});
+      if (!error.fields || !Object.keys(error.fields).length) notify(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (key, label, props = {}) => (
+    <div className="form-group">
+      <label htmlFor={`user-${key}`}>{label}</label>
+      <input id={`user-${key}`} value={form[key]} onChange={(e) => update(key, e.target.value)} {...props} />
+      {errors[key] && <small className="field-error">{errors[key]}</small>}
+    </div>
+  );
+
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="user-form-title">
+        <div className="modal-head">
+          <h3 id="user-form-title">{editing ? `Edit ${account.name}` : "Add New User"}</h3>
+          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+
+        <div className="form-row">
+          {field("first_name", "First Name")}
+          {field("last_name", "Last Name")}
+        </div>
+        <div className="form-row">
+          {field("username", "Username", { autoComplete: "off" })}
+          {field("contact_number", "Contact Number")}
+        </div>
+        {field("email", "Email Address", { type: "email" })}
+
+        <div className="form-row">
+          <div className="form-group">
+            <label htmlFor="user-role">Role</label>
+            <select id="user-role" value={form.role} onChange={(e) => update("role", e.target.value)}>
+              {ACCOUNT_ROLES.map((role) => <option key={role}>{role}</option>)}
+            </select>
+            {errors.role && <small className="field-error">{errors.role}</small>}
+          </div>
+          <div className="form-group">
+            <label htmlFor="user-municipality">Municipality</label>
+            <select id="user-municipality" value={form.municipality} onChange={(e) => update("municipality", e.target.value)}>
+              {form.role === "Administrator" && <option value="">None</option>}
+              {municipalities.map((m) => <option key={m.id} value={String(m.id)}>{m.name}</option>)}
+            </select>
+            {errors.municipality && <small className="field-error">{errors.municipality}</small>}
+          </div>
+        </div>
+
+        {!editing && field("password", "Initial Password", { type: "password", autoComplete: "new-password", placeholder: "At least 8 characters" })}
+        {!editing && <p className="muted-text" style={{ marginTop: -6, marginBottom: 12 }}>The account is active right away. Ask the user to change this password from My Profile.</p>}
+
+        <div className="button-row">
+          <button className="secondary-btn" onClick={onClose}>Cancel</button>
+          <button className="primary-btn" onClick={save} disabled={saving}>{saving ? "Saving…" : editing ? "Save Changes" : "Create Account"}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Shows a temporary password once, after an Administrator resets it.
+function TemporaryPasswordModal({ result, onClose }) {
+  const [copied, setCopied] = useState(false);
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(result.password);
+      setCopied(true);
+    } catch {
+      setCopied(false);
+    }
+  };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="temp-password-title">
+        <div className="modal-head">
+          <h3 id="temp-password-title">Temporary Password for {result.name}</h3>
+          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <p className="muted-text">Give this password to {result.name} privately. It is shown only once. They have been logged out and should change it from My Profile after logging in.</p>
+        <div className="temp-password">
+          <code>{result.password}</code>
+          <button className="secondary-btn" onClick={copy}>{copied ? "Copied" : "Copy"}</button>
+        </div>
+        <div className="button-row">
+          <button className="primary-btn" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 /* ================================================================
    USER MANAGEMENT
    ================================================================ */
 
 function UserManagement({
   notify,
+  municipalities,
   loading,
   loadError,
   activityLogs,
@@ -1086,6 +1248,8 @@ function UserManagement({
   const [rejectionReason, setRejectionReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
   const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const [formAccount, setFormAccount] = useState(undefined); // undefined: closed, null: add, object: edit
+  const [tempPassword, setTempPassword] = useState(null);
   const openVerificationDocument = async (userId, documentType) => {
   const token = localStorage.getItem("authToken");
 
@@ -1155,7 +1319,7 @@ function UserManagement({
     name: `${account.first_name || ""} ${account.last_name || ""}`.trim(),
     username: account.username,
     email: account.email,
-    role: account.role === "LGU Officer" ? "LGU Personnel" : account.role,
+    role: account.role,
     municipality: account.municipality || "",
     contact: account.contact_number || "",
     status: "Pending",
@@ -1174,9 +1338,10 @@ function UserManagement({
   name: `${account.first_name || ""} ${account.last_name || ""}`.trim(),
   username: account.username,
   email: account.email,
-  role: account.role === "LGU Officer"
-    ? "LGU Personnel"
-    : account.role,
+  role: account.role,
+  firstName: account.first_name || "",
+  lastName: account.last_name || "",
+  municipalityId: account.municipality_id,
   municipality: account.municipality || "",
   contact: account.contact_number || "",
   status:
@@ -1184,11 +1349,9 @@ function UserManagement({
     ? "Rejected"
     : account.account_status === "pending"
     ? "Pending"
-    : account.account_status === "approved"
-    ? "Active"
     : account.is_active
     ? "Active"
-    : "Pending",
+    : "Inactive",
   online: false,
   source: "database",
   verification: account.verification,
@@ -1336,7 +1499,50 @@ const submitReview = async () => {
       }));
 
   const initials = (name) => name.split(" ").map((n) => n[0]).slice(0, 2).join("").toUpperCase();
-  const roleClass = (role) => (role === "Fish Vendor" ? "vendor" : role === "LGU Personnel" ? "lgu" : "admin");
+  const roleClass = (role) => (role === "Fish Vendor" ? "vendor" : role === "LGU Officer" ? "lgu" : "admin");
+
+  /* ---- account actions (UC-7) ---- */
+
+  // Your own account is changed from Admin Profile, not here.
+  let currentUserId = null;
+  try { currentUserId = JSON.parse(localStorage.getItem("user") || "null")?.id ?? null; } catch { /* ignore invalid storage */ }
+
+  // Replace an account row with the server's copy (or add it).
+  const upsertAccount = (row) =>
+    setDatabaseUsers((prev) => (prev.some((a) => a.id === row.id) ? prev.map((a) => (a.id === row.id ? row : a)) : [row, ...prev]));
+
+  const toggleActive = async (u) => {
+    const activate = u.status !== "Active";
+    if (!activate && !window.confirm(`Deactivate ${u.name}? They will be logged out and cannot log in until reactivated.`)) return;
+    try {
+      upsertAccount(await sendJson(`/auth/users/${u.id}/status/`, "POST", { active: activate }));
+      notify(`${u.name} ${activate ? "reactivated" : "deactivated"}.`);
+    } catch (error) {
+      notify(error.message);
+    }
+  };
+
+  const resetPassword = async (u) => {
+    if (!window.confirm(`Reset ${u.name}'s password? They will be logged out and need the new temporary password to log in.`)) return;
+    try {
+      const data = await sendJson(`/auth/users/${u.id}/reset-password/`, "POST");
+      setTempPassword({ name: u.name, password: data.temporary_password });
+    } catch (error) {
+      notify(error.message);
+    }
+  };
+
+  const deleteAccount = async (u) => {
+    if (!window.confirm(`Permanently delete ${u.name}'s account? This cannot be undone.`)) return;
+    try {
+      const data = await sendJson(`/auth/users/${u.id}/`, "DELETE");
+      setDatabaseUsers((prev) => prev.filter((a) => a.id !== u.id));
+      setViewing(null);
+      notify(data.message);
+    } catch (error) {
+      notify(error.message);
+    }
+  };
 
   return (
     <>
@@ -1345,7 +1551,20 @@ const submitReview = async () => {
           <h2>User Management</h2>
           <p>Manage user accounts, approvals, roles, and access.</p>
         </div>
+        <button className="primary-btn" onClick={() => setFormAccount(null)}>+ Add User</button>
       </div>
+
+      {formAccount !== undefined && (
+        <UserFormModal
+          account={formAccount}
+          municipalities={municipalities}
+          notify={notify}
+          onClose={() => setFormAccount(undefined)}
+          onSaved={(row) => { upsertAccount(row); setFormAccount(undefined); setViewing(null); }}
+        />
+      )}
+
+      {tempPassword && <TemporaryPasswordModal result={tempPassword} onClose={() => setTempPassword(null)} />}
 
       {loading && <div className="info-box">Loading accounts…</div>}
       {loadError && <div className="warn-box" role="alert">{loadError}</div>}
@@ -1645,13 +1864,9 @@ const submitReview = async () => {
             </div>
 
             <div className="button-row">
-              <button
-  className="secondary-btn"
-  disabled
-  title="Database-backed user editing is not implemented yet"
->
-  Edit User (Coming Soon)
-</button>
+              {viewing.status !== "Pending" && viewing.status !== "Rejected" && (
+                <button className="secondary-btn" onClick={() => setFormAccount(viewing)}>✎ Edit User</button>
+              )}
               <button className="primary-btn" onClick={() => setViewing(null)}>Close</button>
             </div>
           </div>
@@ -1685,9 +1900,7 @@ const submitReview = async () => {
 
           <select value={roleFilter} onChange={(e) => setRoleFilter(e.target.value)}>
             <option>All Roles</option>
-            <option>Fish Vendor</option>
-            <option>LGU Personnel</option>
-            <option>System Administrator</option>
+            {ACCOUNT_ROLES.map((role) => <option key={role}>{role}</option>)}
           </select>
         </div>
 
@@ -1723,7 +1936,7 @@ const submitReview = async () => {
                   <td>{u.username}</td>
                   <td>
                     <span className={`role ${roleClass(u.role)}`}>{u.role}</span>
-                    {u.status === "Pending" && u.role === "LGU Personnel" && (
+                    {u.status === "Pending" && u.role === "LGU Officer" && (
                       <small className="verify-flag">⚠ Needs identity verification</small>
                     )}
                   </td>
@@ -1743,7 +1956,25 @@ const submitReview = async () => {
                       </div>
                     ) : (
                       <div className="action-icons">
-                        <button title="View Profile" onClick={() => setViewing(u)}>👁</button>
+                        <button title="View Profile" aria-label={`View ${u.name}`} onClick={() => setViewing(u)}>👁</button>
+                        {u.id === currentUserId ? (
+                          <small className="muted-text">You</small>
+                        ) : u.status !== "Rejected" && (
+                          <>
+                            <button title="Edit" aria-label={`Edit ${u.name}`} onClick={() => setFormAccount(u)}>✎</button>
+                            <button title="Reset Password" aria-label={`Reset password for ${u.name}`} onClick={() => resetPassword(u)}>🔑</button>
+                            <button
+                              title={u.status === "Active" ? "Deactivate" : "Activate"}
+                              aria-label={`${u.status === "Active" ? "Deactivate" : "Activate"} ${u.name}`}
+                              onClick={() => toggleActive(u)}
+                            >
+                              {u.status === "Active" ? "⏸" : "▶"}
+                            </button>
+                          </>
+                        )}
+                        {u.id !== currentUserId && (
+                          <button title="Delete" aria-label={`Delete ${u.name}`} onClick={() => deleteAccount(u)}>✕</button>
+                        )}
                       </div>
                     )}
                   </td>

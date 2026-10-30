@@ -6,7 +6,6 @@ from django.http import FileResponse, Http404
 from rest_framework.decorators import api_view, permission_classes
 from rest_framework.permissions import IsAuthenticated
 from .models import FishVendorVerification, LGUOfficerVerification
-from .permissions import IsAquaTimbangAdministrator
 from django.contrib.auth import authenticate
 # Django's built-in user model.
 from django.contrib.auth.models import User
@@ -73,6 +72,15 @@ def login_user(request):
         password=password,
     )
     if user is None:
+        # Django refuses inactive accounts; explain why when the password is right.
+        candidate = User.objects.filter(username=username).select_related("aquatimbang_profile").first()
+        if candidate is not None and not candidate.is_active and candidate.check_password(password):
+            candidate_profile = getattr(candidate, "aquatimbang_profile", None)
+            if candidate_profile is not None and candidate_profile.account_status == UserProfile.STATUS_REJECTED:
+                message = "Your registration was rejected. Contact your LGU office."
+            else:
+                message = "Account disabled. Contact administrator."
+            return Response({"message": message}, status=status.HTTP_403_FORBIDDEN)
         return Response(
             {"message": "Invalid username or password."},
             status=status.HTTP_401_UNAUTHORIZED,
@@ -85,12 +93,15 @@ def login_user(request):
             {"message": "This account has no AquaTimbang profile."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    # Reject inactive accounts.
+    # Reject accounts that are not approved and active (UC-1 3b, 3c, E2).
     if not user.is_active or not profile.is_active:
-        return Response(
-            {"message": "This AquaTimbang account is inactive."},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+        if profile.account_status == UserProfile.STATUS_PENDING:
+            message = "Your account is pending approval. Please wait for LGU confirmation."
+        elif profile.account_status == UserProfile.STATUS_REJECTED:
+            message = "Your registration was rejected. Contact your LGU office."
+        else:
+            message = "Account disabled. Contact administrator."
+        return Response({"message": message}, status=status.HTTP_403_FORBIDDEN)
     # Record the login time (token logins do not do this automatically).
     from django.contrib.auth.models import update_last_login
     update_last_login(None, user)
@@ -1010,17 +1021,13 @@ def public_summary(request):
 @transaction.atomic
 def approve_user(request, user_id):
     """Approve a pending AquaTimbang registration."""
+    # Administrators and LGU Officers can review registrations.
     admin_profile = getattr(
         request.user, "aquatimbang_profile", None
     )
-    if (
-        admin_profile is None
-        or not request.user.is_active
-        or not admin_profile.is_active
-        or admin_profile.role.name != "Administrator"
-    ):
+    if approved_role(request.user) not in ("Administrator", "LGU Officer"):
         return Response(
-            {"message": "Administrator access required."},
+            {"message": "Administrator or LGU Officer access required."},
             status=status.HTTP_403_FORBIDDEN,
         )
     try:
@@ -1042,12 +1049,14 @@ def approve_user(request, user_id):
             {"message": "Please confirm that you reviewed the registration details and supporting documents."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    # Do not allow an existing inactive Administrator
-    # to be approved through the public registration workflow.
-    if profile.role.name == "Administrator":
+    denied = registration_review_denied(admin_profile, profile)
+    if denied:
+        return Response({"message": denied}, status=status.HTTP_403_FORBIDDEN)
+    # UC-7 3.1: an account needs a municipality before it can be approved.
+    if profile.municipality_id is None:
         return Response(
-            {"message": "Administrator accounts cannot be approved through this workflow."},
-            status=status.HTTP_403_FORBIDDEN,
+            {"message": "User missing required fields (no municipality assigned). Assign a municipality before approving."},
+            status=status.HTTP_400_BAD_REQUEST,
         )
     from django.utils import timezone
     profile.account_status = "approved"
@@ -1099,17 +1108,13 @@ def approve_user(request, user_id):
 @transaction.atomic
 def reject_user(request, user_id):
     """Reject a pending registration with a required reason."""
+    # Administrators and LGU Officers can review registrations.
     admin_profile = getattr(
         request.user, "aquatimbang_profile", None
     )
-    if (
-        admin_profile is None
-        or not request.user.is_active
-        or not admin_profile.is_active
-        or admin_profile.role.name != "Administrator"
-    ):
+    if approved_role(request.user) not in ("Administrator", "LGU Officer"):
         return Response(
-            {"message": "Administrator access required."},
+            {"message": "Administrator or LGU Officer access required."},
             status=status.HTTP_403_FORBIDDEN,
         )
     reason = request.data.get("reason", "")
@@ -1137,11 +1142,9 @@ def reject_user(request, user_id):
             {"message": "Only pending registrations can be rejected."},
             status=status.HTTP_400_BAD_REQUEST,
         )
-    if profile.role.name == "Administrator":
-        return Response(
-            {"message": "Administrator accounts cannot be rejected through this workflow."},
-            status=status.HTTP_403_FORBIDDEN,
-        )
+    denied = registration_review_denied(admin_profile, profile)
+    if denied:
+        return Response({"message": denied}, status=status.HTTP_403_FORBIDDEN)
     from django.utils import timezone
     profile.account_status = "rejected"
     profile.is_active = False
@@ -1240,25 +1243,13 @@ def get_account_verification(profile):
 @permission_classes([IsAuthenticated])
 def pending_registrations(request):
     """
-    Return accounts awaiting Administrator approval.
-    Only active AquaTimbang Administrators can access
-    this information.
+    Return accounts awaiting approval. Administrators see every pending
+    account; LGU Officers see Fish Vendors in their own municipality.
     """
-    # Retrieve the logged-in user's AquaTimbang profile.
-    admin_profile = getattr(
-        request.user,
-        "aquatimbang_profile",
-        None
-    )
-    # Verify Administrator permissions.
-    if (
-        admin_profile is None
-        or not request.user.is_active
-        or not admin_profile.is_active
-        or admin_profile.role.name != "Administrator"
-    ):
+    reviewer_role = approved_role(request.user)
+    if reviewer_role not in ("Administrator", "LGU Officer"):
         return Response(
-            {"message": "Administrator access required."},
+            {"message": "Administrator or LGU Officer access required."},
             status=status.HTTP_403_FORBIDDEN
         )
     # Retrieve all inactive AquaTimbang profiles.
@@ -1270,6 +1261,11 @@ def pending_registrations(request):
         "role",
         "municipality"
     ).order_by("created_at")
+    if reviewer_role == "LGU Officer":
+        pending_profiles = pending_profiles.filter(
+            role__name="Fish Vendor",
+            municipality_id=request.user.aquatimbang_profile.municipality_id,
+        )
     # Prepare account information for the frontend.
     accounts = []
     for profile in pending_profiles:
@@ -1331,86 +1327,27 @@ def registration_options(request):
 # ============================================================
 # ADMINISTRATOR - LIST REGISTERED USERS
 # ============================================================
-@api_view(["GET"])
-@permission_classes([IsAuthenticated])
-def list_users(request):
-    """
-    Return registered AquaTimbang users.
-    Only active Administrators can access this endpoint.
-    """
-    # Verify Administrator permissions.
-    admin_profile = getattr(
-        request.user,
-        "aquatimbang_profile",
-        None
-    )
-    if (
-        admin_profile is None
-        or not request.user.is_active
-        or not admin_profile.is_active
-        or admin_profile.role.name != "Administrator"
-    ):
-        return Response(
-            {"message": "Administrator access required."},
-            status=status.HTTP_403_FORBIDDEN
-        )
-    # Retrieve registered accounts and their profiles.
-    profiles = UserProfile.objects.select_related(
-        "user",
-        "role",
-        "municipality"
-    ).order_by("-user__date_joined")
-    users = []
-    for profile in profiles:
-        users.append({
-            "id": profile.user.id,
-            "first_name": profile.user.first_name,
-            "last_name": profile.user.last_name,
-            "username": profile.user.username,
-            "email": profile.user.email,
-            "role": profile.role.name,
-            "municipality": (
-                profile.municipality.name
-                if profile.municipality
-                else ""
-            ),
-            "contact_number": profile.contact_number,
-            "is_active": profile.is_active,
-            "account_status": profile.account_status,
-            "reviewed_at": (
-            profile.reviewed_at.isoformat()
-            if profile.reviewed_at
-            else None
-            ),
-            "reviewed_by": (
-                profile.reviewed_by.username
-                if profile.reviewed_by
-                else None
-            ),
-            "rejection_reason": profile.rejection_reason,
-            "date_joined": profile.user.date_joined.isoformat(),
-            "registered_at": profile.created_at,
-            "last_login": (
-                profile.user.last_login.isoformat()
-                if profile.user.last_login
-                else None
-            ),
-            "verification": get_account_verification(profile),
-        })
-    return Response(
-        users,
-        status=status.HTTP_200_OK
-    )
 # ============================================================
 # PROTECTED VERIFICATION DOCUMENT ACCESS
 # ============================================================
 @api_view(["GET"])
-@permission_classes([IsAquaTimbangAdministrator])
+@permission_classes([IsAuthenticated])
 def view_verification_document(request, user_id, document_type):
     """
-    Allow active AquaTimbang Administrators to view
-    registration verification documents.
+    Allow Administrators, and LGU Officers reviewing Fish Vendors in
+    their municipality, to view registration verification documents.
     """
+    reviewer_role = approved_role(request.user)
+    if reviewer_role == "LGU Officer":
+        target = UserProfile.objects.filter(user_id=user_id).select_related("role").first()
+        if (
+            target is None
+            or target.role.name != "Fish Vendor"
+            or target.municipality_id != request.user.aquatimbang_profile.municipality_id
+        ):
+            raise Http404("Verification record not found.")
+    elif reviewer_role != "Administrator":
+        return Response({"message": "Administrator access required."}, status=status.HTTP_403_FORBIDDEN)
     # Supported document types and their corresponding models.
     document_fields = {
         "vendor-permit": (
@@ -1833,3 +1770,401 @@ def forecast_history(request):
         .prefetch_related("predictions")[:30]
     )
     return Response(ForecastRunSerializer(runs, many=True).data)
+
+
+# ============================================================
+# USER MANAGEMENT (UC-7) — CREATE, EDIT, ROLES, STATUS, PASSWORDS
+# ============================================================
+import secrets
+
+from django.contrib.auth.password_validation import validate_password
+from django.core.exceptions import ValidationError as DjangoValidationError
+from django.db.models.deletion import ProtectedError
+
+ROLE_NAMES = ("Administrator", "LGU Officer", "Fish Vendor")
+
+
+def registration_review_denied(reviewer_profile, target_profile):
+    """
+    Reason the reviewer may not approve/reject this registration, or None.
+    Administrators review every non-administrator account; LGU Officers
+    review Fish Vendors in their own municipality (UC-1).
+    """
+    if target_profile.role.name == "Administrator":
+        return "Administrator accounts cannot be approved or rejected through this workflow."
+    if reviewer_profile.role.name == "Administrator":
+        return None
+    if target_profile.role.name != "Fish Vendor":
+        return "LGU Officers can only review Fish Vendor registrations."
+    if target_profile.municipality_id != reviewer_profile.municipality_id:
+        return "You can only review Fish Vendors registered in your municipality."
+    return None
+
+
+def user_row(profile):
+    """One account as shown in the Administrator's user list."""
+    user = profile.user
+    return {
+        "id": user.id,
+        "first_name": user.first_name,
+        "last_name": user.last_name,
+        "username": user.username,
+        "email": user.email,
+        "role": profile.role.name,
+        "municipality": profile.municipality.name if profile.municipality else "",
+        "municipality_id": profile.municipality_id,
+        "contact_number": profile.contact_number,
+        "is_active": profile.is_active and user.is_active,
+        "account_status": profile.account_status,
+        "reviewed_at": profile.reviewed_at.isoformat() if profile.reviewed_at else None,
+        "reviewed_by": profile.reviewed_by.username if profile.reviewed_by else None,
+        "rejection_reason": profile.rejection_reason,
+        "date_joined": user.date_joined.isoformat(),
+        "registered_at": profile.created_at,
+        "last_login": user.last_login.isoformat() if user.last_login else None,
+        "verification": get_account_verification(profile),
+    }
+
+
+def require_admin(request):
+    """Response refusing non-administrators, or None for an administrator."""
+    if approved_role(request.user) != "Administrator":
+        return Response({"message": "Administrator access required."}, status=status.HTTP_403_FORBIDDEN)
+    return None
+
+
+def active_admin_count(exclude_user_id=None):
+    admins = UserProfile.objects.filter(
+        role__name="Administrator",
+        account_status=UserProfile.STATUS_APPROVED,
+        is_active=True,
+        user__is_active=True,
+    )
+    if exclude_user_id is not None:
+        admins = admins.exclude(user_id=exclude_user_id)
+    return admins.count()
+
+
+def end_sessions(user):
+    """Log the user out everywhere by deleting their API token."""
+    Token.objects.filter(user=user).delete()
+
+
+def clean_account_fields(data, user=None, creating=False):
+    """
+    Validate account fields from an Administrator.
+    Returns (values, errors); only fields present in data are returned.
+    """
+    values, errors = {}, {}
+
+    def text(field, max_length, required=False):
+        if field not in data:
+            if creating and required:
+                errors[field] = "This field is required."
+            return
+        value = data.get(field)
+        if value is None:
+            value = ""
+        if not isinstance(value, str):
+            errors[field] = "Must be text."
+            return
+        value = value.strip()
+        if required and not value:
+            errors[field] = "This field is required."
+        elif len(value) > max_length:
+            errors[field] = f"Must be at most {max_length} characters."
+        else:
+            values[field] = value
+
+    text("username", 150, required=True)
+    text("first_name", 150, required=True)
+    text("last_name", 150)
+    text("email", 254, required=True)
+    text("contact_number", 20)
+
+    if "username" in values:
+        taken = User.objects.filter(username__iexact=values["username"])
+        if user is not None:
+            taken = taken.exclude(pk=user.pk)
+        if taken.exists():
+            errors["username"] = "This username is already taken."
+
+    if "email" in values:
+        from django.core.validators import validate_email
+        try:
+            validate_email(values["email"])
+        except DjangoValidationError:
+            errors["email"] = "Enter a valid email address."
+        else:
+            taken = User.objects.filter(email__iexact=values["email"])
+            if user is not None:
+                taken = taken.exclude(pk=user.pk)
+            if taken.exists():
+                errors["email"] = "This email address is already registered."
+
+    if "role" in data or creating:
+        role = Role.objects.filter(name=data.get("role")).first() if data.get("role") in ROLE_NAMES else None
+        if role is None:
+            errors["role"] = f"Choose one role: {', '.join(ROLE_NAMES)}."
+        else:
+            values["role"] = role
+
+    if "municipality" in data or creating:
+        municipality_id = data.get("municipality")
+        if municipality_id in (None, ""):
+            values["municipality"] = None
+        else:
+            municipality = Municipality.objects.filter(pk=municipality_id).first() if str(municipality_id).isdigit() else None
+            if municipality is None:
+                errors["municipality"] = "Choose a valid municipality."
+            else:
+                values["municipality"] = municipality
+
+    if creating:
+        password = data.get("password")
+        if not isinstance(password, str) or not password:
+            errors["password"] = "Set an initial password."
+        else:
+            try:
+                validate_password(password)
+            except DjangoValidationError as error:
+                errors["password"] = " ".join(error.messages)
+            else:
+                values["password"] = password
+
+    # Fish Vendors and LGU Officers work in a municipality.
+    final_role = values.get("role") or (user.aquatimbang_profile.role if user else None)
+    final_municipality = values["municipality"] if "municipality" in values else (
+        user.aquatimbang_profile.municipality if user else None
+    )
+    if final_role is not None and final_role.name != "Administrator" and final_municipality is None and "municipality" not in errors:
+        errors["municipality"] = "Fish Vendors and LGU Officers need a municipality."
+
+    return values, errors
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def list_users(request):
+    """
+    GET: every AquaTimbang account. POST: create an active account
+    (Administrators create LGU Officer and Administrator accounts, UC-1).
+    """
+    refused = require_admin(request)
+    if refused:
+        return refused
+
+    if request.method == "GET":
+        profiles = UserProfile.objects.select_related(
+            "user", "role", "municipality", "reviewed_by"
+        ).order_by("-user__date_joined")
+        return Response([user_row(profile) for profile in profiles], status=status.HTTP_200_OK)
+
+    values, errors = clean_account_fields(request.data, creating=True)
+    if errors:
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        user = User.objects.create_user(
+            username=values["username"],
+            email=values["email"],
+            password=values["password"],
+            first_name=values["first_name"],
+            last_name=values.get("last_name", ""),
+        )
+        profile = UserProfile.objects.create(
+            user=user,
+            role=values["role"],
+            municipality=values.get("municipality"),
+            contact_number=values.get("contact_number", ""),
+            account_status=UserProfile.STATUS_APPROVED,
+            is_active=True,
+            reviewed_by=request.user,
+            reviewed_at=timezone.now(),
+        )
+        log_activity(request.user, "created", "UserAccount", user.id, user.username, {
+            "role": profile.role.name,
+            "municipality": profile.municipality.name if profile.municipality else None,
+        })
+    return Response(user_row(profile), status=status.HTTP_201_CREATED)
+
+
+@api_view(["PATCH", "DELETE"])
+@permission_classes([IsAuthenticated])
+def manage_user(request, user_id):
+    """PATCH: edit details, municipality or role. DELETE: remove the account."""
+    refused = require_admin(request)
+    if refused:
+        return refused
+
+    profile = UserProfile.objects.select_related("user", "role", "municipality").filter(user_id=user_id).first()
+    if profile is None:
+        return Response({"message": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+    user = profile.user
+    is_self = user.pk == request.user.pk
+    is_active_admin = profile.role.name == "Administrator" and profile.is_active and user.is_active
+
+    if request.method == "DELETE":
+        if is_self:
+            return Response({"message": "You cannot delete your own account."}, status=status.HTTP_400_BAD_REQUEST)
+        if is_active_admin and active_admin_count(exclude_user_id=user.pk) == 0:
+            return Response({"message": "You cannot delete the last active Administrator."}, status=status.HTTP_400_BAD_REQUEST)
+        username, role = user.username, profile.role.name
+        try:
+            with transaction.atomic():
+                log_activity(request.user, "deleted", "UserAccount", user.pk, username, {"role": role})
+                user.delete()
+        except ProtectedError:
+            return Response(
+                {"message": f"{username} has price suggestions on record and cannot be deleted. Deactivate the account instead to keep the history."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response({"message": f"{username} deleted."}, status=status.HTTP_200_OK)
+
+    values, errors = clean_account_fields(request.data, user=user)
+    if errors:
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+
+    new_role = values.get("role")
+    if new_role is not None and new_role.pk != profile.role_id:
+        if is_self:
+            return Response({"role": "You cannot change your own role."}, status=status.HTTP_400_BAD_REQUEST)
+        if is_active_admin and active_admin_count(exclude_user_id=user.pk) == 0:
+            return Response({"role": "Keep at least one active Administrator."}, status=status.HTTP_400_BAD_REQUEST)
+
+    changes = {}
+    with transaction.atomic():
+        for field in ("username", "first_name", "last_name", "email"):
+            if field in values and getattr(user, field) != values[field]:
+                changes[field] = {"from": getattr(user, field), "to": values[field]}
+                setattr(user, field, values[field])
+        if "contact_number" in values and profile.contact_number != values["contact_number"]:
+            changes["contact_number"] = {"from": profile.contact_number, "to": values["contact_number"]}
+            profile.contact_number = values["contact_number"]
+        if "municipality" in values and profile.municipality != values["municipality"]:
+            changes["municipality"] = {
+                "from": profile.municipality.name if profile.municipality else None,
+                "to": values["municipality"].name if values["municipality"] else None,
+            }
+            profile.municipality = values["municipality"]
+        if new_role is not None and new_role.pk != profile.role_id:
+            changes["role"] = {"from": profile.role.name, "to": new_role.name}
+            profile.role = new_role
+        user.save()
+        profile.save()
+        if "role" in changes:
+            # A new role takes effect at the next login.
+            end_sessions(user)
+        if changes:
+            log_activity(
+                request.user,
+                "role changed" if "role" in changes else "updated",
+                "UserAccount", user.pk, user.username, {"changes": changes},
+            )
+
+    profile.refresh_from_db()
+    return Response(user_row(profile), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def set_user_status(request, user_id):
+    """Deactivate ({"active": false}) or reactivate ({"active": true}) an approved account."""
+    refused = require_admin(request)
+    if refused:
+        return refused
+
+    active = request.data.get("active")
+    if not isinstance(active, bool):
+        return Response({"message": 'Send {"active": true} or {"active": false}.'}, status=status.HTTP_400_BAD_REQUEST)
+
+    profile = UserProfile.objects.select_related("user", "role").filter(user_id=user_id).first()
+    if profile is None:
+        return Response({"message": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+    user = profile.user
+    if profile.account_status != UserProfile.STATUS_APPROVED:
+        return Response(
+            {"message": "Only approved accounts can be activated or deactivated. Review pending registrations instead."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    if not active:
+        if user.pk == request.user.pk:
+            return Response({"message": "You cannot deactivate your own account."}, status=status.HTTP_400_BAD_REQUEST)
+        if profile.role.name == "Administrator" and active_admin_count(exclude_user_id=user.pk) == 0:
+            return Response({"message": "You cannot deactivate the last active Administrator."}, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        profile.is_active = active
+        profile.save(update_fields=["is_active", "updated_at"])
+        user.is_active = active
+        user.save(update_fields=["is_active"])
+        if not active:
+            end_sessions(user)
+        log_activity(request.user, "activated" if active else "deactivated", "UserAccount", user.pk, user.username, {
+            "role": profile.role.name,
+        })
+    profile.refresh_from_db()
+    return Response(user_row(profile), status=status.HTTP_200_OK)
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def reset_user_password(request, user_id):
+    """
+    Give the account a new temporary password (shown once to the
+    Administrator) and log it out everywhere.
+    """
+    refused = require_admin(request)
+    if refused:
+        return refused
+
+    user = User.objects.filter(pk=user_id).first()
+    if user is None:
+        return Response({"message": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+    if user.pk == request.user.pk:
+        return Response({"message": "Use My Profile to change your own password."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # e.g. "AT-k3Jd9-Qm2Xp" — easy to read aloud, hard to guess.
+    temporary = f"AT-{secrets.token_urlsafe(4)}-{secrets.token_urlsafe(4)}"
+    with transaction.atomic():
+        user.set_password(temporary)
+        user.save(update_fields=["password"])
+        end_sessions(user)
+        log_activity(request.user, "password reset", "UserAccount", user.pk, user.username)
+    return Response(
+        {
+            "message": f"Password reset for {user.username}. Give them this temporary password and ask them to change it from My Profile.",
+            "temporary_password": temporary,
+        },
+        status=status.HTTP_200_OK,
+    )
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def change_my_password(request):
+    """Change your own password. Returns a new login token."""
+    if approved_role(request.user) is None:
+        return Response({"message": "An approved account is required."}, status=status.HTTP_403_FORBIDDEN)
+
+    current = request.data.get("current_password")
+    new = request.data.get("new_password")
+    if not isinstance(current, str) or not request.user.check_password(current):
+        return Response({"current_password": "Your current password is incorrect."}, status=status.HTTP_400_BAD_REQUEST)
+    if not isinstance(new, str) or not new:
+        return Response({"new_password": "Enter a new password."}, status=status.HTTP_400_BAD_REQUEST)
+    if new == current:
+        return Response({"new_password": "Choose a password different from the current one."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_password(new, user=request.user)
+    except DjangoValidationError as error:
+        return Response({"new_password": " ".join(error.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        request.user.set_password(new)
+        request.user.save(update_fields=["password"])
+        # Log out other sessions; this browser gets a fresh token.
+        end_sessions(request.user)
+        token = Token.objects.create(user=request.user)
+        log_activity(request.user, "password changed", "UserAccount", request.user.pk, request.user.username)
+    return Response({"message": "Password changed.", "token": token.key}, status=status.HTTP_200_OK)

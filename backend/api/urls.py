@@ -20,6 +20,10 @@ from .views import (
     approve_user,  # Administrator account approval endpoint
     reject_user,  # Administrator account rejection endpoint
     list_users,
+    manage_user,
+    set_user_status,
+    reset_user_password,
+    change_my_password,
     pending_registrations,
     registration_options,
     view_verification_document,
@@ -181,6 +185,34 @@ urlpatterns = [
         "forecasts/history/",
         forecast_history,
         name="forecast-history"
+    ),
+
+    # Administrator: edit (PATCH) or delete (DELETE) an account.
+    path(
+        "auth/users/<int:user_id>/",
+        manage_user,
+        name="manage-user"
+    ),
+
+    # Administrator: deactivate or reactivate an account.
+    path(
+        "auth/users/<int:user_id>/status/",
+        set_user_status,
+        name="user-status"
+    ),
+
+    # Administrator: give an account a temporary password.
+    path(
+        "auth/users/<int:user_id>/reset-password/",
+        reset_user_password,
+        name="reset-user-password"
+    ),
+
+    # Change your own password.
+    path(
+        "auth/change-password/",
+        change_my_password,
+        name="change-my-password"
     ),
 
     # Live counts for the public landing page.
