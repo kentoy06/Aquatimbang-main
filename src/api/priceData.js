@@ -54,36 +54,3 @@ export function latestBy(records, keyOf) {
   });
   return [...latest.values()];
 }
-
-// Least-squares linear trend projected `days` days past the last point.
-// Returns null when there are fewer than `minPoints` points.
-export function linearForecast(series, days, minPoints = 7) {
-  if (series.length < minPoints) return null;
-  const origin = new Date(`${series[0].date}T00:00:00`).getTime();
-  const dayIndex = (date) => Math.round((new Date(`${date}T00:00:00`).getTime() - origin) / 86400000);
-  const xs = series.map((p) => dayIndex(p.date));
-  const ys = series.map((p) => p.price);
-  const n = xs.length;
-  const meanX = xs.reduce((a, b) => a + b, 0) / n;
-  const meanY = ys.reduce((a, b) => a + b, 0) / n;
-  const sxx = xs.reduce((sum, x) => sum + (x - meanX) ** 2, 0);
-  const slope = sxx ? xs.reduce((sum, x, i) => sum + (x - meanX) * (ys[i] - meanY), 0) / sxx : 0;
-  const intercept = meanY - slope * meanX;
-  // Typical distance between actual prices and the trend line.
-  const residual = Math.sqrt(ys.reduce((sum, y, i) => sum + (y - (intercept + slope * xs[i])) ** 2, 0) / n);
-
-  const last = series[series.length - 1];
-  const lastX = xs[xs.length - 1];
-  return Array.from({ length: Number(days) }, (_, i) => {
-    const d = new Date(`${last.date}T00:00:00`);
-    d.setDate(d.getDate() + i + 1);
-    const price = Math.max(0, intercept + slope * (lastX + i + 1));
-    return {
-      date: d.toLocaleDateString("en-CA"),
-      price,
-      low: Math.max(0, price - residual),
-      high: price + residual,
-      up: slope >= 0,
-    };
-  });
-}

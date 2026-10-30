@@ -680,3 +680,142 @@ class FisherfolkListTests(TestCase):
 
     def test_vendor_cannot_list_fisherfolk(self):
         self.assertEqual(self.vendor_client.get("/api/auth/fisherfolk/").status_code, 403)
+
+
+# ============================================================
+# PREDICTIVE ANALYTICS (SARIMAX)
+# ============================================================
+import datetime
+import random
+from decimal import Decimal
+from unittest import mock
+
+from django.utils import timezone
+
+from .forecasting import NotEnoughData, generate_forecast
+from .models import ExternalFactor, ForecastRun, Prediction
+
+
+class ForecastingTests(TestCase):
+    """SARIMAX forecasts, the trend fallback and the forecast API."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.municipality = Municipality.objects.create(name="Cebu City", province="Cebu")
+        cls.species = FishSpecies.objects.create(name="Galunggong")
+        cls.short_species = FishSpecies.objects.create(name="Bangus")
+        cls.tiny_species = FishSpecies.objects.create(name="Tilapia")
+        roles = {name: Role.objects.create(name=name) for name in ("Fish Vendor", "LGU Officer")}
+        cls.vendor = User.objects.create_user("fc_vendor", "fcv@example.com", "TestPass123!")
+        UserProfile.objects.create(user=cls.vendor, role=roles["Fish Vendor"], municipality=cls.municipality, account_status="approved", is_active=True)
+        cls.officer = User.objects.create_user("fc_officer", "fco@example.com", "TestPass123!")
+        UserProfile.objects.create(user=cls.officer, role=roles["LGU Officer"], municipality=cls.municipality, account_status="approved", is_active=True)
+
+        # 70 days of prices with a weekly pattern; storms add ₱12.
+        rng = random.Random(3)
+        today = timezone.localdate()
+        weekly = [0, -2, -3, -1, 1, 4, 5]
+        for back in range(70, 0, -1):
+            day = today - datetime.timedelta(days=back)
+            stormy = rng.random() < 0.12
+            ExternalFactor.objects.create(
+                date=day, fuel_price=Decimal("62.00") + Decimal(back % 5) / 10,
+                weather="stormy" if stormy else "sunny", is_holiday=False,
+            )
+            price = 180 + weekly[day.weekday()] + (12 if stormy else 0) + rng.gauss(0, 1)
+            PriceRecord.objects.create(
+                fish_species=cls.species, municipality=cls.municipality,
+                price_per_kg=Decimal(f"{price:.2f}"), recorded_date=day, status="published",
+            )
+        # 14 days only: too short for SARIMAX.
+        for back in range(14, 0, -1):
+            PriceRecord.objects.create(
+                fish_species=cls.short_species, municipality=cls.municipality,
+                price_per_kg=Decimal(200 + back), recorded_date=today - datetime.timedelta(days=back), status="published",
+            )
+        # 3 days only: too short for any forecast.
+        for back in range(3, 0, -1):
+            PriceRecord.objects.create(
+                fish_species=cls.tiny_species, municipality=cls.municipality,
+                price_per_kg=Decimal(100), recorded_date=today - datetime.timedelta(days=back), status="published",
+            )
+
+    def client_for(self, user):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=user)[0].key}")
+        return client
+
+    def test_sarimax_forecast_with_external_factors(self):
+        result = generate_forecast(self.species.pk, self.municipality.pk, horizon=7)
+        self.assertEqual(result["model_type"], "sarimax")
+        self.assertTrue(result["model_used"].startswith("SARIMAX("))
+        self.assertIn("stormy", result["exogenous"])
+        # The model should find that storms raise the price by roughly ₱12.
+        self.assertAlmostEqual(result["coefficients"]["stormy"], 12, delta=4)
+        self.assertEqual(len(result["forecast"]), 7)
+        for point in result["forecast"]:
+            self.assertLessEqual(point["lower"], point["price"])
+            self.assertLessEqual(point["price"], point["upper"])
+        self.assertLess(result["mape"], 10)
+        self.assertIsNotNone(result["rmse"])
+
+    def test_short_history_falls_back_to_trend(self):
+        result = generate_forecast(self.short_species.pk, None, horizon=5)
+        self.assertEqual(result["model_type"], "trend")
+        self.assertEqual(len(result["forecast"]), 5)
+        self.assertTrue(any("Not enough historical data" in w for w in result["warnings"]))
+
+    def test_too_little_data_raises(self):
+        with self.assertRaises(NotEnoughData):
+            generate_forecast(self.tiny_species.pk, None, horizon=7)
+
+    def test_model_failure_falls_back_to_trend(self):
+        with mock.patch("api.forecasting.select_order", side_effect=ValueError("boom")):
+            result = generate_forecast(self.species.pk, None, horizon=7)
+        self.assertEqual(result["model_type"], "trend")
+        self.assertIn("Forecast unavailable. Showing trend only.", result["warnings"])
+
+    def test_forecast_api_saves_and_reuses_run(self):
+        client = self.client_for(self.vendor)
+        url = f"/api/forecasts/?species={self.short_species.pk}&horizon=5"
+        first = client.get(url)
+        self.assertEqual(first.status_code, 200)
+        self.assertFalse(first.data["cached"])
+        self.assertEqual(len(first.data["forecast"]), 5)
+        self.assertTrue(first.data["history"])
+        self.assertEqual(Prediction.objects.filter(run_id=first.data["id"]).count(), 5)
+
+        second = client.get(url)
+        self.assertTrue(second.data["cached"])
+        self.assertEqual(second.data["id"], first.data["id"])
+
+        # New published price → the saved forecast is out of date.
+        PriceRecord.objects.create(
+            fish_species=self.short_species, municipality=self.municipality,
+            price_per_kg=Decimal(210), recorded_date=timezone.localdate(), status="published",
+        )
+        third = client.get(url)
+        self.assertFalse(third.data["cached"])
+        self.assertEqual(ForecastRun.objects.filter(fish_species=self.short_species).count(), 2)
+
+    def test_forecast_api_validates_input(self):
+        client = self.client_for(self.vendor)
+        self.assertEqual(client.get("/api/forecasts/?species=999").status_code, 400)
+        self.assertEqual(client.get(f"/api/forecasts/?species={self.species.pk}&horizon=90").status_code, 400)
+        response = client.get(f"/api/forecasts/?species={self.tiny_species.pk}")
+        self.assertTrue(response.data["not_enough_data"])
+
+    def test_only_lgu_and_admin_can_change_external_factors(self):
+        payload = {"date": "2030-01-01", "fuel_price": "63.50", "weather": "rainy", "is_holiday": True}
+        self.assertEqual(self.client_for(self.vendor).post("/api/external-factors/", payload, format="json").status_code, 403)
+        self.assertEqual(self.client_for(self.vendor).get("/api/external-factors/").status_code, 200)
+        response = self.client_for(self.officer).post("/api/external-factors/", payload, format="json")
+        self.assertEqual(response.status_code, 201)
+        self.assertEqual(response.data["weather_display"], "Rainy")
+        self.assertTrue(ActivityLog.objects.filter(target_type="ExternalFactor", action="created").exists())
+
+    def test_external_factor_date_is_unique(self):
+        client = self.client_for(self.officer)
+        day = ExternalFactor.objects.first().date.isoformat()
+        response = client.post("/api/external-factors/", {"date": day, "weather": "sunny"}, format="json")
+        self.assertEqual(response.status_code, 400)

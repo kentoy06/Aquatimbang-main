@@ -1032,3 +1032,55 @@ class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
                 "This municipality is inactive."
             )
         return value
+
+from .models import ExternalFactor, ForecastRun
+
+
+class ExternalFactorSerializer(serializers.ModelSerializer):
+    """Daily fuel price, weather and holiday used by the forecasting model."""
+
+    weather_display = serializers.CharField(source="get_weather_display", read_only=True)
+    recorded_by_name = serializers.CharField(source="recorded_by.username", read_only=True, allow_null=True)
+
+    class Meta:
+        model = ExternalFactor
+        fields = [
+            "id", "date", "fuel_price", "weather", "weather_display",
+            "is_holiday", "notes", "recorded_by_name", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "weather_display", "recorded_by_name", "created_at", "updated_at"]
+
+    def validate_fuel_price(self, value):
+        if value is not None and value <= 0:
+            raise serializers.ValidationError("Fuel price must be greater than zero.")
+        return value
+
+
+class ForecastRunSerializer(serializers.ModelSerializer):
+    """A saved forecast with its predictions."""
+
+    fish_name = serializers.CharField(source="fish_species.name", read_only=True)
+    municipality_name = serializers.CharField(source="municipality.name", read_only=True, allow_null=True)
+    created_by_name = serializers.CharField(source="created_by.username", read_only=True, allow_null=True)
+    forecast = serializers.SerializerMethodField()
+
+    class Meta:
+        model = ForecastRun
+        fields = [
+            "id", "fish_species", "fish_name", "municipality", "municipality_name",
+            "horizon_days", "model_type", "model_used", "exogenous", "coefficients",
+            "mape", "rmse", "holdout_days", "training_start", "training_end",
+            "observations", "warnings", "created_by_name", "created_at", "forecast",
+        ]
+        read_only_fields = fields
+
+    def get_forecast(self, run):
+        return [
+            {
+                "date": p.forecast_date,
+                "price": float(p.forecast_price),
+                "lower": float(p.lower_bound),
+                "upper": float(p.upper_bound),
+            }
+            for p in run.predictions.all()
+        ]
