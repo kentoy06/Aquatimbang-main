@@ -568,6 +568,17 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
 
         ]
 
+def check_price_bounds(value):
+    """Raise a validation error when a price is outside the configured range."""
+    from .models import SystemSetting
+    bounds = SystemSetting.load()
+    if value < bounds.min_price_per_kg or value > bounds.max_price_per_kg:
+        raise serializers.ValidationError(
+            f"Price must be between ₱{bounds.min_price_per_kg:,.2f} and ₱{bounds.max_price_per_kg:,.2f} per kg. "
+            "An Administrator can change this range in System Configuration."
+        )
+
+
 def attach_previous_prices(records):
     """
     Set record._previous_price to the latest published price recorded
@@ -775,6 +786,32 @@ class PriceRecordSerializer(serializers.ModelSerializer):
 
     )
 
+    # Each correction made to this published price, oldest first.
+
+    corrections = serializers.SerializerMethodField()
+
+    def get_corrections(self, obj):
+
+        return [
+
+            {
+
+                "previous_price": str(c.previous_price),
+
+                "new_price": str(c.new_price),
+
+                "reason": c.reason,
+
+                "corrected_by": c.corrected_by.username if c.corrected_by else None,
+
+                "corrected_at": c.corrected_at.isoformat(),
+
+            }
+
+            for c in obj.corrections.all()
+
+        ]
+
     class Meta:
 
         # Connect this serializer to PriceRecord.
@@ -853,6 +890,12 @@ class PriceRecordSerializer(serializers.ModelSerializer):
 
             "rejection_reason",
 
+            # Correction history (Table 19).
+
+            "is_correction",
+
+            "corrections",
+
             # System timestamps.
 
             "created_at",
@@ -866,6 +909,10 @@ class PriceRecordSerializer(serializers.ModelSerializer):
         read_only_fields = [
 
             "id",
+
+            "is_correction",
+
+            "corrections",
 
             # Django determines the submitting user.
 
@@ -918,6 +965,10 @@ class PriceRecordSerializer(serializers.ModelSerializer):
                 "Price per kilogram must be greater than zero."
 
             )
+
+        # UC-4 step 4: stay within the range set in System Configuration.
+
+        check_price_bounds(value)
 
         return value
 
@@ -1084,3 +1135,27 @@ class ForecastRunSerializer(serializers.ModelSerializer):
             }
             for p in run.predictions.all()
         ]
+
+
+
+from .models import SystemSetting
+
+
+class SystemSettingSerializer(serializers.ModelSerializer):
+    """Administrator-editable system parameters."""
+
+    updated_by_name = serializers.CharField(source="updated_by.username", read_only=True, allow_null=True)
+
+    class Meta:
+        model = SystemSetting
+        fields = ["min_price_per_kg", "max_price_per_kg", "updated_by_name", "updated_at"]
+        read_only_fields = ["updated_by_name", "updated_at"]
+
+    def validate(self, attrs):
+        low = attrs.get("min_price_per_kg", getattr(self.instance, "min_price_per_kg", None))
+        high = attrs.get("max_price_per_kg", getattr(self.instance, "max_price_per_kg", None))
+        if low is not None and low <= 0:
+            raise serializers.ValidationError({"min_price_per_kg": "The minimum must be greater than zero."})
+        if low is not None and high is not None and high <= low:
+            raise serializers.ValidationError({"max_price_per_kg": "The maximum must be higher than the minimum."})
+        return attrs

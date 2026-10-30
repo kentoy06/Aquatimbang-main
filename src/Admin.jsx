@@ -202,6 +202,8 @@ const toPriceRow = (r) => ({
   previousPrice: r.previous_price === null || r.previous_price === undefined ? null : Number(r.previous_price),
   enteredBy: r.recorded_by_name || "—",
   status: PRICE_STATUS_LABELS[r.status] || r.status,
+  isCorrection: Boolean(r.is_correction),
+  corrections: r.corrections || [],
 });
 
 // Django user (from /auth/users/) → row shape used by the dashboard tables.
@@ -656,7 +658,7 @@ useEffect(() => {
           />
         );
       case "System Configuration":
-        return <SystemConfiguration />;
+        return <SystemConfiguration notify={notify} />;
       case "Fisherfolk Suggestions":
         return (
           <FisherfolkSuggestions
@@ -2565,6 +2567,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
     if (tab === "Published") return r.status === "Published";
     if (tab === "In Review") return ["Draft", "Pending Review", "Approved"].includes(r.status);
     if (tab === "Flagged / Rejected") return r.status === "Flagged" || r.status === "Rejected";
+    if (tab === "Corrected") return r.isCorrection;
     return true;
   });
 
@@ -2612,7 +2615,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
   };
 
   const correctRecord = async (r) => {
-    const input = window.prompt(`Correct the price for ${r.species} on ${fmtDate(r.date)}:`, r.price);
+    const input = window.prompt(`New price per kg for ${r.species} on ${fmtDate(r.date)}:`, r.price);
     if (input === null) return;
 
     const newPrice = parseFloat(input);
@@ -2621,8 +2624,20 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
       return;
     }
     try {
-      await send(r, "PATCH", { price_per_kg: newPrice.toFixed(2) });
-      notify("Record corrected.");
+      if (r.status === "Published") {
+        // Published prices keep their original value in the correction history.
+        const reason = window.prompt("Reason for this correction (kept in the audit trail):", "");
+        if (reason === null) return;
+        if (!reason.trim()) {
+          notify("A reason is required to correct a published price.");
+          return;
+        }
+        await sendJson(`/prices/${r.id}/correct/`, "POST", { price_per_kg: newPrice.toFixed(2), reason: reason.trim() });
+        notify("Price corrected. The original price is kept in the history.");
+      } else {
+        await send(r, "PATCH", { price_per_kg: newPrice.toFixed(2) });
+        notify("Record updated.");
+      }
       onChanged();
     } catch (err) {
       notify(err.message);
@@ -2676,7 +2691,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
 
       <div className="panel">
         <div className="tabs">
-          {["Latest Day", "All", "Published", "In Review", "Flagged / Rejected"].map((t) => (
+          {["Latest Day", "All", "Published", "In Review", "Corrected", "Flagged / Rejected"].map((t) => (
             <button
               key={t}
               className={tab === t ? "tab active-tab" : "tab"}
@@ -2739,15 +2754,22 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
                   <td>{fmtDate(r.date)}</td>
                   <td><strong>{r.species}</strong></td>
                   <td>{r.municipality}</td>
-                  <td><strong>{peso(r.price)}</strong></td>
+                  <td>
+                    <strong>{peso(r.price)}</strong>
+                    {r.isCorrection && r.corrections.length > 0 && (
+                      <small className="muted-text" style={{ display: "block" }} title={r.corrections.map((c) => `${peso(c.previous_price)} → ${peso(c.new_price)}: ${c.reason} (${c.corrected_by || "—"})`).join("\n")}>
+                        Corrected · was {peso(r.corrections[0].previous_price)}
+                      </small>
+                    )}
+                  </td>
                   <td>{r.enteredBy}</td>
                   <td>
                     <span className={`badge ${badgeFor(r.status)}`}>{r.status}</span>
                   </td>
                   <td>
                     <div className="action-icons">
-                      <button title="Correct price" onClick={() => correctRecord(r)}>✎</button>
-                      <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>
+                      <button title={r.status === "Published" ? "Correct price" : "Edit price"} onClick={() => correctRecord(r)}>✎</button>
+                      {r.status !== "Published" && <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>}
                     </div>
                   </td>
                 </tr>
@@ -2765,20 +2787,110 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
    SYSTEM CONFIGURATION
    ================================================================ */
 
-function SystemConfiguration() {
+function SystemConfiguration({ notify }) {
+  const [saved, setSaved] = useState(null);
+  const [form, setForm] = useState({ min_price_per_kg: "", max_price_per_kg: "" });
+  const [errors, setErrors] = useState({});
+  const [loadError, setLoadError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    sendJson("/system-settings/", "GET")
+      .then((data) => {
+        if (cancelled) return;
+        setSaved(data);
+        setForm({ min_price_per_kg: data.min_price_per_kg, max_price_per_kg: data.max_price_per_kg });
+      })
+      .catch((error) => { if (!cancelled) setLoadError(error.message); });
+    return () => { cancelled = true; };
+  }, []);
+
+  const save = async () => {
+    setSaving(true);
+    setErrors({});
+    try {
+      const data = await sendJson("/system-settings/", "PATCH", form);
+      setSaved(data);
+      notify("Price range saved. New and corrected prices must now fall within it.");
+    } catch (error) {
+      setErrors(error.fields || {});
+      if (!error.fields || !Object.keys(error.fields).length) notify(error.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const changed = saved && (form.min_price_per_kg !== saved.min_price_per_kg || form.max_price_per_kg !== saved.max_price_per_kg);
+
   return (
     <>
       <div className="page-title">
         <div>
           <h2>System Configuration</h2>
-          <p>Price validation bounds, forecasting, retention and security settings.</p>
+          <p>System-wide parameters that control how AquaTimbang validates data.</p>
         </div>
       </div>
-      <div className="panel">
-        <p className="empty-row" style={{ padding: 24 }}>
-          System settings are not stored in the AquaTimbang database yet, so they can't be changed here.
-          The Django backend's own settings (backend/.env) control how the server runs.
-        </p>
+
+      {loadError && <div className="warn-box" role="alert">{loadError}</div>}
+
+      <div className="config-grid">
+        <div className="config-card">
+          <div className="config-header">
+            <div className="config-icon blue">₱</div>
+            <div>
+              <h3>Price Validation Range</h3>
+              <p>Prices per kg outside this range are rejected when entered or corrected</p>
+            </div>
+          </div>
+
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="cfg-min">Minimum Price per kg</label>
+              <div className="input-with-unit"><span>₱</span>
+                <input id="cfg-min" type="number" min="0.01" step="0.01" value={form.min_price_per_kg} onChange={(e) => setForm({ ...form, min_price_per_kg: e.target.value })} />
+              </div>
+              {errors.min_price_per_kg && <small className="field-error">{errors.min_price_per_kg}</small>}
+            </div>
+            <div className="form-group">
+              <label htmlFor="cfg-max">Maximum Price per kg</label>
+              <div className="input-with-unit"><span>₱</span>
+                <input id="cfg-max" type="number" min="0.01" step="0.01" value={form.max_price_per_kg} onChange={(e) => setForm({ ...form, max_price_per_kg: e.target.value })} />
+              </div>
+              {errors.max_price_per_kg && <small className="field-error">{errors.max_price_per_kg}</small>}
+            </div>
+          </div>
+
+          <div className="info-box">
+            Existing prices are not changed. The LGU's Price Anomalies page also uses this range.
+          </div>
+
+          <button className="primary-btn full-btn" style={{ marginTop: 14 }} onClick={save} disabled={saving || !changed}>
+            {saving ? "Saving…" : "Save Price Range"}
+          </button>
+          {saved?.updated_by_name && (
+            <p className="muted-text" style={{ marginTop: 10 }}>
+              Last changed by {saved.updated_by_name} on {formatAuditTimestamp(saved.updated_at)}.
+            </p>
+          )}
+        </div>
+
+        <div className="config-card">
+          <div className="config-header">
+            <div className="config-icon orange">⚙</div>
+            <div>
+              <h3>Login Security</h3>
+              <p>Set on the server in backend/.env</p>
+            </div>
+          </div>
+          <div className="profile-grid">
+            <div className="profile-field"><span>Idle logout</span><strong>{localStorage.getItem("sessionIdleMinutes") || 30} minutes</strong></div>
+            <div className="profile-field"><span>Account lock</span><strong>After repeated wrong passwords</strong></div>
+          </div>
+          <p className="muted-text" style={{ marginTop: 12 }}>
+            Change SESSION_IDLE_MINUTES, LOGIN_MAX_ATTEMPTS and LOGIN_LOCKOUT_MINUTES in backend/.env, then restart the server.
+          </p>
+        </div>
       </div>
     </>
   );

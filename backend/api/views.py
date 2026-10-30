@@ -16,6 +16,10 @@ from django.utils import timezone
 # Django REST Framework tools.
 from rest_framework import status, viewsets
 from .authentication import ExpiringTokenAuthentication
+from .models import PriceCorrection
+from .serializers import check_price_bounds
+from decimal import Decimal, InvalidOperation
+from rest_framework import serializers
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import (
     action,
@@ -197,7 +201,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         "recorded_by",
         "reviewed_by",
         "published_by",
-    ).all()
+    ).prefetch_related("corrections__corrected_by").all()
     # Serializer used for JSON conversion.
     serializer_class = PriceRecordSerializer
     # ========================================================
@@ -241,9 +245,68 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             details=details or {},
         )
 
+    # --------------------------------------------------------
+    # CORRECT A PUBLISHED PRICE (keeps the original — Table 19)
+    # --------------------------------------------------------
+    @action(detail=True, methods=["post"], url_path="correct")
+    @transaction.atomic
+    def correct_price(self, request, pk=None):
+        """
+        Change a published price with a required reason. The previous and
+        new price are kept in the correction history.
+        """
+        if approved_role(request.user) not in ("LGU Officer", "Administrator"):
+            raise PermissionDenied("Only LGU Officers and Administrators can correct prices.")
+        record = self.get_object()
+        if record.status != PriceRecord.STATUS_PUBLISHED:
+            return Response(
+                {"message": "Only published prices are corrected. Edit unpublished prices directly."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        reason = request.data.get("reason")
+        if not isinstance(reason, str) or not reason.strip():
+            return Response({"reason": "Give a reason for the correction."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            new_price = Decimal(str(request.data.get("price_per_kg"))).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError, TypeError):
+            return Response({"price_per_kg": "Enter a valid price."}, status=status.HTTP_400_BAD_REQUEST)
+        if new_price <= 0:
+            return Response({"price_per_kg": "Price per kilogram must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            check_price_bounds(new_price)
+        except serializers.ValidationError as error:
+            return Response({"price_per_kg": error.detail[0]}, status=status.HTTP_400_BAD_REQUEST)
+        if new_price == record.price_per_kg:
+            return Response({"price_per_kg": "The new price is the same as the current one."}, status=status.HTTP_400_BAD_REQUEST)
+
+        previous = record.price_per_kg
+        PriceCorrection.objects.create(
+            price_record=record,
+            previous_price=previous,
+            new_price=new_price,
+            reason=reason.strip(),
+            corrected_by=request.user,
+        )
+        record.price_per_kg = new_price
+        record.is_correction = True
+        record.save(update_fields=["price_per_kg", "is_correction", "updated_at"])
+        self._log_price("corrected", record, {
+            "changes": {"price_per_kg": {"from": str(previous), "to": str(new_price)}},
+            "reason": reason.strip(),
+        })
+        record = self.get_queryset().get(pk=record.pk)
+        return Response(
+            {"message": "Price corrected. The original price is kept in the history.", "record": self.get_serializer(record).data},
+            status=status.HTTP_200_OK,
+        )
+
     @transaction.atomic
     def perform_update(self, serializer):
         record = serializer.instance
+        # Published prices keep an audit trail: use the "correct" action.
+        if record.status == PriceRecord.STATUS_PUBLISHED:
+            raise PermissionDenied("Published prices cannot be edited. Use Correct Price and give a reason.")
         fields = ("fish_species_id", "municipality_id", "price_per_kg", "recorded_date", "source", "remarks", "status")
         previous = {field: str(getattr(record, field)) for field in fields}
         updated = serializer.save()
@@ -256,6 +319,8 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
 
     @transaction.atomic
     def perform_destroy(self, instance):
+        if instance.status == PriceRecord.STATUS_PUBLISHED:
+            raise PermissionDenied("Published prices cannot be deleted. Correct the price instead so the history is kept.")
         self._log_price("deleted", instance, {
             "price_per_kg": str(instance.price_per_kg),
             "recorded_date": instance.recorded_date.isoformat(),
@@ -2252,3 +2317,40 @@ def logout_user(request):
     if request.auth is not None:
         request.auth.delete()
     return Response({"message": "Logged out."}, status=status.HTTP_200_OK)
+
+
+
+# ============================================================
+# SYSTEM CONFIGURATION (Administrator)
+# ============================================================
+from .models import SystemSetting
+from .serializers import SystemSettingSerializer
+
+
+@api_view(["GET", "PATCH"])
+@permission_classes([IsAuthenticated])
+def system_settings(request):
+    """GET: current settings (any approved user). PATCH: change them (Administrator)."""
+    role = approved_role(request.user)
+    if role is None:
+        return Response({"message": "An approved account is required."}, status=status.HTTP_403_FORBIDDEN)
+    settings_row = SystemSetting.load()
+    if request.method == "GET":
+        return Response(SystemSettingSerializer(settings_row).data)
+    if role != "Administrator":
+        return Response({"message": "Administrator access required."}, status=status.HTTP_403_FORBIDDEN)
+
+    before = SystemSettingSerializer(settings_row).data
+    serializer = SystemSettingSerializer(settings_row, data=request.data, partial=True)
+    serializer.is_valid(raise_exception=True)
+    with transaction.atomic():
+        settings_row = serializer.save(updated_by=request.user)
+        after = SystemSettingSerializer(settings_row).data
+        changes = {
+            field: {"from": before[field], "to": after[field]}
+            for field in ("min_price_per_kg", "max_price_per_kg")
+            if before[field] != after[field]
+        }
+        if changes:
+            log_activity(request.user, "updated", "SystemSetting", 1, "Price range", {"changes": changes})
+    return Response(after)

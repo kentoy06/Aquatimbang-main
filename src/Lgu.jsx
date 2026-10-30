@@ -159,9 +159,8 @@ function exportAuditCsv(records, filename) {
    CONSTANTS & HELPERS
    ================================================================ */
 
-// Price-per-kg range treated as plausible; values outside it are listed as anomalies.
-const MIN_PRICE = 50;
-const MAX_PRICE = 1000;
+// Fallback price range until System Configuration has loaded.
+const DEFAULT_PRICE_RANGE = { min: 50, max: 1000 };
 
 const peso = (n) => {
   if (n === null || n === undefined || isNaN(n)) return "—";
@@ -1531,34 +1530,49 @@ function PriceEntry({
       return;
     }
 
+    // Published prices are corrected with a reason; the original is kept.
+    const isPublished = record.status === "published";
+    let reason = "";
+    if (isPublished) {
+      reason = window.prompt("This price is already published. Reason for the correction (kept in the audit trail):", "");
+      if (reason === null) return;
+      if (!reason.trim()) {
+        notify("A reason is required to correct a published price.");
+        return;
+      }
+    }
+
     try {
       const token = getToken();
 
-      // Update only the price field in Django.
       const response = await fetch(
-        `${API_BASE_URL}/prices/${record.id}/`,
+        isPublished
+          ? `${API_BASE_URL}/prices/${record.id}/correct/`
+          : `${API_BASE_URL}/prices/${record.id}/`,
         {
-          method: "PATCH",
+          method: isPublished ? "POST" : "PATCH",
 
           headers: {
             Authorization: `Token ${token}`,
             "Content-Type": "application/json",
           },
 
-          body: JSON.stringify({
-            price_per_kg: newPrice,
-          }),
+          body: JSON.stringify(
+            isPublished
+              ? { price_per_kg: newPrice.toFixed(2), reason: reason.trim() }
+              : { price_per_kg: newPrice }
+          ),
         }
       );
 
       const data = await response.json();
 
-      // Handle update errors.
+      // Handle update errors (including prices outside the allowed range).
       if (!response.ok) {
-        console.error("Price update error:", data);
-
         notify(
-          data.detail ||
+          data.message ||
+            data.detail ||
+            [].concat(data.price_per_kg || data.reason || []).join(" ") ||
             "Unable to update the price."
         );
 
@@ -1576,7 +1590,9 @@ function PriceEntry({
 
 
       notify(
-        `${record.fish_name} price updated.`
+        isPublished
+          ? `${record.fish_name} price corrected. The original price is kept in the history.`
+          : `${record.fish_name} price updated.`
       );
     } catch (error) {
       console.error(
@@ -1927,7 +1943,7 @@ function PriceEntry({
                       <div className="action-icons">
                         {/* Edit this Django price record. */}
                         <button
-                          title="Edit"
+                          title={record.status === "published" ? "Correct published price" : "Edit"}
                           onClick={() =>
                             editPrice(record)
                           }
@@ -1935,15 +1951,17 @@ function PriceEntry({
                           ✎
                         </button>
 
-                        {/* Delete this Django price record. */}
-                        <button
-                          title="Delete"
-                          onClick={() =>
-                            removeEntry(record)
-                          }
-                        >
-                          ✕
-                        </button>
+                        {/* Published prices are corrected, never deleted. */}
+                        {record.status !== "published" && (
+                          <button
+                            title="Delete"
+                            onClick={() =>
+                              removeEntry(record)
+                            }
+                          >
+                            ✕
+                          </button>
+                        )}
                       </div>
                       </div>
                     </td>
@@ -3325,10 +3343,24 @@ function PriceComparison({ priceRecords, loading, error }) {
    ================================================================ */
 
 function PriceAnomalies({ priceRecords, suggestions }) {
-  // Flagged entries plus any entry priced outside the plausible range.
+  const [range, setRange] = useState(DEFAULT_PRICE_RANGE);
+
+  // The allowed range is set by the Administrator in System Configuration.
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/system-settings/`, { headers: { Authorization: `Token ${localStorage.getItem("authToken")}` } })
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        if (!cancelled && data) setRange({ min: Number(data.min_price_per_kg), max: Number(data.max_price_per_kg) });
+      })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, []);
+
+  // Flagged entries plus any entry priced outside the allowed range.
   const anomalousEntries = priceRecords.filter((r) => {
     const price = Number(r.price_per_kg);
-    return r.status === "flagged" || price < MIN_PRICE || price > MAX_PRICE;
+    return r.status === "flagged" || price < range.min || price > range.max;
   });
 
   const suggestionAnomalies = [...new Set(suggestions.map((s) => s.species))].flatMap((sp) => {
@@ -3349,7 +3381,7 @@ function PriceAnomalies({ priceRecords, suggestions }) {
 
       <div className="panel">
         <div className="panel-header">
-          <div><h3>Unusual Price Entries</h3><p>Flagged entries, or prices outside the {peso(MIN_PRICE)} – {peso(MAX_PRICE)} range</p></div>
+          <div><h3>Unusual Price Entries</h3><p>Flagged entries, or prices outside the {peso(range.min)} – {peso(range.max)} range set in System Configuration</p></div>
         </div>
         <table>
           <thead><tr><th>DATE</th><th>SPECIES</th><th>PRICE</th><th>MUNICIPALITY</th><th>STATUS</th></tr></thead>

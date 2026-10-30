@@ -1083,3 +1083,85 @@ class LoginSecurityTests(TestCase):
             client = APIClient()
             codes = [client.get("/api/health/").status_code for _ in range(4)]
         self.assertEqual(codes, [200, 200, 200, 429])
+
+
+# ============================================================
+# PRICE CORRECTIONS AND SYSTEM CONFIGURATION
+# ============================================================
+from .models import PriceCorrection, SystemSetting
+
+
+class PriceCorrectionAndSettingsTests(TestCase):
+
+    def setUp(self):
+        cache.clear()
+        roles = {name: Role.objects.create(name=name) for name in ("Administrator", "LGU Officer", "Fish Vendor")}
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.species = FishSpecies.objects.create(name="Galunggong")
+        self.users = {}
+        for username, role in (("pc_admin", "Administrator"), ("pc_lgu", "LGU Officer"), ("pc_vendor", "Fish Vendor")):
+            user = User.objects.create_user(username, f"{username}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=user, role=roles[role], municipality=self.cebu, account_status="approved", is_active=True)
+            self.users[role] = user
+        self.published = PriceRecord.objects.create(
+            fish_species=self.species, municipality=self.cebu, price_per_kg=Decimal("180.00"),
+            recorded_date=timezone.localdate(), status="published",
+        )
+
+    def client_for(self, role):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=self.users[role])[0].key}")
+        return client
+
+    def test_correct_published_price_keeps_original(self):
+        response = self.client_for("LGU Officer").post(
+            f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "175.50", "reason": "Typo in encoding"}, format="json"
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        record = response.data["record"]
+        self.assertEqual(record["price_per_kg"], "175.50")
+        self.assertTrue(record["is_correction"])
+        self.assertEqual(record["corrections"][0]["previous_price"], "180.00")
+        self.assertEqual(record["corrections"][0]["reason"], "Typo in encoding")
+        self.assertTrue(ActivityLog.objects.filter(action="corrected", target_type="PriceRecord").exists())
+
+    def test_correction_requires_reason_and_lgu_or_admin(self):
+        self.assertIn("reason", self.client_for("Administrator").post(
+            f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "170"}, format="json").data)
+        self.assertEqual(self.client_for("Fish Vendor").post(
+            f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "170", "reason": "x"}, format="json").status_code, 403)
+        self.assertFalse(PriceCorrection.objects.exists())
+
+    def test_published_price_cannot_be_edited_or_deleted(self):
+        client = self.client_for("Administrator")
+        self.assertEqual(client.patch(f"/api/prices/{self.published.pk}/", {"price_per_kg": "170"}, format="json").status_code, 403)
+        self.assertEqual(client.delete(f"/api/prices/{self.published.pk}/").status_code, 403)
+        self.assertTrue(PriceRecord.objects.filter(pk=self.published.pk).exists())
+
+    def test_prices_outside_range_are_rejected(self):
+        client = self.client_for("LGU Officer")
+        response = client.post("/api/prices/", {
+            "fish_species": self.species.pk, "municipality": self.cebu.pk, "price_per_kg": "1500",
+            "recorded_date": "2030-01-01",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("between", str(response.data["price_per_kg"]))
+        too_low = client.post(f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "10", "reason": "x"}, format="json")
+        self.assertEqual(too_low.status_code, 400)
+
+    def test_admin_changes_price_range(self):
+        admin = self.client_for("Administrator")
+        self.assertEqual(self.client_for("Fish Vendor").get("/api/system-settings/").data["min_price_per_kg"], "50.00")
+        self.assertEqual(self.client_for("LGU Officer").patch("/api/system-settings/", {"max_price_per_kg": "2000"}, format="json").status_code, 403)
+        bad = admin.patch("/api/system-settings/", {"min_price_per_kg": "500", "max_price_per_kg": "100"}, format="json")
+        self.assertEqual(bad.status_code, 400)
+        ok = admin.patch("/api/system-settings/", {"max_price_per_kg": "2000"}, format="json")
+        self.assertEqual(ok.status_code, 200)
+        self.assertEqual(SystemSetting.load().max_price_per_kg, Decimal("2000"))
+        self.assertTrue(ActivityLog.objects.filter(target_type="SystemSetting").exists())
+        # A ₱1,500 price is now allowed.
+        response = self.client_for("LGU Officer").post("/api/prices/", {
+            "fish_species": self.species.pk, "municipality": self.cebu.pk, "price_per_kg": "1500",
+            "recorded_date": "2030-01-01",
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
