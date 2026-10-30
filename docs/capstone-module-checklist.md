@@ -55,8 +55,8 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Submission & review panel | ✅ | Draft → Pending → Approved → Published, plus Flag/Reject. |
 | Official price publication | ✅ | Paper UC-4 says prices publish **immediately**; system requires review first. Decide which is correct. |
 | Audit & logging | ✅ | Every create/edit/submit/approve/publish/flag/reject is logged. |
-| Configurable min/max price bounds | 🟡 | Fixed ₱50–₱1,000 in the LGU front-end; not configurable, not enforced by the backend. |
-| Corrections keep the original record (IsCorrection / OriginalPriceID, Table 19) | 🟡 | Edits overwrite the record; the change is only kept in the activity log. |
+| Configurable min/max price bounds | ✅ | Admin sets the range in System Configuration; the backend rejects prices outside it (UC-4 4.1). |
+| Corrections keep the original record (IsCorrection / OriginalPriceID, Table 19) | ✅ | Published prices can only be corrected with a reason; `is_correction` flag plus a `PriceCorrection` history (old price, new price, reason, who, when). Published prices cannot be deleted. |
 | External factor integration (fuel, weather, holidays) | ✅ | External Factors page for LGU Officers and Administrators (`/api/external-factors/`). |
 
 ## 5. Predictive Analytics Module — SARIMAX (UC-6, Table 27)
@@ -144,6 +144,5 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
    LGU Officers approve vendors.
 4. ~~**Authentication security**~~ — done: lockout, session timeout, server-side logout,
    login logging, rate limiting. Still needs an email server for reset links and lock notices.
-5. **Price corrections and bounds** — keep original records on correction; configurable
-   min/max bounds (System Configuration).
+5. ~~**Price corrections and bounds**~~ — done: correction history, configurable price range.
 6. **Smaller items** — save calculator history, PDF export, log generated reports.

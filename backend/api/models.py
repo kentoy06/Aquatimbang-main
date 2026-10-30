@@ -594,6 +594,10 @@ A pending record may also be flagged or rejected.
 
     )
 
+    # True once a published price has been corrected; the original and
+    # every later change are kept in PriceCorrection (Table 19).
+    is_correction = models.BooleanField(default=False)
+
     # ---------------------------------------------------------
 
     # USER TRACKING
@@ -998,3 +1002,62 @@ class TokenActivity(models.Model):
 
     def __str__(self):
         return f"{self.token.user.username} last seen {self.last_seen}"
+
+
+
+# ============================================================
+# PRICE CORRECTIONS AND SYSTEM CONFIGURATION
+# ============================================================
+
+class PriceCorrection(models.Model):
+    """
+    One correction to a published price. Keeps the price before and
+    after, so the original value is never lost (audit trail).
+    """
+
+    price_record = models.ForeignKey(PriceRecord, on_delete=models.CASCADE, related_name="corrections")
+    previous_price = models.DecimalField(max_digits=10, decimal_places=2)
+    new_price = models.DecimalField(max_digits=10, decimal_places=2)
+    reason = models.TextField()
+    corrected_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="price_corrections",
+    )
+    corrected_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ["corrected_at", "id"]
+
+    def __str__(self):
+        return f"{self.price_record_id}: {self.previous_price} -> {self.new_price}"
+
+
+class SystemSetting(models.Model):
+    """
+    System-wide parameters set by the Administrator (one row).
+    """
+
+    # Prices per kg outside this range are rejected (UC-4 step 4).
+    min_price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=50)
+    max_price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=1000)
+
+    updated_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def load(cls):
+        """The single settings row, created with defaults if missing."""
+        settings, _ = cls.objects.get_or_create(pk=1)
+        return settings
+
+    def __str__(self):
+        return f"Price range {self.min_price_per_kg}-{self.max_price_per_kg}"

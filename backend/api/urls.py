@@ -25,6 +25,7 @@ from .views import (
     reset_user_password,
     change_my_password,
     logout_user,
+    system_settings,
     pending_registrations,
     registration_options,
     view_verification_document,
@@ -207,6 +208,13 @@ urlpatterns = [
         "auth/users/<int:user_id>/reset-password/",
         reset_user_password,
         name="reset-user-password"
+    ),
+
+    # System Configuration: GET for everyone, PATCH for the Administrator.
+    path(
+        "system-settings/",
+        system_settings,
+        name="system-settings"
     ),
 
     # End this session on the server.
