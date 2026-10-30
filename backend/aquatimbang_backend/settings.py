@@ -160,8 +160,19 @@ REST_FRAMEWORK = {
     # Allow API requests to authenticate using the token
     # returned by the AquaTimbang login endpoint.
     "DEFAULT_AUTHENTICATION_CLASSES": [
-        "rest_framework.authentication.TokenAuthentication",
+        # Token authentication that also ends idle sessions.
+        "api.authentication.ExpiringTokenAuthentication",
     ],
+
+    # Rate limiting (Table 24): requests per client.
+    "DEFAULT_THROTTLE_CLASSES": [
+        "rest_framework.throttling.AnonRateThrottle",
+        "rest_framework.throttling.UserRateThrottle",
+    ],
+    "DEFAULT_THROTTLE_RATES": {
+        "anon": os.environ.get("API_RATE_ANON", "120/minute"),
+        "user": os.environ.get("API_RATE_USER", "1200/minute"),
+    },
 
     # By default, API endpoints require an authenticated user.
     # Individual public endpoints such as login/register can override this.
@@ -204,6 +215,14 @@ CORS_ALLOWED_ORIGINS = env_list(
     "CORS_ALLOWED_ORIGINS",
     "http://localhost:5173,http://127.0.0.1:5173,https://kentoy06.github.io",
 )
+
+# Login security (UC-1, Tables 24 and 41).
+# Log out after this many minutes without any activity.
+SESSION_IDLE_MINUTES = int(os.environ.get("SESSION_IDLE_MINUTES", "30"))
+# Lock a username after this many wrong passwords in a row...
+LOGIN_MAX_ATTEMPTS = int(os.environ.get("LOGIN_MAX_ATTEMPTS", "5"))
+# ...for this many minutes.
+LOGIN_LOCKOUT_MINUTES = int(os.environ.get("LOGIN_LOCKOUT_MINUTES", "15"))
 
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 

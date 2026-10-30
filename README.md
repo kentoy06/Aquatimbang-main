@@ -21,6 +21,8 @@ python manage.py runserver
 All secrets and machine-specific settings (secret key, MySQL password, allowed
 hosts, CORS origins) are read from `backend/.env`, which git ignores. Leave
 `DB_ENGINE` empty in `.env` to use a local SQLite file instead of MySQL.
+Login security can also be tuned there: `SESSION_IDLE_MINUTES` (default 30),
+`LOGIN_MAX_ATTEMPTS` (5) and `LOGIN_LOCKOUT_MINUTES` (15).
 
 ## Run the front-end
 

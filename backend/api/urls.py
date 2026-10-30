@@ -24,6 +24,7 @@ from .views import (
     set_user_status,
     reset_user_password,
     change_my_password,
+    logout_user,
     pending_registrations,
     registration_options,
     view_verification_document,
@@ -206,6 +207,13 @@ urlpatterns = [
         "auth/users/<int:user_id>/reset-password/",
         reset_user_password,
         name="reset-user-password"
+    ),
+
+    # End this session on the server.
+    path(
+        "auth/logout/",
+        logout_user,
+        name="logout-user"
     ),
 
     # Change your own password.

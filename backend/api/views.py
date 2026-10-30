@@ -15,7 +15,7 @@ from django.db import transaction
 from django.utils import timezone
 # Django REST Framework tools.
 from rest_framework import status, viewsets
-from rest_framework.authentication import TokenAuthentication
+from .authentication import ExpiringTokenAuthentication
 from rest_framework.authtoken.models import Token
 from rest_framework.decorators import (
     action,
@@ -66,6 +66,10 @@ def login_user(request):
             {"message": "Username and password are required."},
             status=status.HTTP_400_BAD_REQUEST,
         )
+    # UC-1 3d: a locked username cannot log in, even with the right password.
+    lock = login_lock(username)
+    if lock is not None:
+        return lock
     # Authenticate using Django.
     user = authenticate(
         username=username,
@@ -81,6 +85,9 @@ def login_user(request):
             else:
                 message = "Account disabled. Contact administrator."
             return Response({"message": message}, status=status.HTTP_403_FORBIDDEN)
+        locked = record_failed_login(username)
+        if locked is not None:
+            return locked
         return Response(
             {"message": "Invalid username or password."},
             status=status.HTTP_401_UNAUTHORIZED,
@@ -105,12 +112,16 @@ def login_user(request):
     # Record the login time (token logins do not do this automatically).
     from django.contrib.auth.models import update_last_login
     update_last_login(None, user)
-    # Create or retrieve the authentication token.
+    LoginLockout.objects.filter(username=username.lower()).delete()
+    # Create or retrieve the authentication token; the session starts now.
     token, _ = Token.objects.get_or_create(user=user)
+    TokenActivity.objects.update_or_create(token=token, defaults={"last_seen": timezone.now()})
+    log_activity(user, "logged in", "Authentication", user.pk, user.username)
     return Response(
         {
             "message": "Login successful.",
             "token": token.key,
+            "session_idle_minutes": settings.SESSION_IDLE_MINUTES,
             "user": {
                 "id": user.id,
                 "username": user.username,
@@ -213,7 +224,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             return None
         return previous_record.price_per_kg
     # Require AquaTimbang token authentication.
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     # Apply AquaTimbang price permissions.
     permission_classes = [CanManagePriceRecords]
     def _log_price(self, action, record, details=None):
@@ -713,7 +724,7 @@ class MunicipalityViewSet(viewsets.ModelViewSet):
     # Serializer for Municipality JSON data.
     serializer_class = MunicipalitySerializer
     # Require login token.
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     # Logged-in users can read municipalities,
     # but only administrators can modify them.
     permission_classes = [IsAdministratorOrReadOnly]
@@ -724,7 +735,7 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
     """Fish species CRUD with server-side, transaction-safe audit logging."""
     queryset = FishSpecies.objects.all().order_by("name")
     serializer_class = FishSpeciesSerializer
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     permission_classes = [CanManageFishSpecies]
     def _log(self, action, instance, details=None):
         user = self.request.user
@@ -795,7 +806,7 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
 class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     """Administrators see all logs; other approved users see their own."""
     serializer_class = ActivityLogSerializer
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     def get_permissions(self):
         return [IsAuthenticated()]
     def get_queryset(self):
@@ -1397,7 +1408,7 @@ from .models import VendorPriceSuggestion
 
 class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
     serializer_class = VendorPriceSuggestionSerializer
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     permission_classes = [IsAuthenticated]
     http_method_names = ["get", "post", "head", "options"]
 
@@ -1604,7 +1615,7 @@ class ExternalFactorViewSet(viewsets.ModelViewSet):
     """
 
     serializer_class = ExternalFactorSerializer
-    authentication_classes = [TokenAuthentication]
+    authentication_classes = [ExpiringTokenAuthentication]
     permission_classes = [IsAuthenticated]
     queryset = ExternalFactor.objects.select_related("recorded_by").all()
 
@@ -2168,3 +2179,76 @@ def change_my_password(request):
         token = Token.objects.create(user=request.user)
         log_activity(request.user, "password changed", "UserAccount", request.user.pk, request.user.username)
     return Response({"message": "Password changed.", "token": token.key}, status=status.HTTP_200_OK)
+
+
+# ============================================================
+# LOGIN SECURITY — LOCKOUT AND LOGOUT (UC-1)
+# ============================================================
+from datetime import timedelta
+
+from django.conf import settings
+
+from .models import LoginLockout, TokenActivity
+
+
+def lockout_response(locked_until):
+    minutes = max(1, int((locked_until - timezone.now()).total_seconds() // 60) + 1)
+    return Response(
+        {
+            "message": (
+                f"Too many failed login attempts. This account is locked for {minutes} more "
+                f"minute{'s' if minutes != 1 else ''}. Try again later or contact your administrator."
+            ),
+            "locked_until": locked_until.isoformat(),
+        },
+        status=status.HTTP_429_TOO_MANY_REQUESTS,
+    )
+
+
+def login_lock(username):
+    """Response refusing a locked username, or None."""
+    record = LoginLockout.objects.filter(username=username.lower()).first()
+    if record and record.locked_until and record.locked_until > timezone.now():
+        return lockout_response(record.locked_until)
+    return None
+
+
+@transaction.atomic
+def record_failed_login(username):
+    """
+    Count a wrong password. Locks the username after LOGIN_MAX_ATTEMPTS
+    failures and returns the lock response; otherwise returns None.
+    """
+    now = timezone.now()
+    record, _ = LoginLockout.objects.select_for_update().get_or_create(username=username.lower())
+    if record.locked_until and record.locked_until <= now:
+        # The previous lock has expired; start counting again.
+        record.failed_attempts = 0
+        record.locked_until = None
+    record.failed_attempts += 1
+    record.last_failed_at = now
+
+    user = User.objects.filter(username__iexact=username).first()
+    if user is not None:
+        log_activity(user, "login failed", "Authentication", user.pk, user.username,
+                     {"attempt": record.failed_attempts})
+
+    if record.failed_attempts >= settings.LOGIN_MAX_ATTEMPTS:
+        record.locked_until = now + timedelta(minutes=settings.LOGIN_LOCKOUT_MINUTES)
+        record.save()
+        if user is not None:
+            log_activity(user, "locked", "Authentication", user.pk, user.username,
+                         {"minutes": settings.LOGIN_LOCKOUT_MINUTES})
+        return lockout_response(record.locked_until)
+    record.save()
+    return None
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def logout_user(request):
+    """End this session on the server by deleting its token."""
+    log_activity(request.user, "logged out", "Authentication", request.user.pk, request.user.username)
+    if request.auth is not None:
+        request.auth.delete()
+    return Response({"message": "Logged out."}, status=status.HTTP_200_OK)

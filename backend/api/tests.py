@@ -989,3 +989,97 @@ class AccountManagementTests(TestCase):
         self.assertIn("rejected", rejected.data["message"])
         # A wrong password never reveals the account's status.
         self.assertEqual(self.login("refused", "wrong-password").data["message"], "Invalid username or password.")
+
+
+# ============================================================
+# LOGIN SECURITY (UC-1 3d, Tables 24 and 41)
+# ============================================================
+from datetime import timedelta as _timedelta
+
+from django.core.cache import cache
+from django.test import override_settings
+
+from .models import LoginLockout, TokenActivity
+
+
+@override_settings(LOGIN_MAX_ATTEMPTS=5, LOGIN_LOCKOUT_MINUTES=15, SESSION_IDLE_MINUTES=30)
+class LoginSecurityTests(TestCase):
+
+    def setUp(self):
+        cache.clear()  # reset rate-limit counters between tests
+        role = Role.objects.create(name="Fish Vendor")
+        self.user = User.objects.create_user("sec_vendor", "sec@example.com", "TestPass123!")
+        UserProfile.objects.create(user=self.user, role=role, account_status="approved", is_active=True)
+
+    def login(self, password="TestPass123!", username="sec_vendor"):
+        return APIClient().post("/api/auth/login/", {"username": username, "password": password}, format="json")
+
+    def test_lockout_after_five_wrong_passwords(self):
+        for _ in range(4):
+            self.assertEqual(self.login("wrong").status_code, 401)
+        locked = self.login("wrong")
+        self.assertEqual(locked.status_code, 429)
+        self.assertIn("locked", locked.data["message"])
+        # Even the right password is refused while locked.
+        self.assertEqual(self.login().status_code, 429)
+        self.assertTrue(ActivityLog.objects.filter(action="locked", target_name="sec_vendor").exists())
+        self.assertEqual(ActivityLog.objects.filter(action="login failed", target_name="sec_vendor").count(), 5)
+
+    def test_lock_expires_after_fifteen_minutes(self):
+        for _ in range(5):
+            self.login("wrong")
+        LoginLockout.objects.filter(username="sec_vendor").update(
+            locked_until=timezone.now() - _timedelta(seconds=1)
+        )
+        self.assertEqual(self.login().status_code, 200)
+        self.assertFalse(LoginLockout.objects.filter(username="sec_vendor").exists())
+
+    def test_successful_login_resets_counter_and_is_logged(self):
+        for _ in range(3):
+            self.login("wrong")
+        response = self.login()
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["session_idle_minutes"], 30)
+        self.assertFalse(LoginLockout.objects.filter(username="sec_vendor").exists())
+        self.assertTrue(ActivityLog.objects.filter(action="logged in", target_name="sec_vendor").exists())
+
+    def test_username_case_shares_one_counter(self):
+        for name in ("SEC_VENDOR", "Sec_Vendor", "sec_vendor", "SEC_vendor", "sec_VENDOR"):
+            self.login("wrong", username=name)
+        self.assertEqual(self.login().status_code, 429)
+
+    def test_idle_session_expires(self):
+        token = self.login().data["token"]
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        self.assertEqual(client.get("/api/auth/me/").status_code, 200)
+        TokenActivity.objects.filter(token_id=token).update(last_seen=timezone.now() - _timedelta(minutes=31))
+        expired = client.get("/api/auth/me/")
+        self.assertEqual(expired.status_code, 401)
+        self.assertIn("inactivity", expired.data["detail"])
+        self.assertFalse(Token.objects.filter(key=token).exists())
+
+    def test_activity_keeps_session_alive(self):
+        token = self.login().data["token"]
+        TokenActivity.objects.filter(token_id=token).update(last_seen=timezone.now() - _timedelta(minutes=29))
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        self.assertEqual(client.get("/api/auth/me/").status_code, 200)
+        activity = TokenActivity.objects.get(token_id=token)
+        self.assertLess(timezone.now() - activity.last_seen, _timedelta(minutes=1))
+
+    def test_logout_deletes_token(self):
+        token = self.login().data["token"]
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {token}")
+        self.assertEqual(client.post("/api/auth/logout/").status_code, 200)
+        self.assertFalse(Token.objects.filter(key=token).exists())
+        self.assertEqual(client.get("/api/auth/me/").status_code, 401)
+        self.assertTrue(ActivityLog.objects.filter(action="logged out", target_name="sec_vendor").exists())
+
+    def test_rate_limit(self):
+        from rest_framework.throttling import AnonRateThrottle
+        with mock.patch.object(AnonRateThrottle, "THROTTLE_RATES", {"anon": "3/minute"}):
+            client = APIClient()
+            codes = [client.get("/api/health/").status_code for _ in range(4)]
+        self.assertEqual(codes, [200, 200, 200, 429])

@@ -19,11 +19,11 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Approve / reject registrations | ✅ | LGU Officers review Fish Vendors in their municipality (Vendor Registrations page); Administrators review everyone. |
 | Login with role-based dashboard | ✅ | |
 | "Pending approval" / "Registration rejected" / "Account disabled" login messages | ✅ | UC-1 3b, 3c and E2 wording. A wrong password never reveals the account status. |
-| Logout ends the session | 🟡 | Clears the browser only; the server token stays valid. |
-| Lock account for 15 min after 5 failed logins (UC-1 3d) | ❌ | |
+| Logout ends the session | ✅ | The server deletes the login token (`/api/auth/logout/`). |
+| Lock account for 15 min after 5 failed logins (UC-1 3d) | 🟡 | Locked even with the right password; logged. The email notice needs an email server. |
 | Forgot password → reset link valid 1 hour (UC-1 3e) | ❌ | Login page currently says to contact an Administrator. |
-| Session expires after inactivity (Table 24/41) | ❌ | Tokens never expire. |
-| Log every login with timestamp (UC-1 step 6, AccessLogs) | ❌ | Activity log does not record logins. |
+| Session expires after inactivity (Table 24/41) | ✅ | 30 minutes by default (`SESSION_IDLE_MINUTES`); enforced by the server and by an idle timer in the browser. |
+| Log every login with timestamp (UC-1 step 6, AccessLogs) | ✅ | Logged in, logged out, login failed and locked appear in Activity Logs. |
 
 ## 2. Municipal Fish Price Dashboard Module (UC-2)
 
@@ -114,8 +114,8 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Role-based access control | ✅ | |
 | Credentials in environment variables, no hardcoding | ✅ | `backend/.env`. |
 | CORS restricted to trusted domains | ✅ | `CORS_ALLOWED_ORIGINS`. |
-| Login lockout, session timeout | ❌ | See Module 1. |
-| API rate limiting | ❌ | |
+| Login lockout, session timeout | ✅ | See Module 1. |
+| API rate limiting | ✅ | 120 requests/minute without login, 1,200 with login (configurable in `.env`). |
 | HTTPS, firewall, hosting | ❌ | Backend is not deployed yet. |
 
 ---
@@ -142,8 +142,8 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
    confidence intervals, saved predictions, MAPE/RMSE.
 3. ~~**User Management**~~ — done: create, edit, deactivate, delete, roles, password reset,
    LGU Officers approve vendors.
-4. **Authentication security** — lockout after 5 failed logins, session timeout,
-   server-side logout, login logging, email password reset. (Status messages are done.)
+4. ~~**Authentication security**~~ — done: lockout, session timeout, server-side logout,
+   login logging, rate limiting. Still needs an email server for reset links and lock notices.
 5. **Price corrections and bounds** — keep original records on correction; configurable
    min/max bounds (System Configuration).
 6. **Smaller items** — save calculator history, PDF export, log generated reports.
