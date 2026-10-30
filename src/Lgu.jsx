@@ -18,6 +18,7 @@ import {
 } from "./api/priceData.js";
 import AccountProfile from "./components/AccountProfile.jsx";
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
+import VendorRegistrations from "./components/VendorRegistrations.jsx";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -388,6 +389,7 @@ useEffect(() => {
     {
       label: "FISHERFOLK",
       items: [
+        { name: "Vendor Registrations", icon: "✅" },
         { name: "Fisherfolk Management", icon: "👥" },
         { name: "Price Suggestions", icon: "📥" },
       ],
@@ -447,6 +449,8 @@ useEffect(() => {
         return <LGUFishSpeciesManagement notify={notify} />;
       case "External Factors":
         return <ExternalFactorsPage notify={notify} />;
+      case "Vendor Registrations":
+        return <VendorRegistrations notify={notify} />;
       case "Fisherfolk Management":
         return <FisherfolkManagement fisherfolk={fisherfolk} suggestions={suggestions} loading={fisherfolkLoading} error={fisherfolkError} />;
       case "Price Suggestions":
@@ -602,9 +606,9 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk) {
   const pendingFisherfolk = fisherfolk.filter((f) => f.account_status === "pending");
   if (pendingFisherfolk.length > 0) {
     notifs.push({
-      id: id++, type: "info", page: "Fisherfolk Management",
-      title: `${pendingFisherfolk.length} fisherfolk registration${pendingFisherfolk.length > 1 ? "s" : ""} pending`,
-      detail: "Administrator approval required before they can submit suggestions.",
+      id: id++, type: "warning", page: "Vendor Registrations",
+      title: `${pendingFisherfolk.length} fish vendor registration${pendingFisherfolk.length > 1 ? "s" : ""} waiting for your review`,
+      detail: "Approve or reject them in Vendor Registrations.",
     });
   }
 

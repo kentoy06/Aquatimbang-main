@@ -15,10 +15,10 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Function | Status | Notes |
 |---|---|---|
 | Fish Vendor self-registration | ✅ | Register page with market/stall verification. |
-| LGU Officer accounts | 🟡 | Paper: **created by the System Administrator**. System: LGU Officers self-register and wait for approval. |
-| Approve / reject registrations | 🟡 | Paper: vendors are approved by **LGU Personnel or the Administrator**. System: Administrator only. |
+| LGU Officer accounts | ✅ | Administrators create LGU Officer accounts (active immediately). Self-registration as LGU Officer is still possible and needs Administrator approval. |
+| Approve / reject registrations | ✅ | LGU Officers review Fish Vendors in their municipality (Vendor Registrations page); Administrators review everyone. |
 | Login with role-based dashboard | ✅ | |
-| "Pending approval" / "Registration rejected" login messages | 🟡 | Pending shows "account is inactive"; rejected shows "Invalid username or password". |
+| "Pending approval" / "Registration rejected" / "Account disabled" login messages | ✅ | UC-1 3b, 3c and E2 wording. A wrong password never reveals the account status. |
 | Logout ends the session | 🟡 | Clears the browser only; the server token stays valid. |
 | Lock account for 15 min after 5 failed logins (UC-1 3d) | ❌ | |
 | Forgot password → reset link valid 1 hour (UC-1 3e) | ❌ | Login page currently says to contact an Administrator. |
@@ -88,13 +88,13 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Function | Status | Notes |
 |---|---|---|
 | Review pending registrations, approve/reject | ✅ | With verification documents. |
-| Create user accounts (needed for LGU Officers per UC-1) | ❌ | |
-| Edit / update user information | ❌ | |
-| Deactivate / delete accounts | ❌ | |
-| Role assignment & management | ❌ | |
-| Password reset & recovery | ❌ | |
+| Create user accounts (needed for LGU Officers per UC-1) | ✅ | + Add User. |
+| Edit / update user information | ✅ | Name, username, email, contact, municipality. |
+| Deactivate / delete accounts | ✅ | Deactivating logs the user out. Accounts with price suggestions can only be deactivated, to keep their history. |
+| Role assignment & management | ✅ | One role per account; changing it logs the user out. The last active Administrator cannot be removed or demoted. |
+| Password reset & recovery | 🟡 | Administrator gives a one-time temporary password; users change their password in My Profile. Email reset links (UC-1 3e) need an email server. |
 | User activity logs | ✅ | |
-| Block approval when required fields are missing (e.g. no municipality) | ❌ | |
+| Block approval when required fields are missing (e.g. no municipality) | ✅ | |
 
 ## 8. Fish Species Management Module (UC-8)
 
@@ -140,10 +140,10 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 1. Settle the contradictions above.
 2. ~~**Predictive Analytics (SARIMAX)**~~ — done: external factors, SARIMAX forecast API,
    confidence intervals, saved predictions, MAPE/RMSE.
-3. **User Management** — create, edit, deactivate, role assignment, password reset; let
+3. ~~**User Management**~~ — done: create, edit, deactivate, delete, roles, password reset,
    LGU Officers approve vendors.
-4. **Authentication security** — clear pending/rejected messages, lockout after 5 failed
-   logins, session timeout, server-side logout, login logging.
+4. **Authentication security** — lockout after 5 failed logins, session timeout,
+   server-side logout, login logging, email password reset. (Status messages are done.)
 5. **Price corrections and bounds** — keep original records on correction; configurable
    min/max bounds (System Configuration).
 6. **Smaller items** — save calculator history, PDF export, log generated reports.

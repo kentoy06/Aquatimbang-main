@@ -1,10 +1,78 @@
 import React, { useEffect, useState } from "react";
+import { apiUrl, authHeaders } from "../api/config.js";
 import {
   describeActivity,
   formatDate,
   formatDateTime,
   useMyActivity,
 } from "../api/account.js";
+
+// Change your own password. The server returns a new login token, which
+// replaces the old one so this browser stays logged in.
+function ChangePasswordCard({ notify }) {
+  const empty = { current_password: "", new_password: "", confirm: "" };
+  const [form, setForm] = useState(empty);
+  const [errors, setErrors] = useState({});
+  const [saving, setSaving] = useState(false);
+  const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
+
+  const submit = async () => {
+    if (form.new_password !== form.confirm) {
+      setErrors({ confirm: "The new passwords don't match." });
+      return;
+    }
+    setSaving(true);
+    setErrors({});
+    try {
+      const response = await fetch(apiUrl("/auth/change-password/"), {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ current_password: form.current_password, new_password: form.new_password }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) {
+        setErrors(data && typeof data === "object" ? data : { new_password: "Could not change your password." });
+        return;
+      }
+      localStorage.setItem("authToken", data.token);
+      setForm(empty);
+      notify?.("Password changed. Other devices have been logged out.");
+    } catch {
+      setErrors({ new_password: "Unable to connect to the server." });
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const field = (key, label, autoComplete) => (
+    <div className="form-group">
+      <label htmlFor={`pw-${key}`}>{label}</label>
+      <input id={`pw-${key}`} type="password" autoComplete={autoComplete} value={form[key]} onChange={(e) => update(key, e.target.value)} />
+      {(errors[key] || (key === "new_password" && errors.message)) && (
+        <small style={{ display: "block", marginTop: 4, color: "#b42318", fontSize: 12 }}>{errors[key] || errors.message}</small>
+      )}
+    </div>
+  );
+
+  return (
+    <div className="config-card">
+      <div className="config-header">
+        <div className="config-icon purple">🔑</div>
+        <div><h3>Change Password</h3><p>Use at least 8 characters that are hard to guess</p></div>
+      </div>
+      {field("current_password", "Current Password", "current-password")}
+      {field("new_password", "New Password", "new-password")}
+      {field("confirm", "Confirm New Password", "new-password")}
+      <button
+        className="primary-btn full-btn"
+        onClick={submit}
+        disabled={saving || !form.current_password || !form.new_password}
+      >
+        {saving ? "Saving…" : "Change Password"}
+      </button>
+    </div>
+  );
+}
 
 // Profile page shared by the Administrator, LGU Officer and Fish Vendor
 // dashboards. Reads and saves the logged-in user's own record in Django.
@@ -129,6 +197,8 @@ function AccountProfile({ account, notify, description = "Manage your account de
             ))}
           </div>
         </div>
+
+        <ChangePasswordCard notify={notify} />
       </div>
     </>
   );

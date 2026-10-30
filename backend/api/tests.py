@@ -508,7 +508,8 @@ class UserManagementActivityLogTests(TestCase):
         self.client.credentials(HTTP_AUTHORIZATION=f"Token {token.key}")
         self.pending = User.objects.create_user(username="pending_audit", password="Password123!",
                                                 is_active=False)
-        UserProfile.objects.create(user=self.pending, role=self.vendor_role,
+        self.municipality = Municipality.objects.create(name="Audit City", province="Cebu")
+        UserProfile.objects.create(user=self.pending, role=self.vendor_role, municipality=self.municipality,
                                    is_active=False, account_status="pending")
 
     def test_approval_creates_one_permanent_log(self):
@@ -819,3 +820,172 @@ class ForecastingTests(TestCase):
         day = ExternalFactor.objects.first().date.isoformat()
         response = client.post("/api/external-factors/", {"date": day, "weather": "sunny"}, format="json")
         self.assertEqual(response.status_code, 400)
+
+
+# ============================================================
+# USER MANAGEMENT (UC-7) AND LOGIN MESSAGES (UC-1)
+# ============================================================
+
+class AccountManagementTests(TestCase):
+    """Creating, editing, deactivating and deleting accounts; reviews; passwords."""
+
+    def setUp(self):
+        self.roles = {name: Role.objects.create(name=name) for name in ("Administrator", "LGU Officer", "Fish Vendor")}
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.mandaue = Municipality.objects.create(name="Mandaue City", province="Cebu")
+        self.admin = self.make_user("um_admin", "Administrator", self.cebu)
+        self.officer = self.make_user("um_officer", "LGU Officer", self.cebu)
+        self.vendor = self.make_user("um_vendor", "Fish Vendor", self.cebu)
+
+    def make_user(self, username, role, municipality, status="approved"):
+        active = status == "approved"
+        user = User.objects.create_user(username, f"{username}@example.com", "TestPass123!", first_name=username, is_active=status != "rejected")
+        UserProfile.objects.create(user=user, role=self.roles[role], municipality=municipality, account_status=status, is_active=active)
+        return user
+
+    def client_for(self, user):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=user)[0].key}")
+        return client
+
+    def login(self, username, password="TestPass123!"):
+        return APIClient().post("/api/auth/login/", {"username": username, "password": password}, format="json")
+
+    # ---- creating and editing ----
+
+    def test_admin_creates_active_lgu_account(self):
+        response = self.client_for(self.admin).post("/api/auth/users/", {
+            "username": "new_officer", "email": "new@lgu.gov.ph", "first_name": "New", "last_name": "Officer",
+            "password": "Str0ng-Pass-2026", "role": "LGU Officer", "municipality": self.cebu.pk,
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["account_status"], "approved")
+        self.assertEqual(self.login("new_officer", "Str0ng-Pass-2026").status_code, 200)
+        self.assertTrue(ActivityLog.objects.filter(action="created", target_name="new_officer").exists())
+
+    def test_create_validates_fields(self):
+        response = self.client_for(self.admin).post("/api/auth/users/", {
+            "username": "um_vendor", "email": "UM_ADMIN@example.com", "first_name": "",
+            "password": "123", "role": "Boss", "municipality": "",
+        }, format="json")
+        self.assertEqual(response.status_code, 400)
+        for field in ("username", "email", "first_name", "password", "role"):
+            self.assertIn(field, response.data)
+
+    def test_vendor_or_lgu_needs_municipality(self):
+        response = self.client_for(self.admin).post("/api/auth/users/", {
+            "username": "no_muni", "email": "nm@example.com", "first_name": "No", "password": "Str0ng-Pass-2026",
+            "role": "Fish Vendor", "municipality": None,
+        }, format="json")
+        self.assertIn("municipality", response.data)
+
+    def test_non_admin_cannot_manage_users(self):
+        client = self.client_for(self.officer)
+        self.assertEqual(client.get("/api/auth/users/").status_code, 403)
+        self.assertEqual(client.patch(f"/api/auth/users/{self.vendor.pk}/", {"first_name": "X"}, format="json").status_code, 403)
+
+    def test_edit_and_change_role_ends_sessions(self):
+        Token.objects.create(user=self.vendor)
+        response = self.client_for(self.admin).patch(f"/api/auth/users/{self.vendor.pk}/", {
+            "first_name": "Renamed", "role": "LGU Officer", "municipality": self.mandaue.pk,
+        }, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["role"], "LGU Officer")
+        self.assertEqual(response.data["municipality"], "Mandaue City")
+        self.assertFalse(Token.objects.filter(user=self.vendor).exists())
+        self.assertTrue(ActivityLog.objects.filter(action="role changed", target_name="um_vendor").exists())
+
+    def test_admin_cannot_change_own_role(self):
+        response = self.client_for(self.admin).patch(f"/api/auth/users/{self.admin.pk}/", {"role": "Fish Vendor"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    # ---- deactivate, delete ----
+
+    def test_deactivate_blocks_login_and_reactivate_restores_it(self):
+        client = self.client_for(self.admin)
+        response = client.post(f"/api/auth/users/{self.vendor.pk}/status/", {"active": False}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(response.data["is_active"])
+        login = self.login("um_vendor")
+        self.assertEqual(login.status_code, 403)
+        self.assertEqual(login.data["message"], "Account disabled. Contact administrator.")
+        client.post(f"/api/auth/users/{self.vendor.pk}/status/", {"active": True}, format="json")
+        self.assertEqual(self.login("um_vendor").status_code, 200)
+
+    def test_cannot_deactivate_self_or_last_admin(self):
+        client = self.client_for(self.admin)
+        self.assertEqual(client.post(f"/api/auth/users/{self.admin.pk}/status/", {"active": False}, format="json").status_code, 400)
+        self.assertEqual(client.delete(f"/api/auth/users/{self.admin.pk}/").status_code, 400)
+
+    def test_delete_account_without_records(self):
+        response = self.client_for(self.admin).delete(f"/api/auth/users/{self.vendor.pk}/")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(User.objects.filter(pk=self.vendor.pk).exists())
+        self.assertTrue(ActivityLog.objects.filter(action="deleted", target_name="um_vendor").exists())
+
+    def test_delete_account_with_suggestions_is_refused(self):
+        from .models import FishSpecies, VendorPriceSuggestion
+        species = FishSpecies.objects.create(name="Galunggong")
+        VendorPriceSuggestion.objects.create(vendor=self.vendor, fish_species=species, municipality=self.cebu, suggested_price=180)
+        response = self.client_for(self.admin).delete(f"/api/auth/users/{self.vendor.pk}/")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Deactivate", response.data["message"])
+        self.assertTrue(User.objects.filter(pk=self.vendor.pk).exists())
+        self.assertFalse(ActivityLog.objects.filter(action="deleted", target_name="um_vendor").exists())
+
+    # ---- passwords ----
+
+    def test_admin_reset_gives_working_temporary_password(self):
+        Token.objects.create(user=self.vendor)
+        response = self.client_for(self.admin).post(f"/api/auth/users/{self.vendor.pk}/reset-password/")
+        self.assertEqual(response.status_code, 200)
+        temporary = response.data["temporary_password"]
+        self.assertFalse(Token.objects.filter(user=self.vendor).exists())
+        self.assertEqual(self.login("um_vendor", temporary).status_code, 200)
+        self.assertEqual(self.login("um_vendor").status_code, 401)
+
+    def test_change_own_password(self):
+        client = self.client_for(self.vendor)
+        wrong = client.post("/api/auth/change-password/", {"current_password": "nope", "new_password": "An0ther-Pass-2026"}, format="json")
+        self.assertIn("current_password", wrong.data)
+        weak = client.post("/api/auth/change-password/", {"current_password": "TestPass123!", "new_password": "123"}, format="json")
+        self.assertIn("new_password", weak.data)
+        response = client.post("/api/auth/change-password/", {"current_password": "TestPass123!", "new_password": "An0ther-Pass-2026"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertTrue(response.data["token"])
+        self.assertEqual(self.login("um_vendor", "An0ther-Pass-2026").status_code, 200)
+
+    # ---- reviewing registrations ----
+
+    def test_lgu_officer_reviews_vendors_in_own_municipality_only(self):
+        local = self.make_user("local_vendor", "Fish Vendor", self.cebu, status="pending")
+        other = self.make_user("other_vendor", "Fish Vendor", self.mandaue, status="pending")
+        pending_lgu = self.make_user("pending_lgu", "LGU Officer", self.cebu, status="pending")
+        client = self.client_for(self.officer)
+
+        listed = [row["username"] for row in client.get("/api/auth/users/pending/").data["results"]]
+        self.assertEqual(listed, ["local_vendor"])
+
+        self.assertEqual(client.post(f"/api/auth/users/{local.pk}/approve/", {"verification_confirmed": True}, format="json").status_code, 200)
+        self.assertEqual(client.post(f"/api/auth/users/{other.pk}/approve/", {"verification_confirmed": True}, format="json").status_code, 403)
+        self.assertEqual(client.post(f"/api/auth/users/{pending_lgu.pk}/approve/", {"verification_confirmed": True}, format="json").status_code, 403)
+
+    def test_approval_requires_municipality(self):
+        no_muni = self.make_user("no_muni_vendor", "Fish Vendor", None, status="pending")
+        response = self.client_for(self.admin).post(f"/api/auth/users/{no_muni.pk}/approve/", {"verification_confirmed": True}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("municipality", response.data["message"])
+
+    # ---- login messages ----
+
+    def test_login_messages_for_pending_and_rejected(self):
+        self.make_user("waiting", "Fish Vendor", self.cebu, status="pending")
+        self.make_user("refused", "Fish Vendor", self.cebu, status="rejected")
+        pending = self.login("waiting")
+        self.assertEqual(pending.status_code, 403)
+        self.assertIn("pending approval", pending.data["message"])
+        rejected = self.login("refused")
+        self.assertEqual(rejected.status_code, 403)
+        self.assertIn("rejected", rejected.data["message"])
+        # A wrong password never reveals the account's status.
+        self.assertEqual(self.login("refused", "wrong-password").data["message"], "Invalid username or password.")
