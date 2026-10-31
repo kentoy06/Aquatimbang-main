@@ -76,10 +76,12 @@ export function FishPicker({ species, value, onChange, myFish = [], disabled = f
             <div className="fish-preview-photo">
               {url ? <img src={url} alt={selected.name} /> : <span>{labels.noPhoto || "No photo yet"}</span>}
             </div>
-            <strong>{selected.name}</strong>
-            {selected.scientific_name && <em>{selected.scientific_name}</em>}
-            {myFish.includes(String(selected.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
-            {selected.photo_credit && url && <small className="fish-credit">{labels.credit || "Photo"}: {selected.photo_credit}</small>}
+            <div className="fish-preview-info">
+              <strong>{selected.name}</strong>
+              {selected.scientific_name && <em>{selected.scientific_name}</em>}
+              {myFish.includes(String(selected.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
+              {selected.photo_credit && url && <small className="fish-credit">{labels.credit || "Photo"}: {selected.photo_credit}</small>}
+            </div>
           </div>
         )}
       </div>
