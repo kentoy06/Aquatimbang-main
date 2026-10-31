@@ -6,6 +6,7 @@ import {
   formatDateTime,
   useMyActivity,
 } from "../api/account.js";
+import { useProtectedImage } from "../api/images.js";
 
 // Change your own password. The server returns a new login token, which
 // replaces the old one so this browser stays logged in.
@@ -76,8 +77,9 @@ function ChangePasswordCard({ notify }) {
 
 // Profile page shared by the Administrator, LGU Officer and Fish Vendor
 // dashboards. Reads and saves the logged-in user's own record in Django.
-function AccountProfile({ account, notify, description = "Manage your account details and see your recent activity." }) {
+function AccountProfile({ account, notify, description = "Manage your account details and see your recent activity.", children }) {
   const { profile, loading, error, save } = account;
+  const photo = useProtectedImage(profile?.has_photo ? "/auth/me/photo/" : "");
   const { activity, loading: activityLoading, error: activityError } = useMyActivity();
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -134,7 +136,9 @@ function AccountProfile({ account, notify, description = "Manage your account de
       <div className="config-grid">
         <div className="config-card">
           <div className="config-header">
-            <div className="config-icon blue">♙</div>
+            {photo
+              ? <img src={photo} alt="Your profile" style={{ width: 52, height: 52, borderRadius: 12, objectFit: "cover", flexShrink: 0 }} />
+              : <div className="config-icon blue">♙</div>}
             <div>
               <h3>Profile Information</h3>
               <p>Your registered account details</p>
@@ -197,6 +201,8 @@ function AccountProfile({ account, notify, description = "Manage your account de
             ))}
           </div>
         </div>
+
+        {children}
 
         <ChangePasswordCard notify={notify} />
       </div>

@@ -20,6 +20,7 @@ import AccountProfile from "./components/AccountProfile.jsx";
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
 import { listExternalFactors } from "./api/forecast.js";
+import { FishPhotoInput, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 import { describeFilters, exportReport } from "./api/reportExport.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
@@ -907,6 +908,7 @@ function LGUFishSpeciesManagement({ notify }) {
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", scientific_name: "", description: "" });
+  const [photoFile, setPhotoFile] = useState(null);
 
   const request = async (url, method = "GET", payload) => {
     const token = localStorage.getItem("authToken");
@@ -952,10 +954,12 @@ function LGUFishSpeciesManagement({ notify }) {
   const openAdd = () => {
     setEditing(null);
     setForm({ name: "", scientific_name: "", description: "" });
+    setPhotoFile(null);
     setShowForm(true);
   };
   const openEdit = (item) => {
     setEditing(item);
+    setPhotoFile(null);
     setForm({
       name: item.name || "",
       scientific_name: item.scientific_name || "",
@@ -975,7 +979,8 @@ function LGUFishSpeciesManagement({ notify }) {
     if (!payload.name) { notify("Fish species name is required."); return; }
     setBusy(true);
     try {
-      await request(editing ? `${API}${editing.id}/` : API, editing ? "PATCH" : "POST", payload);
+      const saved = await request(editing ? `${API}${editing.id}/` : API, editing ? "PATCH" : "POST", payload);
+      if (photoFile) await uploadSpeciesPhoto(saved.id, photoFile);
       await loadSpecies();
       setShowForm(false);
       setEditing(null);
@@ -1035,7 +1040,12 @@ function LGUFishSpeciesManagement({ notify }) {
                 : filtered.length === 0 ? <tr><td colSpan="4">No fish species found.</td></tr>
                 : filtered.map((item) => (
                   <tr key={item.id}>
-                    <td><strong>{item.name}</strong></td>
+                    <td>
+                      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+                        <FishThumb fish={item} size={38} />
+                        <strong>{item.name}</strong>
+                      </div>
+                    </td>
                     <td>{item.scientific_name || "—"}</td>
                     <td>
                       <span style={{
@@ -1108,6 +1118,7 @@ function LGUFishSpeciesManagement({ notify }) {
                 <textarea id="lgu-species-description" rows={4} value={form.description}
                   onChange={(event) => setForm((old) => ({ ...old, description: event.target.value }))} />
               </div>
+              <FishPhotoInput fish={editing} file={photoFile} onChange={setPhotoFile} />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
                 <button type="button" disabled={busy} onClick={() => setShowForm(false)}
                   style={{ padding: "10px 18px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 600, cursor: "pointer" }}>Cancel</button>

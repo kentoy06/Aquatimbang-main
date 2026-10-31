@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import "./App.css";
 import "./Login.css";
 import { API_BASE_URL } from "./api/config.js";
+import { MAX_DOCUMENT_MB, checkUpload, compressImage } from "./api/images.js";
 
 function Register({ onBack, onGoToLogin }) {
   const [role, setRole] = useState("Fish Vendor");
@@ -19,12 +20,17 @@ function Register({ onBack, onGoToLogin }) {
   municipality: "",
   municipalityOther: "",
 
+  // Photo and purpose (every applicant)
+  profile_photo: null,
+  registration_reason: "",
+
   // Fish Vendor verification
   market_name: "",
   stall_number: "",
   permit_number: "",
   permit_document: null,
   stall_photo: null,
+  species_sold: [],
 
   // LGU Officer verification
   department: "",
@@ -42,6 +48,8 @@ function Register({ onBack, onGoToLogin }) {
     // Registration options retrieved from Django.
   const [roles, setRoles] = useState([]);
   const [municipalities, setMunicipalities] = useState([]);
+  const [fishSpecies, setFishSpecies] = useState([]);
+  const [fileErrors, setFileErrors] = useState({});
   const [loadingOptions, setLoadingOptions] = useState(true);
 
     useEffect(() => {
@@ -59,6 +67,7 @@ function Register({ onBack, onGoToLogin }) {
 
         setRoles(data.roles);
         setMunicipalities(data.municipalities);
+        setFishSpecies(data.fish_species || []);
 
         // Select the first municipality returned by Django.
         if (data.municipalities.length > 0) {
@@ -80,7 +89,23 @@ function Register({ onBack, onGoToLogin }) {
     loadRegistrationOptions();
   }, []);
 
-  const update = (key, value) => setForm({ ...form, [key]: value });
+  const update = (key, value) => setForm((previous) => ({ ...previous, [key]: value }));
+
+  // Check a chosen file, shrinking large photos before they are uploaded.
+  const pickFile = async (key, file, image) => {
+    const ready = image ? await compressImage(file) : file;
+    const problem = checkUpload(ready, { image });
+    setFileErrors((previous) => ({ ...previous, [key]: problem }));
+    update(key, problem ? null : ready);
+  };
+
+  const toggleSpecies = (id) =>
+    setForm((previous) => ({
+      ...previous,
+      species_sold: previous.species_sold.includes(id)
+        ? previous.species_sold.filter((value) => value !== id)
+        : [...previous.species_sold, id],
+    }));
 
   const handleSubmit = async (e) => {
   e.preventDefault();
@@ -138,12 +163,32 @@ function Register({ onBack, onGoToLogin }) {
     return;
   }
 
+  if (!form.profile_photo) {
+    setError("Please upload a clear photo of your face.");
+    return;
+  }
+
+  if (form.registration_reason.trim().length < 15) {
+    setError("Please tell us why you are registering (at least 15 characters).");
+    return;
+  }
+
   const firstName = form.first_name.trim();
   const lastName = form.last_name.trim();
 
   // Required verification details for the selected role.
   if (role === "Fish Vendor" && (!form.market_name.trim() || !form.stall_number.trim())) {
     setError("Please enter your public market name and stall number.");
+    return;
+  }
+
+  if (role === "Fish Vendor" && form.species_sold.length === 0) {
+    setError("Please select at least one fish species that you sell.");
+    return;
+  }
+
+  if (role === "Fish Vendor" && !form.stall_photo) {
+    setError("Please upload a photo of your market stall.");
     return;
   }
 
@@ -166,12 +211,15 @@ registrationData.append("municipality", String(selectedMunicipality.id));
 registrationData.append("contact_number", form.contact.trim());
 registrationData.append("date_of_birth", form.dob);
 registrationData.append("sex", form.sex);
+registrationData.append("profile_photo", form.profile_photo);
+registrationData.append("registration_reason", form.registration_reason.trim());
 
 // Add verification information for the selected role only.
 if (role === "Fish Vendor") {
   registrationData.append("market_name", form.market_name.trim());
   registrationData.append("stall_number", form.stall_number.trim());
   registrationData.append("permit_number", form.permit_number.trim());
+  form.species_sold.forEach((id) => registrationData.append("species_sold", String(id)));
 
   if (form.permit_document) {
     registrationData.append("permit_document", form.permit_document);
@@ -419,6 +467,36 @@ if (role === "LGU Officer") {
               </div>
             </section>
 
+            {/* PHOTO & PURPOSE */}
+            <section className="register-section">
+              <h4 className="register-section-title">Photo &amp; Purpose</h4>
+
+              <FileField
+                id="reg-profile-photo"
+                label="Your Photo"
+                hint="A clear, front-facing photo of your face, like an ID picture (no sunglasses or caps) · JPG or PNG"
+                accept=".jpg,.jpeg,.png"
+                file={form.profile_photo}
+                error={fileErrors.profile_photo}
+                onChange={(file) => pickFile("profile_photo", file, true)}
+              />
+
+              <div className="form-group">
+                <label htmlFor="reg-reason">Why are you registering?</label>
+                <textarea
+                  id="reg-reason"
+                  rows={3}
+                  maxLength={500}
+                  value={form.registration_reason}
+                  placeholder={role === "Fish Vendor"
+                    ? "e.g. I sell bangus and tilapia at Carbon Market and want to check the official prices before selling."
+                    : "e.g. I encode and validate the daily fish prices for the City Agriculture Office."}
+                  onChange={(e) => update("registration_reason", e.target.value)}
+                />
+                <small className="field-help">{form.registration_reason.trim().length}/500 · The reviewer reads this before approving your account.</small>
+              </div>
+            </section>
+
             {/* FISH VENDOR VERIFICATION */}
             {role === "Fish Vendor" && (
               <section className="register-section register-section-verify">
@@ -439,6 +517,23 @@ if (role === "LGU Officer") {
                 </div>
 
                 <div className="form-group">
+                  <span className="file-field-label">Fish You Sell</span>
+                  {fishSpecies.length === 0 ? (
+                    <small className="field-help">{loadingOptions ? "Loading fish species…" : "No fish species are registered yet."}</small>
+                  ) : (
+                    <div className="species-picker" role="group" aria-label="Fish you sell">
+                      {fishSpecies.map((fish) => (
+                        <label key={fish.id} className={`species-option ${form.species_sold.includes(fish.id) ? "species-option-on" : ""}`}>
+                          <input type="checkbox" checked={form.species_sold.includes(fish.id)} onChange={() => toggleSpecies(fish.id)} />
+                          {fish.name}
+                        </label>
+                      ))}
+                    </div>
+                  )}
+                  <small className="field-help">Select every fish you usually sell. Their prices appear first on your dashboard.</small>
+                </div>
+
+                <div className="form-group">
                   <label htmlFor="reg-permit-number">Vendor Permit Number <span className="optional">(optional)</span></label>
                   <input id="reg-permit-number" type="text" placeholder="Enter your vendor permit number" value={form.permit_number} onChange={(e) => update("permit_number", e.target.value)} />
                 </div>
@@ -447,20 +542,21 @@ if (role === "LGU Officer") {
                   id="reg-permit-document"
                   label="Vendor Permit or Market Certification"
                   optional
-                  hint="PDF, JPG or PNG"
+                  hint={`Any one: Mayor's or business permit, stall lease or certificate from the Market Administrator, or a barangay certification that you sell fish · PDF, JPG or PNG · up to ${MAX_DOCUMENT_MB} MB`}
                   accept=".pdf,.jpg,.jpeg,.png"
                   file={form.permit_document}
-                  onChange={(file) => update("permit_document", file)}
+                  error={fileErrors.permit_document}
+                  onChange={(file) => pickFile("permit_document", file, false)}
                 />
 
                 <FileField
                   id="reg-stall-photo"
                   label="Photo of Your Market Stall"
-                  optional
-                  hint="JPG or PNG"
+                  hint="Show your stall with fish on display and the stall number or market sign visible · JPG or PNG"
                   accept=".jpg,.jpeg,.png"
                   file={form.stall_photo}
-                  onChange={(file) => update("stall_photo", file)}
+                  error={fileErrors.stall_photo}
+                  onChange={(file) => pickFile("stall_photo", file, true)}
                 />
               </section>
             )}
@@ -499,10 +595,11 @@ if (role === "LGU Officer") {
                 <FileField
                   id="reg-authorization"
                   label="Proof of Employment or Authorization"
-                  hint="Official employment certificate or authorization letter · PDF, JPG or PNG"
+                  hint={`Any one: Certificate of Employment, appointment or office order, or an authorization letter signed by your department head on official letterhead · PDF preferred (JPG or PNG accepted) · up to ${MAX_DOCUMENT_MB} MB`}
                   accept=".pdf,.jpg,.jpeg,.png"
                   file={form.authorization_document}
-                  onChange={(file) => update("authorization_document", file)}
+                  error={fileErrors.authorization_document}
+                  onChange={(file) => pickFile("authorization_document", file, false)}
                 />
               </section>
             )}
@@ -529,7 +626,7 @@ if (role === "LGU Officer") {
 }
 
 // File picker styled as an upload box that shows the chosen file name.
-function FileField({ id, label, hint, accept, file, onChange, optional = false }) {
+function FileField({ id, label, hint, accept, file, onChange, error = "", optional = false }) {
   return (
     <div className="form-group">
       <span className="file-field-label">
@@ -543,6 +640,7 @@ function FileField({ id, label, hint, accept, file, onChange, optional = false }
         </span>
         <input id={id} type="file" accept={accept} onChange={(e) => onChange(e.target.files?.[0] || null)} />
       </label>
+      {error && <small className="field-error" role="alert">{error}</small>}
     </div>
   );
 }

@@ -16,7 +16,9 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 |---|---|---|
 | Fish Vendor self-registration | ✅ | Register page with market/stall verification. |
 | LGU Officer accounts | ✅ | Administrators create LGU Officer accounts (active immediately). Self-registration as LGU Officer is still possible and needs Administrator approval. |
-| Approve / reject registrations | ✅ | LGU Officers review Fish Vendors in their municipality (Vendor Registrations page); Administrators review everyone. |
+| Approve / reject registrations | ✅ | LGU Officers review Fish Vendors in their municipality (Vendor Registrations page); Administrators review everyone. Approval requires ticking every item of a role-specific checklist (Approval guidelines). A rejected applicant sees the reason when logging in. |
+| Profile photo, reason for registering, fish sold | ✅ | Every applicant uploads a face photo and writes why they are registering. Vendors pick the fish they sell (shown first on their dashboard; editable in My Profile). |
+| Verification uploads | ✅ | Documents: PDF, JPG or PNG up to 10 MB. Photos: JPG or PNG up to 5 MB; large phone photos are shrunk in the browser first. Vendors must upload a stall photo; the permit is optional. LGU Officers must upload proof of employment. |
 | Login with role-based dashboard | ✅ | |
 | "Pending approval" / "Registration rejected" / "Account disabled" login messages | ✅ | UC-1 3b, 3c and E2 wording. A wrong password never reveals the account status. |
 | Logout ends the session | ✅ | The server deletes the login token (`/api/auth/logout/`). |
@@ -104,7 +106,14 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Common & scientific name registry | ✅ | |
 | Active/inactive status | ✅ | Inactive species hidden from price entry. |
 | Duplicate-name check | ✅ | |
+| Species photo | ✅ | LGU Officers and Administrators upload a photo; vendors tap a fish name to see the photo, description and latest price. |
 | Warn before deactivating a species with price entries | 🟡 | LGU page confirms; deletion is blocked when prices exist. |
+
+## Accessibility (not in the paper)
+
+| Function | Status | Notes |
+|---|---|---|
+| Vendor dashboard in English, Filipino and Cebuano | ✅ | Language picker in the vendor header, remembered on the device. Menus, dashboard, current prices, calculator, suggestions, notifications, help and My Profile are translated; Price Trends, Community Average and Export Reports details stay in English. Translations should be checked by a native speaker. |
 
 ## Security requirements (Tables 24 and 41)
 

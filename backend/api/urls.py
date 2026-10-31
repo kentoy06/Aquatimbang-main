@@ -14,6 +14,7 @@ from .views import (
     health_check,
     public_summary,
     my_profile,
+    my_photo,
     list_fisherfolk,
     login_user,
     register_user,
@@ -169,6 +170,13 @@ urlpatterns = [
         "auth/me/",
         my_profile,
         name="my-profile"
+    ),
+
+    # The logged-in user's own profile photo.
+    path(
+        "auth/me/photo/",
+        my_photo,
+        name="my-photo"
     ),
 
     # Fish Vendor accounts for LGU Officers and Administrators.

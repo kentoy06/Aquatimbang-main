@@ -409,3 +409,129 @@
   background: #fff4df;
   color: #c58216;
 }
+/* Language switcher */
+.language-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border: 1px solid #d0d5dd;
+  border-radius: 10px;
+  background: #fff;
+  font-size: 13px;
+}
+
+.language-picker select {
+  border: 0;
+  background: transparent;
+  font: inherit;
+  color: #1d2939;
+  cursor: pointer;
+}
+
+/* Fish name that opens the fish details */
+.fish-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 0;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.fish-link:hover strong {
+  color: #0e7c86;
+  text-decoration: underline;
+}
+
+/* My Fish Today */
+.my-fish-panel {
+  margin-bottom: 18px;
+}
+
+.my-fish-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 12px;
+  padding: 0 18px 18px;
+}
+
+.my-fish-card {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #d5ecee;
+  border-radius: 12px;
+  background: #f5fbfb;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.my-fish-card:hover {
+  border-color: #0e7c86;
+}
+
+.my-fish-text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+
+.my-fish-price {
+  font-size: 17px;
+  font-weight: 700;
+  color: #0e7c86;
+}
+
+.my-fish-text small {
+  color: #667085;
+}
+
+.my-fish-empty {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 0 18px 18px;
+  color: #475467;
+}
+
+/* Fish I Sell (My Profile) */
+.species-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.species-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 5px 12px 5px 6px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.species-chip.on {
+  border-color: #0e7c86;
+  background: #e6f4f5;
+  font-weight: 600;
+}
+
+.species-chip input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: #0e7c86;
+}

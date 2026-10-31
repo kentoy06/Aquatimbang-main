@@ -777,3 +777,75 @@
   line-height: 1.5;
   margin-bottom: 14px;
 }
+
+/* =========================
+   REGISTER — PHOTO, PURPOSE, FISH SOLD
+========================= */
+.login-page .form-group textarea {
+  width: 100%;
+  min-height: 84px;
+  padding: 10px 12px;
+  font: inherit;
+  font-size: 13.5px;
+  color: #1d2939;
+  border: 1px solid #d0d5dd;
+  border-radius: 8px;
+  resize: vertical;
+  box-sizing: border-box;
+}
+
+.login-page .form-group textarea:focus {
+  outline: none;
+  border-color: #0E7C86;
+  box-shadow: 0 0 0 3px rgba(14, 124, 134, .12);
+}
+
+.login-page .field-help {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #667085;
+}
+
+.login-page .field-error {
+  display: block;
+  margin-top: 5px;
+  font-size: 12px;
+  color: #b42318;
+}
+
+.login-page .species-picker {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 6px;
+}
+
+.login-page .species-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border: 1px solid #d0d5dd;
+  border-radius: 999px;
+  background: #fff;
+  font-size: 13px;
+  color: #344054;
+  cursor: pointer;
+  user-select: none;
+}
+
+.login-page .species-option-on {
+  border-color: #0E7C86;
+  background: #e6f4f5;
+  color: #0b5f66;
+  font-weight: 600;
+}
+
+.login-page .form-group .species-option input {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  padding: 0;
+  accent-color: #0E7C86;
+}

@@ -142,6 +142,30 @@ class RegisterSerializer(serializers.Serializer):
 
 )
 
+    # Every applicant uploads a clear photo of their face.
+    profile_photo = serializers.ImageField(
+        validators=[validate_image_upload],
+        error_messages={"required": "A profile photo is required.", "invalid": "Upload a valid JPG or PNG photo."},
+    )
+
+    # Why the applicant is registering; read by the reviewer.
+    registration_reason = serializers.CharField(
+        min_length=15,
+        max_length=500,
+        error_messages={
+            "required": "Tell us why you are registering.",
+            "blank": "Tell us why you are registering.",
+            "min_length": "Please write at least 15 characters about why you are registering.",
+        },
+    )
+
+    # Fish species a vendor sells (required for Fish Vendors).
+    species_sold = serializers.PrimaryKeyRelatedField(
+        queryset=FishSpecies.objects.filter(is_active=True),
+        many=True,
+        required=False,
+    )
+
     # ========================================================
 
     # LGU OFFICER VERIFICATION FIELDS
@@ -255,11 +279,19 @@ class RegisterSerializer(serializers.Serializer):
             # Fish Vendors must provide their stall number.
 
             if not attrs.get("stall_number", "").strip():
-
                 raise serializers.ValidationError({
-
                     "stall_number": "Stall number is required for Fish Vendors."
+                })
 
+            # A stall photo is the main proof for vendors without a permit.
+            if not attrs.get("stall_photo"):
+                raise serializers.ValidationError({
+                    "stall_photo": "A photo of your market stall is required."
+                })
+
+            if not attrs.get("species_sold"):
+                raise serializers.ValidationError({
+                    "species_sold": "Select at least one fish species that you sell."
                 })
 
         # ====================================================
@@ -399,6 +431,9 @@ class RegisterSerializer(serializers.Serializer):
         date_of_birth = validated_data.pop("date_of_birth", None)
 
         sex = validated_data.pop("sex", "")
+        profile_photo = validated_data.pop("profile_photo")
+        registration_reason = validated_data.pop("registration_reason").strip()
+        species_sold = validated_data.pop("species_sold", [])
 
         # Extract Fish Vendor verification information.
 
@@ -447,16 +482,15 @@ class RegisterSerializer(serializers.Serializer):
             date_of_birth=date_of_birth,
 
             sex=sex,
-
+            profile_photo=profile_photo,
+            registration_reason=registration_reason,
             is_active=False,
-
         )
 
                 # Save additional verification details for Fish Vendors.
 
         if role.name == "Fish Vendor":
-
-            FishVendorVerification.objects.create(
+            vendor = FishVendorVerification.objects.create(
 
                 profile=profile,
 
@@ -469,8 +503,8 @@ class RegisterSerializer(serializers.Serializer):
                 permit_document=permit_document,
 
                 stall_photo=stall_photo,
-
             )
+            vendor.species_sold.set(species_sold)
 
         # Save additional verification details for LGU Officers.
 
@@ -526,6 +560,18 @@ class MunicipalitySerializer(serializers.ModelSerializer):
 
 class FishSpeciesSerializer(serializers.ModelSerializer):
 
+    # Upload only; the picture is served by /fish-species/<id>/photo/.
+    photo = serializers.ImageField(
+        write_only=True,
+        required=False,
+        allow_null=True,
+        validators=[validate_image_upload],
+    )
+    has_photo = serializers.SerializerMethodField()
+
+    def get_has_photo(self, obj):
+        return bool(obj.photo)
+
     """
 
     Converts FishSpecies records to and from JSON.
@@ -547,6 +593,10 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
             "scientific_name",
 
             "description",
+
+            "photo",
+
+            "has_photo",
 
             "is_active",
 
