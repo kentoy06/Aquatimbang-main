@@ -5,7 +5,10 @@ from PIL import Image, UnidentifiedImageError
 from django.core.exceptions import ValidationError
 
 
-MAX_UPLOAD_SIZE = 5 * 1024 * 1024  # 5 MB
+# Scanned documents can be large; photos are shrunk in the browser
+# before upload, so 5 MB is plenty for them.
+MAX_DOCUMENT_SIZE = 10 * 1024 * 1024  # 10 MB
+MAX_IMAGE_SIZE = 5 * 1024 * 1024  # 5 MB
 
 ALLOWED_DOCUMENT_EXTENSIONS = {
     ".pdf", ".jpg", ".jpeg", ".png"
@@ -56,9 +59,9 @@ def validate_file_contents(file, extension):
 
 
 def validate_document_upload(file):
-    if file.size > MAX_UPLOAD_SIZE:
+    if file.size > MAX_DOCUMENT_SIZE:
         raise ValidationError(
-            "File size must not exceed 5 MB."
+            "File size must not exceed 10 MB."
         )
 
     extension = Path(file.name).suffix.lower()
@@ -71,7 +74,7 @@ def validate_document_upload(file):
 
 
 def validate_image_upload(file):
-    if file.size > MAX_UPLOAD_SIZE:
+    if file.size > MAX_IMAGE_SIZE:
         raise ValidationError(
             "File size must not exceed 5 MB."
         )

@@ -1233,3 +1233,101 @@ class CalculatorAndReportTests(TestCase):
         self.assertEqual(len(self.client_for("cr_admin").get("/api/reports/").data), 2)
         bad = self.client_for("cr_lgu").post("/api/reports/", {**payload, "format": "DOCX"}, format="json")
         self.assertEqual(bad.status_code, 400)
+
+
+def _png_upload(name="photo.png"):
+    from io import BytesIO
+    from PIL import Image
+    from django.core.files.uploadedfile import SimpleUploadedFile
+    buffer = BytesIO()
+    Image.new("RGB", (8, 8), (14, 124, 134)).save(buffer, format="PNG")
+    return SimpleUploadedFile(name, buffer.getvalue(), content_type="image/png")
+
+
+class RegistrationPhotoAndSpeciesTests(TestCase):
+    """Profile photo, registration reason, fish sold, and species photos."""
+
+    def setUp(self):
+        import tempfile
+        from django.test import override_settings
+        media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+        cache.clear()
+        self.roles = {name: Role.objects.create(name=name) for name in ("Administrator", "LGU Officer", "Fish Vendor")}
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.bangus = FishSpecies.objects.create(name="Bangus")
+        self.tilapia = FishSpecies.objects.create(name="Tilapia")
+        self.users = {}
+        for username, role in (("rp_admin", "Administrator"), ("rp_lgu", "LGU Officer")):
+            user = User.objects.create_user(username, f"{username}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=user, role=self.roles[role], municipality=self.cebu, account_status="approved", is_active=True)
+            self.users[username] = user
+
+    def client_for(self, user):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=user)[0].key}")
+        return client
+
+    def vendor_payload(self, **overrides):
+        payload = {
+            "username": "new_vendor", "email": "new_vendor@example.com", "password": "TestPass123!",
+            "first_name": "Maria", "last_name": "Santos", "role": self.roles["Fish Vendor"].id,
+            "municipality": self.cebu.id, "market_name": "Carbon Market", "stall_number": "A-15",
+            "registration_reason": "I sell bangus daily and want to follow the official prices.",
+            "species_sold": [self.bangus.id, self.tilapia.id],
+            "profile_photo": _png_upload("face.png"), "stall_photo": _png_upload("stall.png"),
+        }
+        payload.update(overrides)
+        return {key: value for key, value in payload.items() if value is not None}
+
+    def test_options_list_active_species(self):
+        response = APIClient().get("/api/auth/registration-options/")
+        self.assertEqual([s["name"] for s in response.data["fish_species"]], ["Bangus", "Tilapia"])
+
+    def test_vendor_registration_saves_photo_reason_and_species(self):
+        response = APIClient().post("/api/auth/register/", self.vendor_payload(), format="multipart")
+        self.assertEqual(response.status_code, 201, response.data)
+        vendor = User.objects.get(username="new_vendor")
+        self.assertTrue(vendor.aquatimbang_profile.profile_photo)
+
+        pending = self.client_for(self.users["rp_admin"]).get("/api/auth/users/pending/").data["results"][0]
+        verification = pending["verification"]
+        self.assertTrue(verification["documents"]["profile_photo"])
+        self.assertIn("bangus daily", verification["registration_reason"])
+        self.assertEqual([s["name"] for s in verification["species_sold"]], ["Bangus", "Tilapia"])
+
+        photo = self.client_for(self.users["rp_lgu"]).get(f"/api/auth/users/{vendor.id}/verification/profile-photo/")
+        self.assertEqual(photo.status_code, 200)
+
+    def test_vendor_registration_requires_species_stall_photo_and_reason(self):
+        for missing, field in (("species_sold", "species_sold"), ("stall_photo", "stall_photo"), ("profile_photo", "profile_photo")):
+            response = APIClient().post("/api/auth/register/", self.vendor_payload(**{missing: None}), format="multipart")
+            self.assertEqual(response.status_code, 400, missing)
+            self.assertIn(field, response.data)
+        short = APIClient().post("/api/auth/register/", self.vendor_payload(registration_reason="Hi"), format="multipart")
+        self.assertIn("registration_reason", short.data)
+
+    def test_vendor_updates_fish_sold_and_reads_own_photo(self):
+        APIClient().post("/api/auth/register/", self.vendor_payload(), format="multipart")
+        vendor = User.objects.get(username="new_vendor")
+        UserProfile.objects.filter(user=vendor).update(account_status="approved", is_active=True)
+        client = self.client_for(vendor)
+        response = client.patch("/api/auth/me/", {"species_sold": [self.tilapia.id]}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual([s["name"] for s in response.data["verification"]["species_sold"]], ["Tilapia"])
+        self.assertTrue(response.data["has_photo"])
+        self.assertEqual(client.patch("/api/auth/me/", {"species_sold": []}, format="json").status_code, 400)
+        self.assertEqual(client.get("/api/auth/me/photo/").status_code, 200)
+        # LGU Officers do not sell fish.
+        lgu = self.client_for(self.users["rp_lgu"]).patch("/api/auth/me/", {"species_sold": [self.bangus.id]}, format="json")
+        self.assertEqual(lgu.status_code, 400)
+
+    def test_species_photo_upload_and_view(self):
+        lgu = self.client_for(self.users["rp_lgu"])
+        response = lgu.patch(f"/api/fish-species/{self.bangus.id}/", {"photo": _png_upload("bangus.png")}, format="multipart")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertTrue(response.data["has_photo"])
+        self.assertEqual(lgu.get(f"/api/fish-species/{self.bangus.id}/photo/").status_code, 200)
+        self.assertEqual(lgu.get(f"/api/fish-species/{self.tilapia.id}/photo/").status_code, 404)
+        self.assertEqual(APIClient().get(f"/api/fish-species/{self.bangus.id}/photo/").status_code, 401)

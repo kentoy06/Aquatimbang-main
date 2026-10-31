@@ -1,7 +1,9 @@
 import React, { useEffect, useState } from "react";
 import { apiUrl, authHeaders } from "../api/config.js";
+import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFor } from "./ApplicantReview.jsx";
 
 const DOCUMENTS = [
+  { key: "profile_photo", type: "profile-photo", label: "Profile photo" },
   { key: "permit", type: "vendor-permit", label: "Vendor permit" },
   { key: "stall_photo", type: "vendor-stall", label: "Stall photo" },
 ];
@@ -39,7 +41,7 @@ function VendorRegistrations({ notify, onReviewed }) {
   const [reloadKey, setReloadKey] = useState(0);
   const [reviewing, setReviewing] = useState(null);
   const [action, setAction] = useState("approve");
-  const [confirmed, setConfirmed] = useState(false);
+  const [checks, setChecks] = useState([]);
   const [reason, setReason] = useState("");
   const [saving, setSaving] = useState(false);
 
@@ -60,13 +62,13 @@ function VendorRegistrations({ notify, onReviewed }) {
   const open = (account, nextAction) => {
     setReviewing(account);
     setAction(nextAction);
-    setConfirmed(false);
+    setChecks([]);
     setReason("");
   };
 
   const submit = async () => {
-    if (action === "approve" && !confirmed) {
-      notify("Confirm that you checked the vendor's details and documents.");
+    if (action === "approve" && checks.length < criteriaFor("Fish Vendor").length) {
+      notify("Tick every item in the approval checklist first.");
       return;
     }
     if (action === "reject" && !reason.trim()) {
@@ -105,6 +107,8 @@ function VendorRegistrations({ notify, onReviewed }) {
         <button className="secondary-btn" onClick={() => setReloadKey((k) => k + 1)}>↻ Refresh</button>
       </div>
 
+      <ApprovalGuidelines roles={["Fish Vendor"]} />
+
       {reviewing && (
         <div className="modal-backdrop" onClick={() => setReviewing(null)}>
           <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="review-title">
@@ -113,11 +117,13 @@ function VendorRegistrations({ notify, onReviewed }) {
               <button className="modal-close" onClick={() => setReviewing(null)} aria-label="Close">✕</button>
             </div>
 
+            <ApplicantSummary
+              account={{ ...reviewing, name: name(reviewing) }}
+              onOpenPhoto={() => openDocument(reviewing.id, "profile-photo", notify)}
+            />
+
             {action === "approve" ? (
-              <label className="consent-row" style={{ display: "flex", gap: 9, alignItems: "flex-start" }}>
-                <input type="checkbox" checked={confirmed} onChange={(e) => setConfirmed(e.target.checked)} />
-                <span>I checked this vendor's market, stall and uploaded documents, and they are a legitimate fish vendor in my municipality.</span>
-              </label>
+              <VerificationChecklist role="Fish Vendor" checked={checks} onChange={setChecks} disabled={saving} />
             ) : (
               <div className="form-group">
                 <label htmlFor="reject-reason">Reason for rejection</label>
@@ -127,7 +133,7 @@ function VendorRegistrations({ notify, onReviewed }) {
 
             <div className="button-row">
               <button className="secondary-btn" onClick={() => setReviewing(null)}>Cancel</button>
-              <button className="primary-btn" onClick={submit} disabled={saving}>
+              <button className="primary-btn" onClick={submit} disabled={saving || (action === "approve" && checks.length < criteriaFor("Fish Vendor").length)}>
                 {saving ? "Saving…" : action === "approve" ? "Approve Account" : "Reject Registration"}
               </button>
             </div>
@@ -142,6 +148,7 @@ function VendorRegistrations({ notify, onReviewed }) {
               <tr>
                 <th>VENDOR</th>
                 <th>MARKET / STALL</th>
+                <th>FISH SOLD</th>
                 <th>PERMIT NO.</th>
                 <th>DOCUMENTS</th>
                 <th>REGISTERED</th>
@@ -150,11 +157,11 @@ function VendorRegistrations({ notify, onReviewed }) {
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan="6" className="empty-row">Loading registrations…</td></tr>
+                <tr><td colSpan="7" className="empty-row">Loading registrations…</td></tr>
               ) : error ? (
-                <tr><td colSpan="6" className="empty-row">{error}</td></tr>
+                <tr><td colSpan="7" className="empty-row">{error}</td></tr>
               ) : pending.length === 0 ? (
-                <tr><td colSpan="6" className="empty-row">No pending vendor registrations in your municipality.</td></tr>
+                <tr><td colSpan="7" className="empty-row">No pending vendor registrations in your municipality.</td></tr>
               ) : (
                 pending.map((account) => {
                   const details = account.verification?.details || {};
@@ -166,6 +173,7 @@ function VendorRegistrations({ notify, onReviewed }) {
                         <small style={{ display: "block", color: "#667085" }}>{account.email} · {account.contact_number || "no contact"}</small>
                       </td>
                       <td>{details.market_name || "—"}{details.stall_number ? ` · ${details.stall_number}` : ""}</td>
+                      <td>{(account.verification?.species_sold || []).map((s) => s.name).join(", ") || "—"}</td>
                       <td>{details.permit_number || "—"}</td>
                       <td>
                         <div className="action-buttons" style={{ flexWrap: "wrap" }}>

@@ -8,6 +8,9 @@ import { getForecastHistory, listExternalFactors } from "./api/forecast.js";
 import { describeFilters, exportReport } from "./api/reportExport.js";
 import AccountProfile from "./components/AccountProfile.jsx";
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
+import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFor } from "./components/ApplicantReview.jsx";
+import { useProtectedImage } from "./api/images.js";
+import { FishPhotoInput, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -173,6 +176,8 @@ const mapDatabaseSpecies = (fish) => ({
   scientific: fish.scientific_name || "",
   description: fish.description || "",
   status: fish.is_active ? "Active" : "Inactive",
+  hasPhoto: Boolean(fish.has_photo),
+  photoVersion: fish.updated_at || "",
   dateAdded: fish.created_at
     ? new Date(fish.created_at).toLocaleDateString("en-PH")
     : "—",
@@ -1231,6 +1236,17 @@ function TemporaryPasswordModal({ result, onClose }) {
    USER MANAGEMENT
    ================================================================ */
 
+// Account photo in the profile window, or initials when there is none.
+function ProfilePhoto({ account, fallback }) {
+  const hasPhoto = Boolean(account.verification?.documents?.profile_photo);
+  const photo = useProtectedImage(hasPhoto ? `/auth/users/${account.id}/verification/profile-photo/` : "");
+  return (
+    <div className="table-avatar profile-avatar" style={photo ? { padding: 0, overflow: "hidden" } : undefined}>
+      {photo ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : fallback}
+    </div>
+  );
+}
+
 function UserManagement({
   notify,
   municipalities,
@@ -1251,7 +1267,8 @@ function UserManagement({
   const [reviewAction, setReviewAction] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [reviewSaving, setReviewSaving] = useState(false);
-  const [reviewConfirmed, setReviewConfirmed] = useState(false);
+  const [reviewChecks, setReviewChecks] = useState([]);
+  const reviewConfirmed = Boolean(reviewingUser) && reviewChecks.length === criteriaFor(reviewingUser.role).length;
   const [formAccount, setFormAccount] = useState(undefined); // undefined: closed, null: add, object: edit
   const [tempPassword, setTempPassword] = useState(null);
   const openVerificationDocument = async (userId, documentType) => {
@@ -1392,7 +1409,7 @@ function UserManagement({
     const approve = (u) => {
   setReviewingUser(u);
   setReviewAction("approve");
-  setReviewConfirmed(false);
+  setReviewChecks([]);
   setRejectionReason("");
 };
 
@@ -1408,7 +1425,7 @@ const submitReview = async () => {
   const reason = rejectionReason.trim();
 
   if (reviewAction === "approve" && !reviewConfirmed) {
-  notify("Please confirm that you reviewed the applicant's verification documents.");
+  notify("Tick every item in the approval checklist first.");
   return;
 }
 
@@ -1483,7 +1500,7 @@ const submitReview = async () => {
     setReviewingUser(null);
     setReviewAction("");
     setRejectionReason("");
-    setReviewConfirmed(false);
+    setReviewChecks([]);
   } catch (error) {
     console.error("Account review failed:", error);
     notify("Unable to connect to the Django server.");
@@ -1592,6 +1609,8 @@ const submitReview = async () => {
         </div>
       </div>
 
+      {tab === "Pending" && <ApprovalGuidelines />}
+
       {pendingCount > 0 && (
         <div className="notice">
           <div className="notice-icon">!</div>
@@ -1635,37 +1654,18 @@ const submitReview = async () => {
         {reviewingUser.role} · {reviewingUser.municipality}
       </p>
 
-      {reviewAction === "approve" ? (
-        <div className="info-box">
-  <label
-    style={{
-      display: "flex",
-      alignItems: "flex-start",
-      gap: "10px",
-      cursor: "pointer",
-    }}
-  >
-    <input
-      type="checkbox"
-      checked={reviewConfirmed}
-      onChange={(e) => setReviewConfirmed(e.target.checked)}
-      disabled={reviewSaving}
-      style={{
-        width: "18px",
-        height: "18px",
-        flexShrink: 0,
-        marginTop: "2px",
-        accentColor: "#087f8c",
-      }}
-    />
+      <ApplicantSummary
+        account={reviewingUser}
+        onOpenPhoto={() => openVerificationDocument(reviewingUser.id, "profile-photo")}
+      />
 
-    <span>
-      I confirm that I have reviewed the applicant's
-      identity, registration details, and required
-      verification documents.
-    </span>
-  </label>
-</div>
+      {reviewAction === "approve" ? (
+        <VerificationChecklist
+          role={reviewingUser.role}
+          checked={reviewChecks}
+          onChange={setReviewChecks}
+          disabled={reviewSaving}
+        />
       ) : (
         <div className="form-group">
           <label>Reason for Rejection *</label>
@@ -1721,7 +1721,7 @@ const submitReview = async () => {
             </div>
 
             <div className="profile-head">
-              <div className="table-avatar profile-avatar">{initials(viewing.name)}</div>
+              <ProfilePhoto account={viewing} fallback={initials(viewing.name)} />
               <div>
                 <strong>{viewing.name}</strong>
                 <p>{viewing.email}</p>
@@ -1789,9 +1789,26 @@ const submitReview = async () => {
       )}
     </div>
 
+    <div className="mini-head">Reason and Fish Sold</div>
+    <ApplicantSummary
+      account={viewing}
+      onOpenPhoto={() => openVerificationDocument(viewing.id, "profile-photo")}
+    />
+
     <div className="mini-head">Submitted Documents</div>
 
     <div className="button-row">
+      {viewing.verification.documents?.profile_photo && (
+        <button
+          className="secondary-btn"
+          disabled={documentLoading}
+          onClick={() =>
+            openVerificationDocument(viewing.id, "profile-photo")
+          }
+        >
+          View Profile Photo
+        </button>
+      )}
       {viewing.verification.documents?.permit && (
         <button
           className="secondary-btn"
@@ -2002,6 +2019,7 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [form, setForm] = useState({ name: "", scientific: "", description: "" });
+  const [photoFile, setPhotoFile] = useState(null);
   const [speciesSaving, setSpeciesSaving] = useState(false);
   const visible = species.filter((s) =>
     [s.name, s.scientific, s.description].join(" ").toLowerCase().includes(search.toLowerCase())
@@ -2012,12 +2030,14 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
   const openAdd = () => {
     setEditing(null);
     setForm({ name: "", scientific: "", description: "" });
+    setPhotoFile(null);
     setShowForm(true);
   };
 
   const openEdit = (s) => {
     setEditing(s);
     setForm({ ...s });
+    setPhotoFile(null);
     setShowForm(true);
   };
 
@@ -2085,11 +2105,15 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
       ? `${API_BASE_URL}/fish-species/${editing.id}/`
       : `${API_BASE_URL}/fish-species/`;
 
-    const result = await speciesRequest(
+    let result = await speciesRequest(
       url,
       editing ? "PATCH" : "POST",
       payload
     );
+
+    if (photoFile) {
+      result = await uploadSpeciesPhoto(result.id, photoFile);
+    }
 
     const updated = mapDatabaseSpecies(result);
 
@@ -2183,7 +2207,6 @@ const toggleStatus = async (s) => {
   }
 };
 
-  const initials = (name) => name.slice(0, 2).toUpperCase();
 
   return (
     <>
@@ -2218,6 +2241,8 @@ const toggleStatus = async (s) => {
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
 
+            <FishPhotoInput fish={editing} file={photoFile} onChange={setPhotoFile} />
+
             <div className="button-row">
               <button className="secondary-btn" onClick={() => setShowForm(false)}>Cancel</button>
               <button className="primary-btn" onClick={save} disabled={speciesSaving}>{speciesSaving ? "Saving..." : editing ? "Save Changes" : "Add Species"}</button>
@@ -2235,7 +2260,7 @@ const toggleStatus = async (s) => {
             </div>
 
             <div className="profile-head">
-              <div className="table-avatar profile-avatar">{initials(viewing.name)}</div>
+              <FishThumb fish={viewing} size={64} />
               <div>
                 <strong>{viewing.name}</strong>
                 <p>{viewing.scientific}</p>
@@ -2247,7 +2272,9 @@ const toggleStatus = async (s) => {
               </div>
             </div>
 
-            <div className="info-box">{viewing.description}</div>
+            <FishPicture fish={viewing} />
+
+            <div className="info-box">{viewing.description || "No description yet."}</div>
 
             <div className="profile-grid" style={{ marginTop: 14 }}>
               <div className="profile-field">
@@ -2321,7 +2348,7 @@ const toggleStatus = async (s) => {
                 <tr key={s.id}>
                   <td>
                     <div className="species-cell">
-                      <div className="fish-avatar">{initials(s.name)}</div>
+                      <FishThumb fish={s} size={38} />
                       <div>
                         <strong>{s.name}</strong>
                         <small>{s.scientific}</small>

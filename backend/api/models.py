@@ -122,6 +122,17 @@ class UserProfile(models.Model):
 
     )
 
+    # Photo of the account holder's face, checked against their ID
+    # when the registration is reviewed.
+    profile_photo = models.ImageField(
+        upload_to="verification/photos/",
+        blank=True,
+        null=True,
+    )
+
+    # Why the person is registering, written at sign-up.
+    registration_reason = models.TextField(blank=True, default="")
+
     # Controls whether this AquaTimbang profile is active.
 
      # Registration review workflow.
@@ -282,6 +293,13 @@ class FishVendorVerification(models.Model):
 
     )
 
+    # Fish species the vendor sells; shown first on their dashboard.
+    species_sold = models.ManyToManyField(
+        "FishSpecies",
+        blank=True,
+        related_name="vendors",
+    )
+
     # When the verification information was submitted.
 
     created_at = models.DateTimeField(
@@ -419,6 +437,13 @@ class FishSpecies(models.Model):
     # Optional description of the species.
 
     description = models.TextField(blank=True)
+
+    # Picture shown to vendors so they can recognise the fish.
+    photo = models.ImageField(
+        upload_to="species/",
+        blank=True,
+        null=True,
+    )
 
     # Determines whether the species can currently be used.
 

@@ -56,6 +56,14 @@ from .serializers import (
 # ============================================================
 # LOGIN
 # ============================================================
+
+def rejected_message(profile):
+    """Login message for a rejected registration, with the reviewer's reason."""
+    reason = (profile.rejection_reason or "").strip()
+    if reason:
+        return f"Your registration was rejected: {reason} Contact your LGU office if you have questions."
+    return "Your registration was rejected. Contact your LGU office."
+
 @api_view(["POST"])
 @permission_classes([AllowAny])
 def login_user(request):
@@ -85,7 +93,7 @@ def login_user(request):
         if candidate is not None and not candidate.is_active and candidate.check_password(password):
             candidate_profile = getattr(candidate, "aquatimbang_profile", None)
             if candidate_profile is not None and candidate_profile.account_status == UserProfile.STATUS_REJECTED:
-                message = "Your registration was rejected. Contact your LGU office."
+                message = rejected_message(candidate_profile)
             else:
                 message = "Account disabled. Contact administrator."
             return Response({"message": message}, status=status.HTTP_403_FORBIDDEN)
@@ -109,7 +117,7 @@ def login_user(request):
         if profile.account_status == UserProfile.STATUS_PENDING:
             message = "Your account is pending approval. Please wait for LGU confirmation."
         elif profile.account_status == UserProfile.STATUS_REJECTED:
-            message = "Your registration was rejected. Contact your LGU office."
+            message = rejected_message(profile)
         else:
             message = "Account disabled. Contact administrator."
         return Response({"message": message}, status=status.HTTP_403_FORBIDDEN)
@@ -832,12 +840,14 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
             "description": before.description,
             "is_active": before.is_active,
         }
+        previous["photo"] = before.photo.name or ""
         instance = serializer.save()
         current = {
             "name": instance.name,
             "scientific_name": instance.scientific_name,
             "description": instance.description,
             "is_active": instance.is_active,
+            "photo": instance.photo.name or "",
         }
         changes = {
             field: {"from": previous[field], "to": value}
@@ -868,6 +878,21 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
                     "to preserve historical price data."
                 )
             })
+    @action(detail=True, methods=["get"])
+    def photo(self, request, pk=None):
+        """The species picture, for anyone logged in."""
+        fish = self.get_object()
+        if not fish.photo:
+            raise Http404("No photo for this species.")
+        try:
+            fish.photo.open("rb")
+        except (FileNotFoundError, OSError):
+            raise Http404("Photo file not found.")
+        response = FileResponse(fish.photo, filename=fish.photo.name.split("/")[-1])
+        response["Cache-Control"] = "private, max-age=3600"
+        return response
+
+
 class ActivityLogViewSet(viewsets.ReadOnlyModelViewSet):
     """Administrators see all logs; other approved users see their own."""
     serializer_class = ActivityLogSerializer
@@ -923,10 +948,36 @@ def serialize_own_profile(user, profile):
         "account_status": profile.account_status,
         "date_joined": user.date_joined.isoformat(),
         "last_login": user.last_login.isoformat() if user.last_login else None,
+        "has_photo": bool(profile.profile_photo),
+        "registration_reason": profile.registration_reason,
         "verification": get_account_verification(profile),
     }
+
+
+def update_species_sold(profile, value):
+    """
+    Replace the fish species a vendor sells. Returns an error message,
+    or None when saved.
+    """
+    vendor = FishVendorVerification.objects.filter(profile=profile).first()
+    if profile.role.name != "Fish Vendor" or vendor is None:
+        return "Only Fish Vendors can choose the fish they sell."
+    if not isinstance(value, list) or not value:
+        return "Select at least one fish species that you sell."
+    try:
+        ids = {int(item) for item in value}
+    except (TypeError, ValueError):
+        return "Invalid fish species."
+    species = list(FishSpecies.objects.filter(id__in=ids, is_active=True))
+    if len(species) != len(ids):
+        return "One of the selected fish species is not available."
+    vendor.species_sold.set(species)
+    return None
+
+
 @api_view(["GET", "PATCH"])
 @permission_classes([IsAuthenticated])
+@transaction.atomic
 def my_profile(request):
     """
     Read or update the logged-in user's own profile.
@@ -973,11 +1024,30 @@ def my_profile(request):
                     errors[field] = "Must be at most 150 characters."
                     continue
                 setattr(user, field, value)
+        if "species_sold" in request.data:
+            error = update_species_sold(profile, request.data.get("species_sold"))
+            if error:
+                errors["species_sold"] = error
         if errors:
+            transaction.set_rollback(True)
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
         user.save(update_fields=["first_name", "last_name", "email"])
         profile.save(update_fields=["contact_number", "updated_at"])
     return Response(serialize_own_profile(user, profile), status=status.HTTP_200_OK)
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def my_photo(request):
+    """The logged-in user's own profile photo."""
+    profile = getattr(request.user, "aquatimbang_profile", None)
+    if profile is None or not profile.profile_photo:
+        raise Http404("No profile photo.")
+    try:
+        profile.profile_photo.open("rb")
+    except (FileNotFoundError, OSError):
+        raise Http404("Profile photo not found.")
+    return FileResponse(profile.profile_photo, filename=profile.profile_photo.name.split("/")[-1])
+
+
 # ============================================================
 # LGU OFFICER - FISHERFOLK (FISH VENDOR) ACCOUNTS
 # ============================================================
@@ -1280,7 +1350,9 @@ def get_account_verification(profile):
     verification = {
         "type": None,
         "details": {},
-        "documents": {},
+        "documents": {"profile_photo": bool(profile.profile_photo)},
+        "registration_reason": profile.registration_reason,
+        "species_sold": [],
     }
     if profile.role.name == "Fish Vendor":
         vendor = FishVendorVerification.objects.filter(
@@ -1293,10 +1365,14 @@ def get_account_verification(profile):
                 "stall_number": vendor.stall_number,
                 "permit_number": vendor.permit_number,
             }
-            verification["documents"] = {
+            verification["documents"].update({
                 "permit": bool(vendor.permit_document),
                 "stall_photo": bool(vendor.stall_photo),
-            }
+            })
+            verification["species_sold"] = [
+                {"id": fish.id, "name": fish.name}
+                for fish in vendor.species_sold.order_by("name")
+            ]
     elif profile.role.name == "LGU Officer":
         officer = LGUOfficerVerification.objects.filter(
             profile=profile
@@ -1309,11 +1385,11 @@ def get_account_verification(profile):
                 "official_email": officer.official_email,
                 "employee_id": officer.employee_id,
             }
-            verification["documents"] = {
+            verification["documents"].update({
                 "authorization": bool(
                     officer.authorization_document
                 ),
-            }
+            })
     return verification
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
@@ -1384,7 +1460,12 @@ def registration_options(request):
     municipalities = Municipality.objects.filter(
         is_active=True
     ).order_by("name")
+    species = FishSpecies.objects.filter(is_active=True).order_by("name")
     return Response({
+        "fish_species": [
+            {"id": fish.id, "name": fish.name, "has_photo": bool(fish.photo)}
+            for fish in species
+        ],
         "roles": [
             {
                 "id": role.id,
@@ -1438,16 +1519,19 @@ def view_verification_document(request, user_id, document_type):
             LGUOfficerVerification,
             "authorization_document",
         ),
+        "profile-photo": (
+            UserProfile,
+            "profile_photo",
+        ),
     } 
     # Reject unsupported document types.
     if document_type not in document_fields:
         raise Http404("Document type not found.")
     model, field_name = document_fields[document_type]
     # Find the verification record belonging to the user.
+    lookup = {"user_id": user_id} if model is UserProfile else {"profile__user_id": user_id}
     try:
-        verification = model.objects.get(
-            profile__user_id=user_id
-        )
+        verification = model.objects.get(**lookup)
     except model.DoesNotExist:
         raise Http404("Verification record not found.")
     document = getattr(verification, field_name)

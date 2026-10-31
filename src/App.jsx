@@ -1,12 +1,20 @@
-import React, { useCallback, useEffect, useState } from "react";
+import React, { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import "./App.css";
 import "./Login.css";
 
 import Landing from "./Landing.jsx";
 import Register from "./Register.jsx";
-import Admin from "./Admin.jsx";
-import Vendor from "./Vendor.jsx";
-import LGU from "./Lgu.jsx";
+// Dashboard styles stay global (as before the dashboards were split into
+// separate downloads) because pages share some of their classes.
+import "./Admin.css";
+import "./Vendor.css";
+import "./Lgu.css";
+
+// Each dashboard is downloaded only when that role logs in.
+const Admin = lazy(() => import("./Admin.jsx"));
+const Vendor = lazy(() => import("./Vendor.jsx"));
+const LGU = lazy(() => import("./Lgu.jsx"));
+const dashboardFallback = <div style={{ padding: 40, textAlign: "center", color: "#667085" }}>Loading your dashboard…</div>;
 import { API_BASE_URL } from "./api/config.js";
 import { logout, SESSION_ENDED_EVENT, useIdleLogout } from "./api/session.js";
 
@@ -75,7 +83,7 @@ function App() {
 
   // Display the correct dashboard.
   if (page === "Admin") {
-    return <Admin onLogout={handleLogout} />;
+    return <Suspense fallback={dashboardFallback}><Admin onLogout={handleLogout} /></Suspense>;
   }
 
   if (page === "Vendor") {
@@ -90,15 +98,17 @@ function App() {
   }
 
   return (
-    <Vendor
-      onLogout={handleLogout}
-      currentUser={currentUser}
-    />
+    <Suspense fallback={dashboardFallback}>
+      <Vendor
+        onLogout={handleLogout}
+        currentUser={currentUser}
+      />
+    </Suspense>
   );
 }
 
   if (page === "LGU") {
-    return <LGU onLogout={handleLogout} />;
+    return <Suspense fallback={dashboardFallback}><LGU onLogout={handleLogout} /></Suspense>;
   }
 
   // Display registration page.

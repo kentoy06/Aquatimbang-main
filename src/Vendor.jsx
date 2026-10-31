@@ -9,6 +9,8 @@ import {
 import { API_BASE_URL } from "./api/config.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import { FishPicture, FishThumb } from "./components/FishPhoto.jsx";
+import { LANGUAGES, LanguageContext, translate, useLanguageSetting, useT } from "./i18n/vendor.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -41,6 +43,9 @@ function Vendor({ onLogout, currentUser }) {
   const identity = getVendorIdentity(account.profile ? { ...currentUser, ...account.profile, name: fullName(account.profile) } : currentUser);
   const [activePage, setActivePage] = useState("Dashboard");
   const [toast, setToast] = useState("");
+  const [language, setLanguage] = useLanguageSetting();
+  const t = (text, vars) => translate(language, text, vars);
+  const [fishInfoId, setFishInfoId] = useState(null);
 
   const [publishedPrices, setPublishedPrices] = useState([]);
   const [priceMunicipalities, setPriceMunicipalities] = useState([]);
@@ -115,7 +120,7 @@ function Vendor({ onLogout, currentUser }) {
         const data = await response.json();
         const rows = Array.isArray(data) ? data : data?.results;
         if (!Array.isArray(rows)) throw new Error("Unexpected fish species response");
-        if (!cancelled) setRegisteredFishSpecies(rows.filter((r) => r.is_active !== false).map((r) => ({ id: String(r.id), name: r.name })));
+        if (!cancelled) setRegisteredFishSpecies(rows.filter((r) => r.is_active !== false).map((r) => ({ ...r, id: String(r.id) })));
       } catch (err) {
         if (!cancelled) setSpeciesLoadError(err.message || "Could not load fish species registry");
       }
@@ -196,6 +201,13 @@ useEffect(() => {
     setTimeout(() => setToast(""), 2600);
   };
 
+  // Fish this vendor sells, chosen at registration or in My Profile.
+  const myFish = (account.profile?.verification?.species_sold || []).map((fish) => String(fish.id));
+  const mineFirst = (list) => [...list].sort((a, b) =>
+    Number(myFish.includes(String(b.id))) - Number(myFish.includes(String(a.id))) || a.name.localeCompare(b.name));
+  const speciesForVendor = mineFirst(registeredFishSpecies);
+  const openFish = (id) => setFishInfoId(String(id));
+
   const notifications = buildVendorNotifications(mySuggestions, publishedPrices);
   const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
 
@@ -237,7 +249,7 @@ useEffect(() => {
   const renderPage = () => {
     switch (activePage) {
       case "Current Fish Prices":
-        return <LivePublishedPrices records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} />;
+        return <LivePublishedPrices records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} species={registeredFishSpecies} myFish={myFish} onFishClick={openFish} />;
       case "Price Trends":
         return <PriceTrends registeredSpecies={registeredFishSpecies} speciesLoadError={speciesLoadError} records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} />;
       case "Price Forecast":
@@ -245,7 +257,7 @@ useEffect(() => {
       case "Submit Suggested Price":
         return (
           <SubmitSuggestedPrice
-            registeredSpecies={registeredFishSpecies}
+            registeredSpecies={speciesForVendor}
             records={publishedPrices}
             setMySuggestions={setMySuggestions}
             notify={notify}
@@ -276,21 +288,26 @@ useEffect(() => {
       case "Community Average":
         return <CommunityAverage averages={communityAverages} publishedPrices={publishedPrices} loading={communityLoading || publishedLoading} error={communityError || publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} onRefresh={() => setCommunityRefresh((n) => n + 1)} />;
       case "Fair Price Calculator":
-        return <FairPriceCalculator records={publishedPrices} registeredSpecies={registeredFishSpecies} speciesLoadError={speciesLoadError} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} notify={notify} />;
+        return <FairPriceCalculator records={publishedPrices} registeredSpecies={speciesForVendor} myFish={myFish} speciesLoadError={speciesLoadError} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} notify={notify} />;
       case "Export Reports":
         return <ExportReports mySuggestions={mySuggestions} suggestionsLoading={suggestionsLoading} suggestionsError={suggestionsError} records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} registeredSpecies={registeredFishSpecies} notify={notify} />;
       case "Notifications":
         return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} goTo={setActivePage} />;
       case "My Profile":
-        return <AccountProfile account={account} notify={notify} description="Manage your vendor details and see your recent activity." />;
+        return (
+          <AccountProfile account={account} notify={notify} description="Manage your vendor details and see your recent activity.">
+            <MyFishCard account={account} species={registeredFishSpecies} notify={notify} />
+          </AccountProfile>
+        );
       case "Help / How to Use":
         return <HelpPage />;
       default:
-        return <LiveVendorDashboard records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} vendorName={identity.name} goTo={setActivePage} mySuggestions={mySuggestions} />;
+        return <LiveVendorDashboard records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} vendorName={identity.name} goTo={setActivePage} mySuggestions={mySuggestions} species={registeredFishSpecies} myFish={myFish} onFishClick={openFish} />;
     }
   };
 
   return (
+    <LanguageContext.Provider value={language}>
     <div className="app">
 
       <aside className="sidebar">
@@ -302,12 +319,12 @@ useEffect(() => {
           </div>
         </div>
 
-        <div className="admin-label">FISH VENDOR</div>
+        <div className="admin-label">{t("FISH VENDOR")}</div>
 
         <nav>
           {menuGroups.map((group, gi) => (
             <React.Fragment key={group.label}>
-              {gi > 0 && <div className="admin-label group-label">{group.label}</div>}
+              {gi > 0 && <div className="admin-label group-label">{t(group.label)}</div>}
               {group.items.map((item) => (
                 <button
                   key={item.name}
@@ -315,7 +332,7 @@ useEffect(() => {
                   onClick={() => setActivePage(item.name)}
                 >
                   <span className="nav-icon">{item.icon}</span>
-                  <span>{item.name}</span>
+                  <span>{t(item.name)}</span>
                   {item.name === "Notifications" && unread.length > 0 && (
                     <span className="nav-badge">{unread.length}</span>
                   )}
@@ -330,22 +347,28 @@ useEffect(() => {
             <div className="avatar">{identity.initials}</div>
             <div>
               <strong>{identity.name}</strong>
-              <small>Fish Vendor</small>
+              <small>{t("Fish Vendor")}</small>
             </div>
           </div>
 
-          <button className="logout-btn" onClick={onLogout}>↪ Logout</button>
+          <button className="logout-btn" onClick={onLogout}>{t("↪ Logout")}</button>
         </div>
       </aside>
 
       <main className="main">
         <header className="topbar">
           <div>
-            <h1>{activePage}</h1>
-            <p>View official fish prices and compute fair selling amounts</p>
+            <h1>{t(activePage)}</h1>
+            <p>{t("View official fish prices and compute fair selling amounts")}</p>
           </div>
 
           <div className="topbar-right">
+            <label className="language-picker" title={t("Language")}>
+              <span aria-hidden="true">🌐</span>
+              <select aria-label={t("Language")} value={language} onChange={(e) => setLanguage(e.target.value)}>
+                {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+              </select>
+            </label>
             <button className="notification" onClick={() => setActivePage("Notifications")}>
               🔔
               {unread.length > 0 && <span className="notif-dot"></span>}
@@ -354,7 +377,7 @@ useEffect(() => {
               <div className="avatar small">{identity.initials}</div>
               <div>
                 <strong>{identity.name}</strong>
-                <span>Fish Vendor</span>
+                <span>{t("Fish Vendor")}</span>
               </div>
             </div>
           </div>
@@ -363,7 +386,85 @@ useEffect(() => {
         <section className="content">{renderPage()}</section>
       </main>
 
+      {fishInfoId && (
+        <FishInfoModal
+          fish={registeredFishSpecies.find((f) => f.id === fishInfoId) || { id: fishInfoId, name: publishedPrices.find((r) => String(r.fish_species) === fishInfoId)?.fish_name || "" }}
+          latest={latestPublishedRows(publishedPrices, selectedPriceMunicipality).find((r) => String(r.fish_species) === fishInfoId)}
+          onClose={() => setFishInfoId(null)}
+          onCompute={() => { setFishInfoId(null); setActivePage("Fair Price Calculator"); }}
+        />
+      )}
+
       {toast && <div className="toast">{toast}</div>}
+    </div>
+    </LanguageContext.Provider>
+  );
+}
+
+// Photo and details of one fish species, opened by tapping its name.
+function FishInfoModal({ fish, latest, onClose, onCompute }) {
+  const t = useT();
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="fish-info-title">
+        <div className="modal-head">
+          <h3 id="fish-info-title">{fish.name || t("Fish Details")}</h3>
+          <button className="modal-close" onClick={onClose} aria-label={t("Close")}>✕</button>
+        </div>
+        {fish.has_photo ? <FishPicture fish={fish} /> : <div className="fish-picture fish-picture-empty">{t("No photo of this fish yet.")}</div>}
+        {fish.scientific_name && <p style={{ margin: "0 0 6px" }}><span className="muted-text">{t("Scientific name")}:</span> <em>{fish.scientific_name}</em></p>}
+        <p style={{ margin: "0 0 12px", color: "#475467" }}>{fish.description || t("No description yet.")}</p>
+        <div className="locked-field">
+          {t("Latest official price")}: <strong style={{ marginLeft: 6 }}>{latest ? `${peso(latest.price_per_kg)} / kg` : t("Not available")}</strong>
+          {latest && <small style={{ marginLeft: 8, color: "#64748b" }}>{latest.municipality_name} · {latest.recorded_date}</small>}
+        </div>
+        <div className="button-row" style={{ marginTop: 16 }}>
+          <button className="secondary-btn" onClick={onClose}>{t("Close")}</button>
+          <button className="primary-btn" onClick={onCompute}>{t("Compute Price")}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// Vendor's list of fish they sell, shown in My Profile.
+function MyFishCard({ account, species, notify }) {
+  const t = useT();
+  const saved = (account.profile?.verification?.species_sold || []).map((fish) => String(fish.id));
+  const [chosen, setChosen] = useState(null);
+  const [saving, setSaving] = useState(false);
+  const current = chosen ?? saved;
+  const toggle = (id) => setChosen(current.includes(id) ? current.filter((x) => x !== id) : [...current, id]);
+  const save = async () => {
+    setSaving(true);
+    try {
+      await account.save({ species_sold: current.map(Number) });
+      setChosen(null);
+      notify(t("Your fish list was saved."));
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <div className="config-card">
+      <div className="config-header">
+        <div className="config-icon green">🐟</div>
+        <div><h3>{t("Fish I Sell")}</h3><p>{t("These appear first on your dashboard.")}</p></div>
+      </div>
+      <div className="species-chips">
+        {species.map((fish) => (
+          <label key={fish.id} className={`species-chip ${current.includes(fish.id) ? "on" : ""}`}>
+            <input type="checkbox" checked={current.includes(fish.id)} onChange={() => toggle(fish.id)} />
+            <FishThumb fish={fish} size={26} />
+            {fish.name}
+          </label>
+        ))}
+      </div>
+      <button className="primary-btn full-btn" onClick={save} disabled={saving || chosen === null || current.length === 0}>
+        {saving ? t("Saving…") : t("Save Fish List")}
+      </button>
     </div>
   );
 }
@@ -401,6 +502,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = []) {
    ================================================================ */
 
 function PriceTrends({ registeredSpecies = [], speciesLoadError = "", records = [], loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "" }) {
+  const t = useT();
   const [speciesId, setSpeciesId] = useState("");
   const [range, setRange] = useState("30");
   const [fromDate, setFromDate] = useState("");
@@ -451,7 +553,7 @@ function PriceTrends({ registeredSpecies = [], speciesLoadError = "", records = 
   return (
     <>
       <div className="page-title">
-        <div><h2>Price Trends</h2><p>Historical LGU-published fish prices from AquaTimbang. No simulated prices.</p></div>
+        <div><h2>{t("Price Trends")}</h2><p>Historical LGU-published fish prices from AquaTimbang. No simulated prices.</p></div>
       </div>
       <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
       <div className="panel" style={{ padding: 18, marginTop: 16 }}>
@@ -537,6 +639,7 @@ function SubmitSuggestedPrice({
   setMySuggestions,
   notify,
 }) {
+  const t = useT();
   const [speciesId, setSpeciesId] = useState("");
   const [price, setPrice] = useState("");
   const [comment, setComment] = useState("");
@@ -612,7 +715,7 @@ function SubmitSuggestedPrice({
         ...prev,
       ]);
 
-      notify("Suggested price saved and submitted for LGU review.");
+      notify(t("Suggested price saved and submitted for LGU review."));
 
       setPrice("");
       setComment("");
@@ -631,11 +734,8 @@ function SubmitSuggestedPrice({
     <>
       <div className="page-title">
         <div>
-          <h2>Submit Suggested Price</h2>
-          <p>
-            Think the official price doesn't match what you're seeing
-            at the market? Suggest a price for LGU review.
-          </p>
+          <h2>{t("Submit Suggested Price")}</h2>
+          <p>{t("Think the official price doesn't match what you're seeing at the market? Suggest a price for LGU review.")}</p>
         </div>
       </div>
 
@@ -644,15 +744,13 @@ function SubmitSuggestedPrice({
           <div className="config-header">
             <div className="config-icon blue">✎</div>
             <div>
-              <h3>New Suggestion</h3>
-              <p>
-                Submitted suggestions are reviewed by an LGU officer.
-              </p>
+              <h3>{t("New Suggestion")}</h3>
+              <p>{t("Submitted suggestions are reviewed by an LGU officer.")}</p>
             </div>
           </div>
 
           <div className="form-group">
-            <label>Fish Species</label>
+            <label>{t("Fish Species")}</label>
             <select
               value={speciesId}
               onChange={(e) => setSpeciesId(e.target.value)}
@@ -668,19 +766,19 @@ function SubmitSuggestedPrice({
           </div>
 
           <div className="form-group">
-            <label>Current Official Price</label>
+            <label>{t("Current Official Price")}</label>
             <div className="locked-field">
-              {officialNow !== null ? peso(officialNow) : "Not available"}
+              {officialNow !== null ? peso(officialNow) : t("Not available")}
               {officialNow !== null && (
                 <span className="badge success">
-                  LGU Validated
+                  {t("LGU Validated")}
                 </span>
               )}
             </div>
           </div>
 
           <div className="form-group">
-            <label>Your Suggested Price per KG</label>
+            <label>{t("Your Suggested Price per KG")}</label>
             <div className="input-with-unit">
               <span>₱</span>
               <input
@@ -697,27 +795,26 @@ function SubmitSuggestedPrice({
 
           {bigDiff && (
             <div className="warn-box">
-              ⚠ This is {Math.abs(diffPct).toFixed(0)}%{" "}
-              {diffPct > 0 ? "above" : "below"} the current official
-              price. Adding a comment helps the LGU officer
-              understand why.
+              {t(diffPct > 0
+                ? "⚠ This is {pct}% above the current official price. Adding a comment helps the LGU officer understand why."
+                : "⚠ This is {pct}% below the current official price. Adding a comment helps the LGU officer understand why.",
+              { pct: Math.abs(diffPct).toFixed(0) })}
             </div>
           )}
 
           <div className="form-group">
-            <label>Comment (optional)</label>
+            <label>{t("Comment (optional)")}</label>
             <input
               type="text"
               value={comment}
-              placeholder="Explain the market conditions or price difference"
+              placeholder={t("Explain the market conditions or price difference")}
               onChange={(e) => setComment(e.target.value)}
               disabled={submitting}
             />
           </div>
 
           <div className="info-box">
-            Your suggestion will be saved to the database and
-            forwarded to the LGU for review.
+            {t("Your suggestion will be saved and forwarded to the LGU for review.")}
           </div>
 
           {error && (
@@ -731,7 +828,7 @@ function SubmitSuggestedPrice({
             onClick={submit}
             disabled={submitting || !valid}
           >
-            {submitting ? "Submitting..." : "Submit Suggestion"}
+            {submitting ? t("Submitting...") : t("Submit Suggestion")}
           </button>
         </div>
       </div>
@@ -744,6 +841,7 @@ function SubmitSuggestedPrice({
    ================================================================ */
 
 function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
+  const t = useT();
   const [editingId, setEditingId] = useState(null);
   const [draftComment, setDraftComment] = useState("");
 
@@ -772,8 +870,8 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
     <>
       <div className="page-title">
         <div>
-          <h2>My Suggested Prices</h2>
-          <p>Track the status of every price you've suggested to the LGU.</p>
+          <h2>{t("My Suggested Prices")}</h2>
+          <p>{t("Track the status of every price you've suggested to the LGU.")}</p>
         </div>
       </div>
 
@@ -781,18 +879,18 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
         <table>
           <thead>
             <tr>
-              <th>DATE</th>
-              <th>SPECIES</th>
-              <th>SUGGESTED PRICE</th>
-              <th>COMMENT</th>
-              <th>STATUS</th>
-              <th>LGU FEEDBACK</th>
-              <th>ACTIONS</th>
+              <th>{t("DATE")}</th>
+              <th>{t("SPECIES")}</th>
+              <th>{t("SUGGESTED PRICE")}</th>
+              <th>{t("COMMENT")}</th>
+              <th>{t("STATUS")}</th>
+              <th>{t("LGU FEEDBACK")}</th>
+              <th>{t("ACTIONS")}</th>
             </tr>
           </thead>
           <tbody>
             {mySuggestions.length === 0 ? (
-              <tr><td colSpan="7" className="empty-row">You haven't submitted any suggestions yet.</td></tr>
+              <tr><td colSpan="7" className="empty-row">{t("You haven't submitted any suggestions yet.")}</td></tr>
             ) : (
               mySuggestions.map((s) => (
                 <tr key={s.id}>
@@ -845,6 +943,7 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
    ================================================================ */
 
 function CommunityAverage({ averages = [], publishedPrices = [], loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", onRefresh }) {
+  const t = useT();
   const [speciesId, setSpeciesId] = useState("");
   const options = [...new Map(averages.map((row) => [String(row.fish_species), { id: String(row.fish_species), name: row.fish_name }])).values()]
     .sort((a, b) => a.name.localeCompare(b.name));
@@ -859,7 +958,7 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
   ).sort((a, b) => String(b.recorded_date).localeCompare(String(a.recorded_date)) || Number(b.id || 0) - Number(a.id || 0))[0];
   return (
     <>
-      <div className="page-title"><div><h2>Community Average</h2>
+      <div className="page-title"><div><h2>{t("Community Average")}</h2>
         <p>Actual LGU-reviewed vendor suggestions, grouped by municipality and fish species. No simulated prices.</p>
       </div></div>
       <div className="notice"><div className="notice-icon">!</div><div>
@@ -907,7 +1006,8 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
    FAIR PRICE CALCULATOR
    ================================================================ */
 
-function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoadError = "", loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", notify }) {
+function FairPriceCalculator({ records = [], registeredSpecies = [], myFish = [], speciesLoadError = "", loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", notify }) {
+  const t = useT();
   const [speciesId, setSpeciesId] = useState("");
   const [weight, setWeight] = useState("");
   // Calculations saved in the database (WeightEntries, Table 20).
@@ -931,7 +1031,7 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoad
     ...records.filter((r) => r.status === "published" || r.status === undefined)
       .map((r) => [String(r.fish_species), { id: String(r.fish_species), name: r.fish_name || `Species #${r.fish_species}` }]),
     ...registeredSpecies.map((r) => [String(r.id), { id: String(r.id), name: r.name }]),
-  ]).values()).sort((a, b) => a.name.localeCompare(b.name));
+  ]).values()).sort((a, b) => Number(myFish.includes(b.id)) - Number(myFish.includes(a.id)) || a.name.localeCompare(b.name));
   const selectedSpecies = speciesOptions.some((s) => s.id === speciesId) ? speciesId : (speciesOptions[0]?.id || "");
   const speciesName = speciesOptions.find((s) => s.id === selectedSpecies)?.name || "Fish species";
 
@@ -969,7 +1069,7 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoad
       const data = await response.json().catch(() => null);
       if (!response.ok) throw new Error(data?.message || data?.weight_kg || "Could not save the calculation.");
       setHistory((prev) => [data, ...prev]);
-      notify?.("Calculation saved to your history.");
+      notify?.(t("Calculation saved to your history."));
     } catch (err) {
       notify?.(err.message);
     } finally {
@@ -989,50 +1089,50 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoad
   return (
     <>
       <div className="page-title"><div>
-        <h2>Fair Price Calculator</h2>
-        <p>Calculate a reference amount using the latest published LGU fish price. No simulated prices.</p>
+        <h2>{t("Fair Price Calculator")}</h2>
+        <p>{t("Calculate a reference amount using the latest published LGU fish price.")}</p>
       </div></div>
       <div className="notice"><div className="notice-icon">!</div><div>
-        <strong>Reference calculation only</strong>
-        <p>The amount is based on the latest published LGU price for the selected municipality. Actual transactions may differ.</p>
+        <strong>{t("Reference calculation only")}</strong>
+        <p>{t("The amount is based on the latest published LGU price for the selected municipality. Actual transactions may differ.")}</p>
       </div></div>
       <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
-      {!municipality && <div className="panel" style={{ padding: 16, marginBottom: 16 }}>Select a specific municipality to calculate a price. “All municipalities” cannot provide a single official unit price.</div>}
+      {!municipality && <div className="panel" style={{ padding: 16, marginBottom: 16 }}>{t("Select a specific municipality to calculate a price.")}</div>}
       {speciesLoadError && <p style={{ color: "#a16207", fontSize: 13 }}>Species registry unavailable ({speciesLoadError}). Showing species found in published prices only.</p>}
       {loading && <div className="panel" style={{ padding: 16, marginBottom: 16 }}>Loading published LGU prices…</div>}
       {error && <div className="panel" style={{ padding: 16, marginBottom: 16, color: "#b91c1c" }}>Unable to load published prices: {error}</div>}
       <div className="config-grid">
         <div className="config-card">
           <div className="config-header"><div className="config-icon blue">🧮</div><div>
-            <h3>Compute Reference Amount</h3><p>Weight × latest published price per kilogram</p>
+            <h3>{t("Compute Reference Amount")}</h3><p>{t("Weight × latest published price per kilogram")}</p>
           </div></div>
-          <div className="form-group"><label htmlFor="calc-species">Fish Species</label>
+          <div className="form-group"><label htmlFor="calc-species">{t("Fish Species")}</label>
             <select id="calc-species" value={selectedSpecies} onChange={(e) => setSpeciesId(e.target.value)} disabled={!speciesOptions.length}>
               {!speciesOptions.length && <option value="">No registered species</option>}
               {speciesOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
-          <div className="form-group"><label htmlFor="calc-weight">Weight in Kilograms</label>
+          <div className="form-group"><label htmlFor="calc-weight">{t("Weight in Kilograms")}</label>
             <div className="input-with-unit"><input id="calc-weight" type="number" value={weight} min="0.01" step="0.01" placeholder="0.00" onChange={(e) => setWeight(e.target.value)} /><span>kg</span></div>
           </div>
-          {invalid && <div className="error-box">Please enter a weight greater than zero.</div>}
-          <div className="form-group"><label>Latest Published LGU Price per KG</label>
-            <div className="locked-field">{unit === null ? "Not available" : peso(unit)} {unit !== null && <span className="badge success">Published</span>}</div>
+          {invalid && <div className="error-box">{t("Please enter a weight greater than zero.")}</div>}
+          <div className="form-group"><label>{t("Latest Published LGU Price per KG")}</label>
+            <div className="locked-field">{unit === null ? t("Not available") : peso(unit)} {unit !== null && <span className="badge success">{t("Published")}</span>}</div>
             {unit !== null && <p style={{ marginTop: 8, fontSize: 13, color: "#64748b" }}>Municipality: {municipality} · Recorded: {String(latest.recorded_date).slice(0, 10)}</p>}
-            {!loading && !error && municipality && unit === null && <p style={{ marginTop: 8, fontSize: 13, color: "#9a3412" }}>No published price for {speciesName} in {municipality}. Try another species or municipality.</p>}
+            {!loading && !error && municipality && unit === null && <p style={{ marginTop: 8, fontSize: 13, color: "#9a3412" }}>{t("No published price for {fish} in {place}. Try another species or municipality.", { fish: speciesName, place: municipality })}</p>}
           </div>
         </div>
         <div className="config-card">
-          <div className="config-header"><div className="config-icon green">₱</div><div><h3>Computation Result</h3><p>Reference amount for the selected weight</p></div></div>
-          <div className="big-result"><span>REFERENCE AMOUNT</span>
+          <div className="config-header"><div className="config-icon green">₱</div><div><h3>{t("Computation Result")}</h3><p>{t("Reference amount for the selected weight")}</p></div></div>
+          <div className="big-result"><span>{t("REFERENCE AMOUNT")}</span>
             <strong>{total === null ? "—" : peso(total)}</strong>
-            <small>{valid ? `${parsed} kg × ${peso(unit)} per kg` : "Select a published price and enter a valid weight"}</small>
+            <small>{valid ? `${parsed} kg × ${peso(unit)} per kg` : t("Select a published price and enter a valid weight")}</small>
           </div>
-          <div className="button-row"><button className="secondary-btn" onClick={() => setWeight("")}>Clear</button>
-            <button className="primary-btn" onClick={save} disabled={!valid || saving}>{saving ? "Saving…" : "Save to History"}</button></div>
-          <div className="mini-head">My Saved Calculations</div>
+          <div className="button-row"><button className="secondary-btn" onClick={() => setWeight("")}>{t("Clear")}</button>
+            <button className="primary-btn" onClick={save} disabled={!valid || saving}>{saving ? t("Saving…") : t("Save to History")}</button></div>
+          <div className="mini-head">{t("My Saved Calculations")}</div>
           {historyError && <div className="error-box">{historyError}</div>}
-          {!historyError && history.length === 0 && <p style={{ fontSize: 13, color: "#64748b" }}>Saved calculations appear here, so you can look back at your pricing.</p>}
+          {!historyError && history.length === 0 && <p style={{ fontSize: 13, color: "#64748b" }}>{t("Saved calculations appear here, so you can look back at your pricing.")}</p>}
           <div className="breakdown">{history.slice(0, 20).map((h) => <div className="breakdown-row" key={h.id}>
             <span>
               {h.fish_name} · {h.municipality_name} · {Number(h.weight_kg)} kg × {peso(h.price_per_kg)}
@@ -1053,7 +1153,12 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoad
    EXPORT REPORTS
    ================================================================ */
 
-function ExportReports({ mySuggestions = [], suggestionsLoading, suggestionsError, records = [], loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", registeredSpecies = [], notify }) {
+function ExportReports(props) {
+  const t = useT();
+  return <ExportReportsPage {...props} title={t("Export Reports")} />;
+}
+
+function ExportReportsPage({ title, mySuggestions = [], suggestionsLoading, suggestionsError, records = [], loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", registeredSpecies = [], notify }) {
   const [reportType, setReportType] = useState("Published LGU Price History");
   const [speciesId, setSpeciesId] = useState("");
   const [fromDate, setFromDate] = useState("");
@@ -1111,7 +1216,7 @@ function ExportReports({ mySuggestions = [], suggestionsLoading, suggestionsErro
   const fieldStyle = { minWidth: 180, maxWidth: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "white" };
   return (
     <>
-      <div className="page-title"><div><h2>Export Reports</h2>
+      <div className="page-title"><div><h2>{title}</h2>
         <p>Download actual AquaTimbang records as Excel-compatible CSV files. No simulated prices.</p>
       </div></div>
       <div className="notice"><div className="notice-icon">!</div><div>
@@ -1159,6 +1264,7 @@ function ExportReports({ mySuggestions = [], suggestionsLoading, suggestionsErro
    ================================================================ */
 
 function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goTo }) {
+  const t = useT();
   const dismiss = (id) => setDismissedNotifs((prev) => [...prev, id]);
   const visible = notifications.filter((n) => !dismissedNotifs.includes(n.id));
   const iconFor = (type) => (type === "danger" ? "⚠" : "ℹ");
@@ -1168,8 +1274,8 @@ function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goT
     <>
       <div className="page-title">
         <div>
-          <h2>Notifications</h2>
-          <p>Updates about your suggestions and today's official prices.</p>
+          <h2>{t("Notifications")}</h2>
+          <p>{t("Updates about your suggestions and today's official prices.")}</p>
         </div>
         {dismissedNotifs.length > 0 && (
           <button className="secondary-btn" onClick={() => setDismissedNotifs([])}>Restore Dismissed</button>
@@ -1178,7 +1284,7 @@ function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goT
 
       <div className="panel">
         {visible.length === 0 ? (
-          <p className="empty-row">You're all caught up.</p>
+          <p className="empty-row">{t("You're all caught up.")}</p>
         ) : (
           visible.map((n) => (
             <div className="activity" key={n.id}>
@@ -1204,6 +1310,7 @@ function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goT
    ================================================================ */
 
 function HelpPage() {
+  const t = useT();
   const steps = [
     { title: "Check today's prices", text: "Open Current Fish Prices to see LGU-validated rates for every species before you head to the market." },
     { title: "Compute a fair price", text: "Use the Fair Price Calculator — enter the weight you're selling and it multiplies it by the official rate automatically." },
@@ -1217,8 +1324,8 @@ function HelpPage() {
     <>
       <div className="page-title">
         <div>
-          <h2>Help / How to Use</h2>
-          <p>A quick walkthrough of everything you can do in AquaTimbang.</p>
+          <h2>{t("Help / How to Use")}</h2>
+          <p>{t("A quick walkthrough of everything you can do in AquaTimbang.")}</p>
         </div>
       </div>
 
@@ -1227,8 +1334,8 @@ function HelpPage() {
           <div className="activity" key={i}>
             <div className="activity-icon blue-bg">{i + 1}</div>
             <div>
-              <strong>{s.title}</strong>
-              <p>{s.text}</p>
+              <strong>{t(s.title)}</strong>
+              <p>{t(s.text)}</p>
             </div>
           </div>
         ))}
@@ -1237,8 +1344,8 @@ function HelpPage() {
       <div className="notice" style={{ marginTop: 18 }}>
         <div className="notice-icon">?</div>
         <div>
-          <strong>Still need help?</strong>
-          <p>Visit your local LGU office or reach out through the market coordinator for further assistance.</p>
+          <strong>{t("Still need help?")}</strong>
+          <p>{t("Visit your local LGU office or reach out through the market coordinator for further assistance.")}</p>
         </div>
       </div>
     </>
@@ -1262,6 +1369,7 @@ function latestPublishedRows(records, municipality) {
   return [...groups.values()].sort((a, b) => String(a.fish_name).localeCompare(String(b.fish_name)));
 }
 function PriceMunicipalitySelector({ records, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "" }) {
+  const t = useT();
   // Preserve all registered municipalities even when none has a published price.
   const names = [
     ...availableMunicipalities,
@@ -1276,46 +1384,90 @@ function PriceMunicipalitySelector({ records, municipality, onMunicipalityChange
   });
   const options = [...unique.values()].sort((a, b) => a.localeCompare(b));
   return <div style={{ display: "flex", alignItems: "center", flexWrap: "wrap", gap: 10, marginBottom: 16 }}>
-    <label htmlFor="published-municipality" style={{ fontWeight: 600 }}>Municipality:</label>
+    <label htmlFor="published-municipality" style={{ fontWeight: 600 }}>{t("Municipality:")}</label>
     <select id="published-municipality" value={municipality} onChange={(e) => onMunicipalityChange(e.target.value)} style={{ minWidth: 220, maxWidth: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "white" }}>
-      <option value="">All municipalities</option>
+      <option value="">{t("All municipalities")}</option>
       {options.map((name) => <option key={name} value={name}>{name}</option>)}
     </select>
-    <span style={{ color: "#64748b", fontSize: 13 }}>Municipalities remain selectable even when they have no published prices.</span>
+    <span style={{ color: "#64748b", fontSize: 13 }}>{t("Municipalities remain selectable even when they have no published prices.")}</span>
   </div>;
 }
 function PublishedState({ loading, error, records, municipality }) {
-  if (loading) return <div className="panel" style={{ padding: 24 }}>Loading published prices from AquaTimbang…</div>;
-  if (error) return <div className="panel" style={{ padding: 24, color: "#b42318" }}>Could not load official prices: {error}</div>;
-  if (!latestPublishedRows(records, municipality).length) return <div className="panel" style={{ padding: 24 }}>No published LGU prices are available{municipality ? ` for ${municipality}` : ""} yet.</div>;
+  const t = useT();
+  if (loading) return <div className="panel" style={{ padding: 24 }}>{t("Loading published prices…")}</div>;
+  if (error) return <div className="panel" style={{ padding: 24, color: "#b42318" }}>{t("Could not load official prices: {error}", { error })}</div>;
+  if (!latestPublishedRows(records, municipality).length) return <div className="panel" style={{ padding: 24 }}>{t("No published LGU prices are available yet.")}{municipality ? ` (${municipality})` : ""}</div>;
   return null;
 }
-function LivePublishedPrices({ records, loading, error, municipality, onMunicipalityChange, availableMunicipalities, defaultMunicipality }) {
-  const rows = latestPublishedRows(records, municipality);
+
+// A fish name that opens its photo and details.
+function FishName({ row, species, myFish, onFishClick }) {
+  const t = useT();
+  const fish = species.find((f) => String(f.id) === String(row.fish_species)) || { id: row.fish_species, name: row.fish_name };
+  return (
+    <button type="button" className="fish-link" onClick={() => onFishClick(row.fish_species)}>
+      <FishThumb fish={fish} size={32} />
+      <strong>{row.fish_name || `Species #${row.fish_species}`}</strong>
+      {myFish.includes(String(row.fish_species)) && <span className="badge success">{t("Your fish")}</span>}
+    </button>
+  );
+}
+function LivePublishedPrices({ records, loading, error, municipality, onMunicipalityChange, availableMunicipalities, defaultMunicipality, species = [], myFish = [], onFishClick }) {
+  const t = useT();
+  const rows = latestPublishedRows(records, municipality)
+    .sort((a, b) => Number(myFish.includes(String(b.fish_species))) - Number(myFish.includes(String(a.fish_species))));
   return <>
-    <div className="page-title"><div><h2>Current Fish Prices</h2><p>Latest published LGU prices{municipality ? ` · ${municipality}` : ""}. No demo prices.</p></div></div>
+    <div className="page-title"><div><h2>{t("Current Fish Prices")}</h2><p>{t("Latest official LGU prices. Tap a fish to see its photo.")}{municipality ? ` · ${municipality}` : ""}</p></div></div>
     <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
     <PublishedState loading={loading} error={error} records={records} municipality={municipality} />
     {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><table>
-      <thead><tr><th>FISH SPECIES</th><th>MUNICIPALITY</th><th>OFFICIAL PRICE / KG</th><th>RECORDED DATE</th><th>STATUS</th></tr></thead>
-      <tbody>{rows.map((r) => <tr key={`${r.fish_species}-${r.municipality}`}><td><strong>{r.fish_name || `Species #${r.fish_species}`}</strong></td><td>{r.municipality_name || "—"}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td><td><span className="badge success">Published</span></td></tr>)}</tbody>
+      <thead><tr><th>{t("FISH SPECIES")}</th><th>{t("MUNICIPALITY")}</th><th>{t("OFFICIAL PRICE / KG")}</th><th>{t("RECORDED DATE")}</th><th>{t("STATUS")}</th></tr></thead>
+      <tbody>{rows.map((r) => <tr key={`${r.fish_species}-${r.municipality}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} /></td><td>{r.municipality_name || "—"}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td><td><span className="badge success">{t("Published")}</span></td></tr>)}</tbody>
     </table></div>}
   </>;
 }
-function LiveVendorDashboard({ records, loading, error, municipality, onMunicipalityChange, availableMunicipalities, defaultMunicipality, vendorName, goTo, mySuggestions }) {
+function LiveVendorDashboard({ records, loading, error, municipality, onMunicipalityChange, availableMunicipalities, defaultMunicipality, vendorName, goTo, mySuggestions, species = [], myFish = [], onFishClick }) {
+  const t = useT();
   const rows = latestPublishedRows(records, municipality);
+  // The vendor's own fish, with the latest price in the selected municipality.
+  const myFishRows = myFish.map((id) => ({
+    fish: species.find((f) => String(f.id) === id) || { id, name: "" },
+    price: rows.find((r) => String(r.fish_species) === id),
+  })).filter((item) => item.fish.name || item.price);
   const average = rows.length ? rows.reduce((sum, r) => sum + Number(r.price_per_kg), 0) / rows.length : null;
   const pending = mySuggestions.filter((s) => s.status === "Pending Review").length;
   return <>
-    <div className="welcome-card"><div><span className="eyebrow">FISH VENDOR</span><h2>Welcome, {vendorName.split(" ")[0]}!</h2><p>Published LGU prices from the AquaTimbang database{municipality ? ` for ${municipality}` : ""}.</p></div><div className="welcome-fish">🐟</div></div>
+    <div className="welcome-card"><div><span className="eyebrow">{t("FISH VENDOR")}</span><h2>{t("Welcome, {name}!", { name: vendorName.split(" ")[0] })}</h2><p>{t("Official LGU prices for {place}.", { place: municipality || t("all municipalities") })}</p></div><div className="welcome-fish">🐟</div></div>
     <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
+    <div className="panel my-fish-panel">
+      <div className="panel-header"><div><h3>{t("My Fish Today")}</h3><p>{t("Latest official prices of the fish you sell. Tap a fish to see its photo.")}</p></div></div>
+      {myFishRows.length === 0 ? (
+        <div className="my-fish-empty">
+          <p>{t("You have not chosen the fish you sell. Add them in My Profile.")}</p>
+          <button className="secondary-btn" onClick={() => goTo("My Profile")}>{t("Choose My Fish")}</button>
+        </div>
+      ) : (
+        <div className="my-fish-grid">
+          {myFishRows.map(({ fish, price }) => (
+            <button type="button" key={fish.id} className="my-fish-card" onClick={() => onFishClick(fish.id)}>
+              <FishThumb fish={fish} size={56} />
+              <span className="my-fish-text">
+                <strong>{fish.name || price?.fish_name}</strong>
+                <span className="my-fish-price">{price ? `${peso(price.price_per_kg)} / kg` : t("No published price yet")}</span>
+                {price && <small>{t("AS OF")} {price.recorded_date}{municipality ? "" : ` · ${price.municipality_name}`}</small>}
+              </span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
     <div className="config-grid" style={{ marginBottom: 18 }}>
-      <div className="config-card"><h3>Published Species</h3><h2>{loading ? "…" : rows.length}</h2></div>
-      <div className="config-card"><h3>Average Published Price / KG</h3><h2>{loading ? "…" : peso(average)}</h2></div>
-      <div className="config-card"><h3>My Pending Suggestions</h3><h2>{pending}</h2></div>
+      <div className="config-card"><h3>{t("Published Species")}</h3><h2>{loading ? "…" : rows.length}</h2></div>
+      <div className="config-card"><h3>{t("Average Published Price / KG")}</h3><h2>{loading ? "…" : peso(average)}</h2></div>
+      <div className="config-card"><h3>{t("My Pending Suggestions")}</h3><h2>{pending}</h2></div>
     </div>
     <PublishedState loading={loading} error={error} records={records} municipality={municipality} />
-    {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><div className="panel-header"><div><h3>Latest Official Fish Prices</h3><p>Only LGU-published records</p></div><button className="primary-btn" onClick={() => goTo("Current Fish Prices")}>View All Prices</button></div><table><thead><tr><th>SPECIES</th><th>PRICE / KG</th><th>AS OF</th></tr></thead><tbody>{rows.slice(0, 8).map((r) => <tr key={`${r.fish_species}-${r.municipality}`}><td>{r.fish_name}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td></tr>)}</tbody></table></div>}
+    {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><div className="panel-header"><div><h3>{t("Latest Official Fish Prices")}</h3><p>{t("Only LGU-published records")}</p></div><button className="primary-btn" onClick={() => goTo("Current Fish Prices")}>{t("View All Prices")}</button></div><table><thead><tr><th>{t("SPECIES")}</th><th>{t("PRICE / KG")}</th><th>{t("AS OF")}</th></tr></thead><tbody>{rows.slice(0, 8).map((r) => <tr key={`${r.fish_species}-${r.municipality}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} /></td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td></tr>)}</tbody></table></div>}
   </>;
 }
 
