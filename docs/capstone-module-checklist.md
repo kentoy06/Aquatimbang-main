@@ -34,7 +34,7 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Filters: species, date range, municipality | 🟡 | Species and municipality yes; date-range filter not on every view. |
 | Interactive charts (Chart.js / Recharts in the paper) | 🟡 | Forecast pages use Recharts (hover tooltips, confidence band); trend pages still use simple charts. |
 | Forecast integration (SARIMAX) | ✅ | Vendor, LGU and Admin forecast pages use the SARIMAX API. |
-| Data export & sharing (LGU, Admin) | ✅ | CSV export. |
+| Data export & sharing (LGU, Admin) | ✅ | CSV and PDF export. |
 | Responsive interface | 🟡 | Login/Register checked on phone width; dashboards not yet checked. |
 | "No data available for the selected filters" message | ✅ | |
 
@@ -45,7 +45,7 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Select species, enter weight | ✅ | |
 | Total = weight × latest LGU-validated price per kg | ✅ | |
 | "Weight must be greater than zero" / "No current price" messages | ✅ | |
-| Save calculation history (WeightEntries, Table 20) | ❌ | Calculations are not stored. |
+| Save calculation history (WeightEntries, Table 20) | ✅ | "Save to History" stores species, municipality, weight, the published price used and the total (`/api/weight-entries/`). The server recomputes the total from the latest published price. Vendors can remove their own entries. |
 
 ## 4. Price Entry and Validation Module (UC-4)
 
@@ -76,12 +76,12 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Function | Status | Notes |
 |---|---|---|
 | Price history report | ✅ | LGU Reports, Admin Reports Management. |
-| Validation log report | ✅ | LGU Validation History. |
+| Validation log report | ✅ | LGU Reports and Validation History. |
 | User activity logs (Admin) | ✅ | Admin Activity Logs. |
 | Export CSV | ✅ | |
-| Export PDF | 🟡 | Uses the browser's Print → Save as PDF. |
-| External factor summaries | ❌ | External factor data now exists; a report for it is not built yet. |
-| Log generated reports (Reports table, Table 22) | ❌ | |
+| Export PDF | ✅ | Real PDF files (title, filters, summary, who generated it, page numbers). |
+| External factor summaries | ✅ | LGU "External Factor Summary" (days logged, average fuel price, rainy/stormy days, holidays) and Admin "External Factor Report". |
+| Log generated reports (Reports table, Table 22) | ✅ | Every CSV/PDF export is saved (`/api/reports/`): type, format, filters, row count, who, when. Administrators see all of them under Reports Management → Generated Reports. |
 
 ## 7. User Management Module (UC-7)
 
@@ -145,4 +145,5 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 4. ~~**Authentication security**~~ — done: lockout, session timeout, server-side logout,
    login logging, rate limiting. Still needs an email server for reset links and lock notices.
 5. ~~**Price corrections and bounds**~~ — done: correction history, configurable price range.
-6. **Smaller items** — save calculator history, PDF export, log generated reports.
+6. ~~**Smaller items**~~ — done: calculator history, PDF export, external factor reports, report log.
+7. **Email server** (optional) — reset links and lockout notices (UC-1 3d, 3e).

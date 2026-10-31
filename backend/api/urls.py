@@ -26,6 +26,9 @@ from .views import (
     change_my_password,
     logout_user,
     system_settings,
+    weight_entries,
+    delete_weight_entry,
+    reports,
     pending_registrations,
     registration_options,
     view_verification_document,
@@ -215,6 +218,25 @@ urlpatterns = [
         "system-settings/",
         system_settings,
         name="system-settings"
+    ),
+
+    # Fair Price Calculator history (your own saved calculations).
+    path(
+        "weight-entries/",
+        weight_entries,
+        name="weight-entries"
+    ),
+    path(
+        "weight-entries/<int:entry_id>/",
+        delete_weight_entry,
+        name="delete-weight-entry"
+    ),
+
+    # Log of exported reports.
+    path(
+        "reports/",
+        reports,
+        name="reports"
     ),
 
     # End this session on the server.

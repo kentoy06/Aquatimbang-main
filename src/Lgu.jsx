@@ -19,6 +19,8 @@ import {
 import AccountProfile from "./components/AccountProfile.jsx";
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
+import { listExternalFactors } from "./api/forecast.js";
+import { describeFilters, exportReport } from "./api/reportExport.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -180,17 +182,6 @@ const STATUS_LABELS = {
   flagged: "Flagged",
   rejected: "Rejected",
 };
-
-function downloadCsv(filename, header, rows) {
-  const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-  const csv = "\uFEFF" + [header, ...rows].map((row) => row.map(quote).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const a = document.createElement("a");
-  a.href = url;
-  a.download = filename;
-  a.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
-}
 
 // Unique { id, name } options from records, sorted by name.
 function uniqueOptions(records, idKey, nameKey) {
@@ -3438,80 +3429,146 @@ function PriceAnomalies({ priceRecords, suggestions }) {
    ================================================================ */
 
 function Reports({ priceRecords, notify }) {
-  const [statusFilter, setStatusFilter] = useState("All Statuses");
-  const [speciesFilter, setSpeciesFilter] = useState("All Species");
+  const [type, setType] = useState("Price History Report");
+  const [statusFilter, setStatusFilter] = useState("");
+  const [speciesFilter, setSpeciesFilter] = useState("");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const [exporting, setExporting] = useState("");
+  const { records: logs } = useDjangoActivityLogs();
+  const [factors, setFactors] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    listExternalFactors()
+      .then((rows) => { if (!cancelled) setFactors(rows); })
+      .catch(() => { if (!cancelled) setFactors([]); });
+    return () => { cancelled = true; };
+  }, []);
+
   const species = recordSpeciesNames(priceRecords);
+  const inRange = (day) => (!from || day >= from) && (!to || day <= to);
 
-  const visible = priceRecords
-    .filter((r) => speciesFilter === "All Species" || r.fish_name === speciesFilter)
-    .filter((r) => statusFilter === "All Statuses" || r.status === statusFilter)
-    .sort((a, b) => (a.recorded_date < b.recorded_date ? 1 : a.recorded_date > b.recorded_date ? -1 : b.id - a.id));
-  const published = visible.filter(isPublished);
-  const flagged = visible.filter((r) => r.status === "flagged");
-  const average = visible.length ? visible.reduce((s, r) => s + Number(r.price_per_kg), 0) / visible.length : 0;
+  // Rows and columns for the selected report type.
+  let columns;
+  let rows;
+  let summary;
+  if (type === "Price History Report") {
+    const visible = priceRecords
+      .filter((r) => !speciesFilter || r.fish_name === speciesFilter)
+      .filter((r) => !statusFilter || r.status === statusFilter)
+      .filter((r) => inRange(r.recorded_date))
+      .sort((a, b) => (a.recorded_date < b.recorded_date ? 1 : a.recorded_date > b.recorded_date ? -1 : b.id - a.id));
+    columns = ["Date", "Species", "Price per kg", "Municipality", "Status", "Recorded by"];
+    rows = visible.map((r) => [r.recorded_date, r.fish_name, peso(r.price_per_kg), r.municipality_name, STATUS_LABELS[r.status] || r.status, r.recorded_by_name || "—"]);
+    const average = visible.length ? visible.reduce((s, r) => s + Number(r.price_per_kg), 0) / visible.length : 0;
+    summary = [
+      ["Total Entries", visible.length],
+      ["Published", visible.filter(isPublished).length],
+      ["Average Price", peso(average)],
+      ["Flagged Entries", visible.filter((r) => r.status === "flagged").length],
+    ];
+  } else if (type === "Validation Log Report") {
+    const visible = logs
+      .filter((l) => DECISION_ACTIONS.includes(String(l.action).toLowerCase()) || String(l.action).toLowerCase() === "corrected")
+      .filter((l) => inRange((l.created_at || "").slice(0, 10)))
+      .filter((l) => !speciesFilter || String(l.target_name || "").startsWith(speciesFilter));
+    columns = ["Date & Time", "Decision", "Record", "Details"];
+    rows = visible.map((l) => [formatAuditTimestamp(l.created_at), auditLabel(l.action), l.target_name || "—", auditSummary(l)]);
+    summary = ["Approved", "Published", "Flagged", "Rejected"].map((label) => [label, visible.filter((l) => auditLabel(l.action) === label).length]);
+  } else {
+    const visible = factors.filter((f) => inRange(f.date)).sort((a, b) => (a.date < b.date ? 1 : -1));
+    const fuel = visible.filter((f) => f.fuel_price !== null).map((f) => Number(f.fuel_price));
+    columns = ["Date", "Fuel price per liter", "Weather", "Holiday", "Notes"];
+    rows = visible.map((f) => [f.date, f.fuel_price !== null ? peso(f.fuel_price) : "—", f.weather_display, f.is_holiday ? "Yes" : "No", f.notes || ""]);
+    summary = [
+      ["Days Logged", visible.length],
+      ["Average Fuel Price", fuel.length ? peso(fuel.reduce((a, b) => a + b, 0) / fuel.length) : "—"],
+      ["Rainy / Stormy Days", `${visible.filter((f) => f.weather === "rainy").length} / ${visible.filter((f) => f.weather === "stormy").length}`],
+      ["Holidays", visible.filter((f) => f.is_holiday).length],
+    ];
+  }
 
-  const exportCSV = () => {
-    downloadCsv(
-      "price_report.csv",
-      ["Date", "Species", "Price per kg", "Municipality", "Status", "Recorded by"],
-      visible.map((r) => [r.recorded_date, r.fish_name, Number(r.price_per_kg).toFixed(2), r.municipality_name, STATUS_LABELS[r.status] || r.status, r.recorded_by_name || ""])
-    );
-    notify("Report exported as CSV.");
+  const parameters = {
+    species: type === "External Factor Summary" ? "" : speciesFilter,
+    status: type === "Price History Report" && statusFilter ? STATUS_LABELS[statusFilter] : "",
+    from,
+    to,
   };
 
-  const exportPDF = () => {
-    notify("Opening print dialog — choose 'Save as PDF'.");
-    setTimeout(() => window.print(), 400);
+  const exportAs = async (format) => {
+    setExporting(format);
+    try {
+      await exportReport({
+        format,
+        reportType: type,
+        parameters,
+        subtitle: [describeFilters(parameters), summary.map(([label, value]) => `${label}: ${value}`).join(" · ")].filter(Boolean).join("\n"),
+        columns,
+        rows,
+      });
+      notify(`${type} exported as ${format}.`);
+    } catch (error) {
+      notify(`Export failed: ${error.message}`);
+    } finally {
+      setExporting("");
+    }
   };
 
   return (
     <>
       <div className="page-title">
-        <div><h2>Reports</h2><p>Generate and export price record reports from the database.</p></div>
+        <div><h2>Reports</h2><p>Generate and export price history, validation log, and external factor reports.</p></div>
         <div className="filter-row">
-          <button className="secondary-btn" onClick={exportCSV} disabled={!visible.length}>↓ Export CSV</button>
-          <button className="primary-btn" onClick={exportPDF}>↓ Export PDF</button>
+          <button className="secondary-btn" onClick={() => exportAs("CSV")} disabled={!rows.length || exporting !== ""}>{exporting === "CSV" ? "Exporting…" : "↓ Export CSV"}</button>
+          <button className="primary-btn" onClick={() => exportAs("PDF")} disabled={!rows.length || exporting !== ""}>{exporting === "PDF" ? "Exporting…" : "↓ Export PDF"}</button>
         </div>
       </div>
 
       <div className="log-summary">
-        <div className="mini-stat"><span>Total Entries</span><strong>{visible.length}</strong></div>
-        <div className="mini-stat"><span>Published</span><strong>{published.length}</strong></div>
-        <div className="mini-stat"><span>Average Price</span><strong>{peso(average)}</strong></div>
-        <div className="mini-stat"><span>Flagged Entries</span><strong>{flagged.length}</strong></div>
+        {summary.map(([label, value]) => (
+          <div className="mini-stat" key={label}><span>{label}</span><strong>{value}</strong></div>
+        ))}
       </div>
 
       <div className="panel">
-        <div className="table-tools">
-          <select value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
-            <option>All Statuses</option>
-            {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        <div className="table-tools" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
+          <select aria-label="Report type" value={type} onChange={(e) => setType(e.target.value)}>
+            <option>Price History Report</option>
+            <option>Validation Log Report</option>
+            <option>External Factor Summary</option>
           </select>
-          <select value={speciesFilter} onChange={(e) => setSpeciesFilter(e.target.value)}>
-            <option>All Species</option>
-            {species.map((s) => <option key={s}>{s}</option>)}
-          </select>
+          {type !== "External Factor Summary" && (
+            <select aria-label="Species" value={speciesFilter} onChange={(e) => setSpeciesFilter(e.target.value)}>
+              <option value="">All Species</option>
+              {species.map((s) => <option key={s}>{s}</option>)}
+            </select>
+          )}
+          {type === "Price History Report" && (
+            <select aria-label="Status" value={statusFilter} onChange={(e) => setStatusFilter(e.target.value)}>
+              <option value="">All Statuses</option>
+              {Object.entries(STATUS_LABELS).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+            </select>
+          )}
+          <label>From <input type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+          <label>To <input type="date" min={from || undefined} value={to} onChange={(e) => setTo(e.target.value)} /></label>
         </div>
 
-        <table>
-          <thead><tr><th>DATE</th><th>SPECIES</th><th>PRICE / KG</th><th>MUNICIPALITY</th><th>STATUS</th></tr></thead>
-          <tbody>
-            {visible.length === 0 ? (
-              <tr><td colSpan="5" className="empty-row">No records found.</td></tr>
-            ) : (
-              visible.slice(0, 200).map((r) => (
-                <tr key={r.id}>
-                  <td>{fmtDate(r.recorded_date)}</td>
-                  <td><strong>{r.fish_name}</strong></td>
-                  <td><strong>{peso(r.price_per_kg)}</strong></td>
-                  <td>{r.municipality_name}</td>
-                  <td><span className={`badge ${r.status}`}>{STATUS_LABELS[r.status] || r.status}</span></td>
-                </tr>
-              ))
-            )}
-          </tbody>
-        </table>
-        {visible.length > 200 && <p className="chart-note">Showing the 200 most recent of {visible.length} records. Export CSV for the full list.</p>}
+        <div style={{ overflowX: "auto" }}>
+          <table>
+            <thead><tr>{columns.map((c) => <th key={c}>{c.toUpperCase()}</th>)}</tr></thead>
+            <tbody>
+              {rows.length === 0 ? (
+                <tr><td colSpan={columns.length} className="empty-row">No records found for the selected parameters.</td></tr>
+              ) : (
+                rows.slice(0, 200).map((row, i) => (
+                  <tr key={i}>{row.map((cell, ci) => <td key={ci}>{ci === 1 ? <strong>{cell}</strong> : cell}</td>)}</tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
+        {rows.length > 200 && <p className="chart-note">Showing 200 of {rows.length} rows. Exports include every row.</p>}
       </div>
     </>
   );

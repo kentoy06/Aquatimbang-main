@@ -910,7 +910,22 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
 function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoadError = "", loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", notify }) {
   const [speciesId, setSpeciesId] = useState("");
   const [weight, setWeight] = useState("");
+  // Calculations saved in the database (WeightEntries, Table 20).
   const [history, setHistory] = useState([]);
+  const [historyError, setHistoryError] = useState("");
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(`${API_BASE_URL}/weight-entries/`, { headers: { Authorization: `Token ${localStorage.getItem("authToken")}` } })
+      .then(async (response) => {
+        const data = await response.json().catch(() => null);
+        if (!response.ok) throw new Error(data?.message || "Could not load your saved calculations.");
+        if (!cancelled) setHistory(data);
+      })
+      .catch((err) => { if (!cancelled) setHistoryError(err.message); });
+    return () => { cancelled = true; };
+  }, []);
 
   const speciesOptions = Array.from(new Map([
     ...records.filter((r) => r.status === "published" || r.status === undefined)
@@ -938,13 +953,37 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoad
   const valid = touched && !invalid && unit !== null && !loading && !error;
   const total = valid ? parsed * unit : null;
 
-  const save = () => {
+  const save = async () => {
     if (!valid || !latest) {
       notify?.("Choose a municipality and species with a published LGU price, then enter a valid weight.");
       return;
     }
-    setHistory((prev) => [{ id: Date.now(), species: speciesName, municipality, weight: parsed, unit, date: String(latest.recorded_date).slice(0, 10), total }, ...prev].slice(0, 5));
-    notify?.("Computation saved for this session.");
+    setSaving(true);
+    try {
+      // The server recomputes the total from the latest published price.
+      const response = await fetch(`${API_BASE_URL}/weight-entries/`, {
+        method: "POST",
+        headers: { Authorization: `Token ${localStorage.getItem("authToken")}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ fish_species: latest.fish_species, municipality: latest.municipality, weight_kg: parsed.toFixed(2) }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || data?.weight_kg || "Could not save the calculation.");
+      setHistory((prev) => [data, ...prev]);
+      notify?.("Calculation saved to your history.");
+    } catch (err) {
+      notify?.(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const removeEntry = async (entry) => {
+    const response = await fetch(`${API_BASE_URL}/weight-entries/${entry.id}/`, {
+      method: "DELETE",
+      headers: { Authorization: `Token ${localStorage.getItem("authToken")}` },
+    });
+    if (response.ok) setHistory((prev) => prev.filter((h) => h.id !== entry.id));
+    else notify?.("Could not remove the calculation.");
   };
 
   return (
@@ -990,11 +1029,20 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], speciesLoad
             <small>{valid ? `${parsed} kg × ${peso(unit)} per kg` : "Select a published price and enter a valid weight"}</small>
           </div>
           <div className="button-row"><button className="secondary-btn" onClick={() => setWeight("")}>Clear</button>
-            <button className="primary-btn" onClick={save} disabled={!valid}>Save</button></div>
-          {history.length > 0 && <><div className="mini-head">Recent Computations (this session only)</div>
-            <div className="breakdown">{history.map((h) => <div className="breakdown-row" key={h.id}>
-              <span>{h.species} · {h.municipality} · {h.weight} kg · {h.date}</span><strong>{peso(h.total)}</strong>
-            </div>)}</div></>}
+            <button className="primary-btn" onClick={save} disabled={!valid || saving}>{saving ? "Saving…" : "Save to History"}</button></div>
+          <div className="mini-head">My Saved Calculations</div>
+          {historyError && <div className="error-box">{historyError}</div>}
+          {!historyError && history.length === 0 && <p style={{ fontSize: 13, color: "#64748b" }}>Saved calculations appear here, so you can look back at your pricing.</p>}
+          <div className="breakdown">{history.slice(0, 20).map((h) => <div className="breakdown-row" key={h.id}>
+            <span>
+              {h.fish_name} · {h.municipality_name} · {Number(h.weight_kg)} kg × {peso(h.price_per_kg)}
+              <small style={{ display: "block", color: "#64748b" }}>Saved {new Date(h.created_at).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" })}{h.price_date ? ` · price of ${h.price_date}` : ""}</small>
+            </span>
+            <span style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <strong>{peso(h.computed_price)}</strong>
+              <button className="secondary-btn" style={{ padding: "2px 8px" }} title="Remove" aria-label={`Remove ${h.fish_name} calculation`} onClick={() => removeEntry(h)}>✕</button>
+            </span>
+          </div>)}</div>
         </div>
       </div>
     </>

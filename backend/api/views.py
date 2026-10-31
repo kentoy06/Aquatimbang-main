@@ -2354,3 +2354,151 @@ def system_settings(request):
         if changes:
             log_activity(request.user, "updated", "SystemSetting", 1, "Price range", {"changes": changes})
     return Response(after)
+
+
+# ============================================================
+# FAIR PRICE CALCULATOR HISTORY (UC-3, Table 20)
+# ============================================================
+from .models import ReportLog, WeightEntry
+
+# Largest weight accepted in one calculation, in kilograms.
+MAX_WEIGHT_KG = Decimal("10000")
+
+
+def weight_entry_row(entry):
+    return {
+        "id": entry.id,
+        "fish_species": entry.fish_species_id,
+        "fish_name": entry.fish_species.name,
+        "municipality": entry.municipality_id,
+        "municipality_name": entry.municipality.name,
+        "weight_kg": str(entry.weight_kg),
+        "price_per_kg": str(entry.price_per_kg),
+        "computed_price": str(entry.computed_price),
+        "price_date": entry.price_record.recorded_date.isoformat() if entry.price_record else None,
+        "created_at": entry.created_at.isoformat(),
+    }
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def weight_entries(request):
+    """
+    GET: your saved calculations. POST {fish_species, municipality, weight_kg}:
+    compute weight × the latest published price and save it.
+    """
+    if approved_role(request.user) is None:
+        return Response({"message": "An approved account is required."}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == "GET":
+        entries = WeightEntry.objects.filter(user=request.user).select_related(
+            "fish_species", "municipality", "price_record"
+        )[:200]
+        return Response([weight_entry_row(e) for e in entries])
+
+    try:
+        weight = Decimal(str(request.data.get("weight_kg"))).quantize(Decimal("0.01"))
+    except (InvalidOperation, ValueError, TypeError):
+        return Response({"weight_kg": "Enter the weight in kilograms."}, status=status.HTTP_400_BAD_REQUEST)
+    if weight <= 0:
+        return Response({"weight_kg": "Weight must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+    if weight > MAX_WEIGHT_KG:
+        return Response({"weight_kg": f"Weight must be at most {MAX_WEIGHT_KG:,} kg."}, status=status.HTTP_400_BAD_REQUEST)
+
+    species = FishSpecies.objects.filter(pk=request.data.get("fish_species")).first() if str(request.data.get("fish_species", "")).isdigit() else None
+    municipality = Municipality.objects.filter(pk=request.data.get("municipality")).first() if str(request.data.get("municipality", "")).isdigit() else None
+    if species is None or municipality is None:
+        return Response({"message": "Choose a fish species and municipality."}, status=status.HTTP_400_BAD_REQUEST)
+
+    # UC-3 step 4: the latest LGU-validated (published) price per kg.
+    latest = (
+        PriceRecord.objects.filter(fish_species=species, municipality=municipality, status=PriceRecord.STATUS_PUBLISHED)
+        .order_by("-recorded_date", "-id")
+        .first()
+    )
+    if latest is None:
+        return Response(
+            {"message": "No current price found for this species. Please select another."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+
+    entry = WeightEntry.objects.create(
+        user=request.user,
+        fish_species=species,
+        municipality=municipality,
+        price_record=latest,
+        weight_kg=weight,
+        price_per_kg=latest.price_per_kg,
+        computed_price=(weight * latest.price_per_kg).quantize(Decimal("0.01")),
+    )
+    return Response(weight_entry_row(entry), status=status.HTTP_201_CREATED)
+
+
+@api_view(["DELETE"])
+@permission_classes([IsAuthenticated])
+def delete_weight_entry(request, entry_id):
+    """Remove one of your saved calculations."""
+    deleted, _ = WeightEntry.objects.filter(pk=entry_id, user=request.user).delete()
+    if not deleted:
+        return Response({"message": "Calculation not found."}, status=status.HTTP_404_NOT_FOUND)
+    return Response({"message": "Calculation removed."})
+
+
+# ============================================================
+# GENERATED REPORTS LOG (UC-5, Table 22)
+# ============================================================
+
+def report_row(report):
+    user = report.generated_by
+    return {
+        "id": report.id,
+        "report_type": report.report_type,
+        "parameters": report.parameters,
+        "format": report.format,
+        "row_count": report.row_count,
+        "generated_by": user.username if user else None,
+        "generated_by_name": (user.get_full_name() or user.username) if user else None,
+        "generated_by_role": approved_role(user) if user else None,
+        "generated_at": report.generated_at.isoformat(),
+    }
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def reports(request):
+    """
+    GET: generated reports (Administrators see all, LGU Officers their own).
+    POST {report_type, parameters, format, row_count}: record an export.
+    """
+    role = approved_role(request.user)
+    if role not in ("LGU Officer", "Administrator"):
+        return Response({"message": "LGU Officer or Administrator access required."}, status=status.HTTP_403_FORBIDDEN)
+
+    if request.method == "GET":
+        logs = ReportLog.objects.select_related("generated_by")
+        if role == "LGU Officer":
+            logs = logs.filter(generated_by=request.user)
+        return Response([report_row(r) for r in logs[:200]])
+
+    report_type = request.data.get("report_type")
+    fmt = str(request.data.get("format", "")).upper()
+    parameters = request.data.get("parameters") or {}
+    try:
+        row_count = max(0, int(request.data.get("row_count", 0)))
+    except (TypeError, ValueError):
+        row_count = 0
+    if not isinstance(report_type, str) or not report_type.strip() or len(report_type) > 100:
+        return Response({"report_type": "Give the report type."}, status=status.HTTP_400_BAD_REQUEST)
+    if fmt not in (ReportLog.FORMAT_PDF, ReportLog.FORMAT_CSV):
+        return Response({"format": "Format must be PDF or CSV."}, status=status.HTTP_400_BAD_REQUEST)
+    if not isinstance(parameters, dict):
+        return Response({"parameters": "Parameters must be an object."}, status=status.HTTP_400_BAD_REQUEST)
+
+    report = ReportLog.objects.create(
+        generated_by=request.user,
+        report_type=report_type.strip(),
+        parameters=parameters,
+        format=fmt,
+        row_count=row_count,
+    )
+    return Response(report_row(report), status=status.HTTP_201_CREATED)
