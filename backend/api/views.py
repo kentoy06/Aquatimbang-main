@@ -878,9 +878,12 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
                     "to preserve historical price data."
                 )
             })
-    @action(detail=True, methods=["get"])
+    @action(detail=True, methods=["get"], authentication_classes=[], permission_classes=[AllowAny])
     def photo(self, request, pk=None):
-        """The species picture, for anyone logged in."""
+        """
+        The species picture. Public, like the species names on the
+        registration page, so it can be shown as a plain <img>.
+        """
         fish = self.get_object()
         if not fish.photo:
             raise Http404("No photo for this species.")
@@ -889,7 +892,7 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
         except (FileNotFoundError, OSError):
             raise Http404("Photo file not found.")
         response = FileResponse(fish.photo, filename=fish.photo.name.split("/")[-1])
-        response["Cache-Control"] = "private, max-age=3600"
+        response["Cache-Control"] = "public, max-age=86400"
         return response
 
 
@@ -1370,7 +1373,12 @@ def get_account_verification(profile):
                 "stall_photo": bool(vendor.stall_photo),
             })
             verification["species_sold"] = [
-                {"id": fish.id, "name": fish.name}
+                {
+                    "id": fish.id,
+                    "name": fish.name,
+                    "has_photo": bool(fish.photo),
+                    "updated_at": fish.updated_at.isoformat(),
+                }
                 for fish in vendor.species_sold.order_by("name")
             ]
     elif profile.role.name == "LGU Officer":
@@ -1463,7 +1471,12 @@ def registration_options(request):
     species = FishSpecies.objects.filter(is_active=True).order_by("name")
     return Response({
         "fish_species": [
-            {"id": fish.id, "name": fish.name, "has_photo": bool(fish.photo)}
+            {
+                "id": fish.id,
+                "name": fish.name,
+                "has_photo": bool(fish.photo),
+                "updated_at": fish.updated_at.isoformat(),
+            }
             for fish in species
         ],
         "roles": [

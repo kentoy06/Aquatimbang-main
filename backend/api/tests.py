@@ -1330,4 +1330,8 @@ class RegistrationPhotoAndSpeciesTests(TestCase):
         self.assertTrue(response.data["has_photo"])
         self.assertEqual(lgu.get(f"/api/fish-species/{self.bangus.id}/photo/").status_code, 200)
         self.assertEqual(lgu.get(f"/api/fish-species/{self.tilapia.id}/photo/").status_code, 404)
-        self.assertEqual(APIClient().get(f"/api/fish-species/{self.bangus.id}/photo/").status_code, 401)
+        # Fish photos are public so the registration page can show them.
+        self.assertEqual(APIClient().get(f"/api/fish-species/{self.bangus.id}/photo/").status_code, 200)
+        stale = APIClient()
+        stale.credentials(HTTP_AUTHORIZATION="Token expired-or-invalid")
+        self.assertEqual(stale.get(f"/api/fish-species/{self.bangus.id}/photo/").status_code, 200)

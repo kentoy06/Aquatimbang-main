@@ -9,7 +9,7 @@ import {
 import { API_BASE_URL } from "./api/config.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
-import { FishPicture, FishThumb } from "./components/FishPhoto.jsx";
+import { FishPicker, FishPicture, FishThumb } from "./components/FishPhoto.jsx";
 import { LANGUAGES, LanguageContext, translate, useLanguageSetting, useT } from "./i18n/vendor.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
@@ -251,13 +251,14 @@ useEffect(() => {
       case "Current Fish Prices":
         return <LivePublishedPrices records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} species={registeredFishSpecies} myFish={myFish} onFishClick={openFish} />;
       case "Price Trends":
-        return <PriceTrends registeredSpecies={registeredFishSpecies} speciesLoadError={speciesLoadError} records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} />;
+        return <PriceTrends registeredSpecies={registeredFishSpecies} myFish={myFish} speciesLoadError={speciesLoadError} records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} />;
       case "Price Forecast":
         return <Suspense fallback={<div className="panel" style={{ padding: 24 }}>Loading forecast…</div>}><ForecastView species={registeredFishSpecies} municipalities={municipalityOptions} defaultMunicipalityId={currentUser?.municipality_id} notify={notify} description="Short-term price estimates to help you decide when to sell." /></Suspense>;
       case "Submit Suggested Price":
         return (
           <SubmitSuggestedPrice
             registeredSpecies={speciesForVendor}
+            myFish={myFish}
             records={publishedPrices}
             setMySuggestions={setMySuggestions}
             notify={notify}
@@ -501,7 +502,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = []) {
    PRICE TRENDS (past)
    ================================================================ */
 
-function PriceTrends({ registeredSpecies = [], speciesLoadError = "", records = [], loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "" }) {
+function PriceTrends({ registeredSpecies = [], myFish = [], speciesLoadError = "", records = [], loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "" }) {
   const t = useT();
   const [speciesId, setSpeciesId] = useState("");
   const [range, setRange] = useState("30");
@@ -511,8 +512,8 @@ function PriceTrends({ registeredSpecies = [], speciesLoadError = "", records = 
   const speciesOptions = Array.from(new Map([
     ...records.filter((r) => r.status === "published" || r.status === undefined)
       .map((r) => [String(r.fish_species), { id: String(r.fish_species), name: r.fish_name || `Species #${r.fish_species}` }]),
-    ...registeredSpecies.map((r) => [String(r.id), { id: String(r.id), name: r.name }]),
-  ]).values()).sort((a, b) => a.name.localeCompare(b.name));
+    ...registeredSpecies.map((r) => [String(r.id), { ...r, id: String(r.id) }]),
+  ]).values()).sort((a, b) => Number(myFish.includes(b.id)) - Number(myFish.includes(a.id)) || a.name.localeCompare(b.name));
   const selectedSpecies = speciesOptions.some((s) => s.id === speciesId) ? speciesId : (speciesOptions[0]?.id || "");
   const speciesName = speciesOptions.find((s) => s.id === selectedSpecies)?.name || "Fish species";
   const today = new Date();
@@ -556,12 +557,17 @@ function PriceTrends({ registeredSpecies = [], speciesLoadError = "", records = 
         <div><h2>{t("Price Trends")}</h2><p>Historical LGU-published fish prices from AquaTimbang. No simulated prices.</p></div>
       </div>
       <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
+      <div className="panel" style={{ padding: 18 }}>
+        <FishPicker
+          species={speciesOptions}
+          value={selectedSpecies}
+          onChange={setSpeciesId}
+          myFish={myFish}
+          labels={{ empty: t("No fish species registered"), noPhoto: t("No photo yet"), yours: t("Your fish"), group: t("Fish Species") }}
+        />
+      </div>
       <div className="panel" style={{ padding: 18, marginTop: 16 }}>
         <div className="filter-row" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
-          <label>Fish species <select className="date-input" value={selectedSpecies} onChange={(e) => setSpeciesId(e.target.value)} disabled={!speciesOptions.length}>
-            {!speciesOptions.length && <option value="">No registered species</option>}
-            {speciesOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select></label>
           <label>Date range <select className="date-input" value={range} onChange={(e) => setRange(e.target.value)}>
             <option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="180">Last 180 days</option><option value="custom">Custom dates</option>
           </select></label>
@@ -635,6 +641,7 @@ function PublishedPriceLineChart({ rows }) {
 
 function SubmitSuggestedPrice({
   registeredSpecies = [],
+  myFish = [],
   records = [],
   setMySuggestions,
   notify,
@@ -751,18 +758,14 @@ function SubmitSuggestedPrice({
 
           <div className="form-group">
             <label>{t("Fish Species")}</label>
-            <select
+            <FishPicker
+              species={registeredSpecies}
               value={speciesId}
-              onChange={(e) => setSpeciesId(e.target.value)}
-              disabled={submitting || !registeredSpecies.length}
-            >
-              {!registeredSpecies.length && <option value="">No fish species registered</option>}
-              {registeredSpecies.map((s) => (
-                <option key={s.id} value={s.id}>
-                  {s.name}
-                </option>
-              ))}
-            </select>
+              onChange={setSpeciesId}
+              myFish={myFish}
+              disabled={submitting}
+              labels={{ empty: t("No fish species registered"), noPhoto: t("No photo yet"), yours: t("Your fish"), group: t("Fish Species") }}
+            />
           </div>
 
           <div className="form-group">
@@ -1030,7 +1033,7 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], myFish = []
   const speciesOptions = Array.from(new Map([
     ...records.filter((r) => r.status === "published" || r.status === undefined)
       .map((r) => [String(r.fish_species), { id: String(r.fish_species), name: r.fish_name || `Species #${r.fish_species}` }]),
-    ...registeredSpecies.map((r) => [String(r.id), { id: String(r.id), name: r.name }]),
+    ...registeredSpecies.map((r) => [String(r.id), { ...r, id: String(r.id) }]),
   ]).values()).sort((a, b) => Number(myFish.includes(b.id)) - Number(myFish.includes(a.id)) || a.name.localeCompare(b.name));
   const selectedSpecies = speciesOptions.some((s) => s.id === speciesId) ? speciesId : (speciesOptions[0]?.id || "");
   const speciesName = speciesOptions.find((s) => s.id === selectedSpecies)?.name || "Fish species";
@@ -1106,11 +1109,14 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], myFish = []
           <div className="config-header"><div className="config-icon blue">🧮</div><div>
             <h3>{t("Compute Reference Amount")}</h3><p>{t("Weight × latest published price per kilogram")}</p>
           </div></div>
-          <div className="form-group"><label htmlFor="calc-species">{t("Fish Species")}</label>
-            <select id="calc-species" value={selectedSpecies} onChange={(e) => setSpeciesId(e.target.value)} disabled={!speciesOptions.length}>
-              {!speciesOptions.length && <option value="">No registered species</option>}
-              {speciesOptions.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
-            </select>
+          <div className="form-group"><label>{t("Fish Species")}</label>
+            <FishPicker
+              species={speciesOptions}
+              value={selectedSpecies}
+              onChange={setSpeciesId}
+              myFish={myFish}
+              labels={{ empty: t("No fish species registered"), noPhoto: t("No photo yet"), yours: t("Your fish"), group: t("Fish Species") }}
+            />
           </div>
           <div className="form-group"><label htmlFor="calc-weight">{t("Weight in Kilograms")}</label>
             <div className="input-with-unit"><input id="calc-weight" type="number" value={weight} min="0.01" step="0.01" placeholder="0.00" onChange={(e) => setWeight(e.target.value)} /><span>kg</span></div>

@@ -815,34 +815,39 @@
 }
 
 .login-page .species-picker {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
   gap: 8px;
   margin-top: 6px;
 }
 
 .login-page .species-option {
-  display: inline-flex;
-  align-items: center;
+  position: relative;
+  display: grid;
+  justify-items: center;
   gap: 6px;
-  padding: 6px 12px;
+  padding: 10px 6px 8px;
   border: 1px solid #d0d5dd;
-  border-radius: 999px;
+  border-radius: 10px;
   background: #fff;
   font-size: 13px;
   color: #344054;
+  text-align: center;
   cursor: pointer;
   user-select: none;
 }
 
 .login-page .species-option-on {
-  border-color: #0E7C86;
+  border: 2px solid #0E7C86;
   background: #e6f4f5;
   color: #0b5f66;
   font-weight: 600;
 }
 
-.login-page .form-group .species-option input {
+.login-page .species-option input {
+  position: absolute;
+  top: 6px;
+  left: 6px;
   width: 15px;
   height: 15px;
   margin: 0;

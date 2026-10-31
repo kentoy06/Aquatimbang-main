@@ -1657,6 +1657,7 @@ const submitReview = async () => {
       <ApplicantSummary
         account={reviewingUser}
         onOpenPhoto={() => openVerificationDocument(reviewingUser.id, "profile-photo")}
+        onOpenStall={() => openVerificationDocument(reviewingUser.id, "vendor-stall")}
       />
 
       {reviewAction === "approve" ? (
@@ -1789,10 +1790,11 @@ const submitReview = async () => {
       )}
     </div>
 
-    <div className="mini-head">Reason and Fish Sold</div>
+    <div className="mini-head">Reason, Stall and Fish Sold</div>
     <ApplicantSummary
       account={viewing}
       onOpenPhoto={() => openVerificationDocument(viewing.id, "profile-photo")}
+      onOpenStall={() => openVerificationDocument(viewing.id, "vendor-stall")}
     />
 
     <div className="mini-head">Submitted Documents</div>

@@ -120,6 +120,7 @@ function VendorRegistrations({ notify, onReviewed }) {
             <ApplicantSummary
               account={{ ...reviewing, name: name(reviewing) }}
               onOpenPhoto={() => openDocument(reviewing.id, "profile-photo", notify)}
+              onOpenStall={() => openDocument(reviewing.id, "vendor-stall", notify)}
             />
 
             {action === "approve" ? (
