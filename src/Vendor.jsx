@@ -747,7 +747,7 @@ function SubmitSuggestedPrice({
       </div>
 
       <div className="config-grid">
-        <div className="config-card">
+        <div className="config-card" style={{ gridColumn: "1 / -1", maxWidth: 1040 }}>
           <div className="config-header">
             <div className="config-icon blue">✎</div>
             <div>

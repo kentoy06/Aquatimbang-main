@@ -598,6 +598,9 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
 
             "has_photo",
 
+
+            "photo_credit",
+
             "is_active",
 
             "created_at",

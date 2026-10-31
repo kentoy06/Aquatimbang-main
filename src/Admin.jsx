@@ -177,6 +177,7 @@ const mapDatabaseSpecies = (fish) => ({
   description: fish.description || "",
   status: fish.is_active ? "Active" : "Inactive",
   hasPhoto: Boolean(fish.has_photo),
+  photo_credit: fish.photo_credit || "",
   photoVersion: fish.updated_at || "",
   dateAdded: fish.created_at
     ? new Date(fish.created_at).toLocaleDateString("en-PH")
@@ -2020,7 +2021,7 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const [form, setForm] = useState({ name: "", scientific: "", description: "" });
+  const [form, setForm] = useState({ name: "", scientific: "", description: "", photo_credit: "" });
   const [photoFile, setPhotoFile] = useState(null);
   const [speciesSaving, setSpeciesSaving] = useState(false);
   const visible = species.filter((s) =>
@@ -2031,7 +2032,7 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: "", scientific: "", description: "" });
+    setForm({ name: "", scientific: "", description: "", photo_credit: "" });
     setPhotoFile(null);
     setShowForm(true);
   };
@@ -2098,6 +2099,7 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
     name,
     scientific_name: form.scientific.trim(),
     description: form.description.trim(),
+    photo_credit: (form.photo_credit || "").trim(),
   };
 
   setSpeciesSaving(true);
@@ -2243,7 +2245,13 @@ const toggleStatus = async (s) => {
               <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
             </div>
 
-            <FishPhotoInput fish={editing} file={photoFile} onChange={setPhotoFile} />
+            <FishPhotoInput
+              fish={editing}
+              file={photoFile}
+              onChange={setPhotoFile}
+              credit={form.photo_credit}
+              onCreditChange={(value) => setForm({ ...form, photo_credit: value })}
+            />
 
             <div className="button-row">
               <button className="secondary-btn" onClick={() => setShowForm(false)}>Cancel</button>
