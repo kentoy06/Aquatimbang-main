@@ -44,52 +44,45 @@ export function FishPicture({ fish, alt, emptyText = "No photo yet. An LGU Offic
 }
 
 /**
- * Choose a fish by its photo instead of a plain dropdown. Shows the
- * chosen fish large, with every fish as a tile underneath.
+ * Choose a fish from a dropdown; the chosen fish's photo, name and
+ * scientific name appear in a separate box on the right.
  *
- * species: [{ id, name, has_photo, updated_at, scientific_name }]
- * myFish:  ids of fish the vendor sells (marked and listed first by the caller)
+ * species: [{ id, name, has_photo, updated_at, scientific_name, photo_credit }]
+ * myFish:  ids of fish the vendor sells (marked with ★ and listed first by the caller)
  */
-export function FishPicker({ species, value, onChange, myFish = [], disabled = false, labels = {} }) {
+export function FishPicker({ species, value, onChange, myFish = [], disabled = false, labels = {}, id }) {
   const selected = species.find((fish) => String(fish.id) === String(value));
   if (!species.length) return <div className="locked-field">{labels.empty || "No fish species registered"}</div>;
+  const url = photoUrl(selected);
   return (
     <div className="fish-picker-box">
-    <div className="fish-picker">
-      <div className="fish-picker-grid" role="radiogroup" aria-label={labels.group || "Fish species"}>
-        {species.map((fish) => {
-          const on = String(fish.id) === String(value);
-          return (
-            <button
-              type="button"
-              key={fish.id}
-              role="radio"
-              aria-checked={on}
-              className={`fish-tile ${on ? "fish-tile-on" : ""}`}
-              onClick={() => onChange(String(fish.id))}
-              disabled={disabled}
-            >
-              <FishThumb fish={fish} size={44} />
-              <span>{fish.name}</span>
-              {myFish.includes(String(fish.id)) && <span className="fish-tile-star" title={labels.yours || "Your fish"}>★</span>}
-            </button>
-          );
-        })}
+      <div className="fish-picker">
+        <select
+          id={id}
+          className="fish-picker-select"
+          value={value}
+          onChange={(event) => onChange(event.target.value)}
+          disabled={disabled}
+          aria-label={labels.group || "Fish species"}
+        >
+          {species.map((fish) => (
+            <option key={fish.id} value={String(fish.id)}>
+              {myFish.includes(String(fish.id)) ? "★ " : ""}{fish.name}
+            </option>
+          ))}
+        </select>
+        {selected && (
+          <div className="fish-preview">
+            <div className="fish-preview-photo">
+              {url ? <img src={url} alt={selected.name} /> : <span>{labels.noPhoto || "No photo yet"}</span>}
+            </div>
+            <strong>{selected.name}</strong>
+            {selected.scientific_name && <em>{selected.scientific_name}</em>}
+            {myFish.includes(String(selected.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
+            {selected.photo_credit && url && <small className="fish-credit">{labels.credit || "Photo"}: {selected.photo_credit}</small>}
+          </div>
+        )}
       </div>
-      {selected && (
-        <div className="fish-picker-selected">
-          <span className="fish-picker-photo">
-            {photoUrl(selected)
-              ? <img src={photoUrl(selected)} alt={selected.name} />
-              : <span>{labels.noPhoto || "No photo yet"}</span>}
-          </span>
-          <strong>{selected.name}</strong>
-          {selected.scientific_name && <em>{selected.scientific_name}</em>}
-          {myFish.includes(String(selected.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
-          {selected.photo_credit && photoUrl(selected) && <small className="fish-credit">{labels.credit || "Photo"}: {selected.photo_credit}</small>}
-        </div>
-      )}
-    </div>
     </div>
   );
 }

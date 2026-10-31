@@ -23,62 +23,61 @@
   text-align: center;
 }
 
-/* Fish picker: tiles on the left, the chosen fish on the right */
+/* Fish picker: dropdown on the left, the chosen fish in its own box on the right */
+.fish-picker-box {
+  container-type: inline-size;
+}
+
 .fish-picker {
   display: grid;
   grid-template-columns: minmax(0, 1fr) 240px;
-  gap: 14px;
+  gap: 16px;
   align-items: start;
 }
 
-.fish-picker-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(104px, 1fr));
-  gap: 8px;
-  max-height: 340px;
-  overflow-y: auto;
-  padding: 2px;
+.fish-picker-select {
+  width: 100%;
 }
 
-.fish-picker-selected {
-  position: sticky;
-  top: 12px;
+.fish-preview {
   display: grid;
   gap: 4px;
   padding: 10px;
-  border: 1px solid #b9e3e7;
-  border-radius: 12px;
-  background: #f0fafb;
+  border: 2px dashed #0e7c86;
+  border-radius: 14px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(14, 124, 134, 0.12);
 }
 
-.fish-picker-selected strong {
+.fish-preview strong {
   margin-top: 6px;
-  font-size: 18px;
+  font-size: 17px;
+  color: #0b5f66;
 }
 
-.fish-picker-selected em {
+.fish-preview em {
   color: #667085;
   font-size: 13px;
 }
 
-.fish-picker-selected .badge {
+.fish-preview .badge {
   justify-self: start;
 }
 
-.fish-picker-photo {
+.fish-preview-photo {
   width: 100%;
   aspect-ratio: 4 / 3;
   border-radius: 10px;
   overflow: hidden;
   display: grid;
   place-items: center;
-  background: #e0f2f4;
+  background: #eef6f7;
   color: #667085;
   font-size: 13px;
   text-align: center;
 }
 
-.fish-picker-photo img {
+.fish-preview-photo img {
   width: 100%;
   height: 100%;
   object-fit: cover;
@@ -94,54 +93,9 @@
   margin: 0;
 }
 
-.fish-tile {
-  position: relative;
-  display: grid;
-  justify-items: center;
-  gap: 6px;
-  padding: 10px 6px;
-  border: 1px solid #d0d5dd;
-  border-radius: 10px;
-  background: #fff;
-  font: inherit;
-  font-size: 13px;
-  color: #344054;
-  cursor: pointer;
-  text-align: center;
-  overflow-wrap: anywhere;
-}
-
-.fish-tile:hover {
-  border-color: #0e7c86;
-}
-
-.fish-tile-on {
-  border: 2px solid #0e7c86;
-  background: #e6f4f5;
-  font-weight: 600;
-  color: #0b5f66;
-}
-
-.fish-tile-star {
-  position: absolute;
-  top: 4px;
-  right: 7px;
-  color: #f79009;
-  font-size: 13px;
-}
-
-/* Narrow cards and phones: the chosen fish goes above the tiles */
-.fish-picker-box {
-  container-type: inline-size;
-}
-
-@container (max-width: 560px) {
+/* Narrow cards and phones: the photo goes under the dropdown */
+@container (max-width: 480px) {
   .fish-picker {
     grid-template-columns: 1fr;
-  }
-
-  .fish-picker-selected {
-    position: static;
-    order: -1;
   }
 }
