@@ -9,7 +9,7 @@ import {
 import { API_BASE_URL } from "./api/config.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
-import { FishPicker, FishPicture, FishThumb } from "./components/FishPhoto.jsx";
+import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
 import { LANGUAGES, LanguageContext, translate, useLanguageSetting, useT } from "./i18n/vendor.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
@@ -746,8 +746,8 @@ function SubmitSuggestedPrice({
         </div>
       </div>
 
-      <div className="config-grid">
-        <div className="config-card" style={{ gridColumn: "1 / -1", maxWidth: 900 }}>
+      <div className="config-grid suggest-grid">
+        <div className="config-card">
           <div className="config-header">
             <div className="config-icon blue">✎</div>
             <div>
@@ -763,6 +763,7 @@ function SubmitSuggestedPrice({
               value={speciesId}
               onChange={setSpeciesId}
               myFish={myFish}
+              preview={false}
               disabled={submitting}
               labels={{ empty: t("No fish species registered"), noPhoto: t("No photo yet"), yours: t("Your fish"), group: t("Fish Species") }}
             />
@@ -834,6 +835,13 @@ function SubmitSuggestedPrice({
             {submitting ? t("Submitting...") : t("Submit Suggestion")}
           </button>
         </div>
+
+        <FishPreview
+          className="fish-preview-side"
+          fish={selectedSpecies}
+          myFish={myFish}
+          labels={{ noPhoto: t("No photo yet"), yours: t("Your fish") }}
+        />
       </div>
     </>
   );

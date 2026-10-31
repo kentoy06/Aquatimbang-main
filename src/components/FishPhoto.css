@@ -108,3 +108,27 @@
     grid-template-columns: 1fr;
   }
 }
+
+/* Standalone preview beside a form (Submit Suggested Price) */
+.fish-preview-side {
+  position: sticky;
+  top: 16px;
+  align-self: start;
+  gap: 14px;
+}
+
+.fish-preview-side .fish-preview-photo {
+  padding: 10px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(14, 124, 134, 0.10);
+}
+
+.fish-preview-side .fish-preview-info {
+  padding: 14px 16px;
+  background: #fff;
+  box-shadow: 0 4px 14px rgba(16, 24, 40, 0.06);
+}
+
+.fish-preview-side .fish-preview-info strong {
+  font-size: 20px;
+}

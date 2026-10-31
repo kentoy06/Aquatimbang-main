@@ -50,40 +50,50 @@ export function FishPicture({ fish, alt, emptyText = "No photo yet. An LGU Offic
  * species: [{ id, name, has_photo, updated_at, scientific_name, photo_credit }]
  * myFish:  ids of fish the vendor sells (marked with ★ and listed first by the caller)
  */
-export function FishPicker({ species, value, onChange, myFish = [], disabled = false, labels = {}, id }) {
+export function FishPicker({ species, value, onChange, myFish = [], disabled = false, labels = {}, id, preview = true }) {
   const selected = species.find((fish) => String(fish.id) === String(value));
   if (!species.length) return <div className="locked-field">{labels.empty || "No fish species registered"}</div>;
-  const url = photoUrl(selected);
+  const select = (
+    <select
+      id={id}
+      className="fish-picker-select"
+      value={value}
+      onChange={(event) => onChange(event.target.value)}
+      disabled={disabled}
+      aria-label={labels.group || "Fish species"}
+    >
+      {species.map((fish) => (
+        <option key={fish.id} value={String(fish.id)}>
+          {myFish.includes(String(fish.id)) ? "★ " : ""}{fish.name}
+        </option>
+      ))}
+    </select>
+  );
+  if (!preview) return select;
   return (
     <div className="fish-picker-box">
       <div className="fish-picker">
-        <select
-          id={id}
-          className="fish-picker-select"
-          value={value}
-          onChange={(event) => onChange(event.target.value)}
-          disabled={disabled}
-          aria-label={labels.group || "Fish species"}
-        >
-          {species.map((fish) => (
-            <option key={fish.id} value={String(fish.id)}>
-              {myFish.includes(String(fish.id)) ? "★ " : ""}{fish.name}
-            </option>
-          ))}
-        </select>
-        {selected && (
-          <div className="fish-preview">
-            <div className="fish-preview-photo">
-              {url ? <img src={url} alt={selected.name} /> : <span>{labels.noPhoto || "No photo yet"}</span>}
-            </div>
-            <div className="fish-preview-info">
-              <strong>{selected.name}</strong>
-              {selected.scientific_name && <em>{selected.scientific_name}</em>}
-              {myFish.includes(String(selected.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
-              {selected.photo_credit && url && <small className="fish-credit">{labels.credit || "Photo"}: {selected.photo_credit}</small>}
-            </div>
-          </div>
-        )}
+        {select}
+        {selected && <FishPreview fish={selected} myFish={myFish} labels={labels} />}
+      </div>
+    </div>
+  );
+}
+
+// The chosen fish: its photo in one box and its name and details in another.
+export function FishPreview({ fish, myFish = [], labels = {}, className = "" }) {
+  if (!fish) return null;
+  const url = photoUrl(fish);
+  return (
+    <div className={`fish-preview ${className}`}>
+      <div className="fish-preview-photo">
+        {url ? <img src={url} alt={fish.name} /> : <span>{labels.noPhoto || "No photo yet"}</span>}
+      </div>
+      <div className="fish-preview-info">
+        <strong>{fish.name}</strong>
+        {fish.scientific_name && <em>{fish.scientific_name}</em>}
+        {myFish.includes(String(fish.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
+        {fish.photo_credit && url && <small className="fish-credit">{labels.credit || "Photo"}: {fish.photo_credit}</small>}
       </div>
     </div>
   );
