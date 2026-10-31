@@ -445,6 +445,9 @@ class FishSpecies(models.Model):
         null=True,
     )
 
+    # Who took the photo and its licence, shown under the picture.
+    photo_credit = models.CharField(max_length=200, blank=True, default="")
+
     # Determines whether the species can currently be used.
 
     is_active = models.BooleanField(default=True)

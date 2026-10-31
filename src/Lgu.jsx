@@ -907,7 +907,7 @@ function LGUFishSpeciesManagement({ notify }) {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", scientific_name: "", description: "" });
+  const [form, setForm] = useState({ name: "", scientific_name: "", description: "", photo_credit: "" });
   const [photoFile, setPhotoFile] = useState(null);
 
   const request = async (url, method = "GET", payload) => {
@@ -953,7 +953,7 @@ function LGUFishSpeciesManagement({ notify }) {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: "", scientific_name: "", description: "" });
+    setForm({ name: "", scientific_name: "", description: "", photo_credit: "" });
     setPhotoFile(null);
     setShowForm(true);
   };
@@ -964,6 +964,7 @@ function LGUFishSpeciesManagement({ notify }) {
       name: item.name || "",
       scientific_name: item.scientific_name || "",
       description: item.description || "",
+      photo_credit: item.photo_credit || "",
     });
     setShowForm(true);
   };
@@ -975,6 +976,7 @@ function LGUFishSpeciesManagement({ notify }) {
       name: form.name.trim(),
       scientific_name: form.scientific_name.trim(),
       description: form.description.trim(),
+      photo_credit: (form.photo_credit || "").trim(),
     };
     if (!payload.name) { notify("Fish species name is required."); return; }
     setBusy(true);
@@ -1118,7 +1120,13 @@ function LGUFishSpeciesManagement({ notify }) {
                 <textarea id="lgu-species-description" rows={4} value={form.description}
                   onChange={(event) => setForm((old) => ({ ...old, description: event.target.value }))} />
               </div>
-              <FishPhotoInput fish={editing} file={photoFile} onChange={setPhotoFile} />
+              <FishPhotoInput
+                fish={editing}
+                file={photoFile}
+                onChange={setPhotoFile}
+                credit={form.photo_credit}
+                onCreditChange={(value) => setForm((old) => ({ ...old, photo_credit: value }))}
+              />
               <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
                 <button type="button" disabled={busy} onClick={() => setShowForm(false)}
                   style={{ padding: "10px 18px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 600, cursor: "pointer" }}>Cancel</button>

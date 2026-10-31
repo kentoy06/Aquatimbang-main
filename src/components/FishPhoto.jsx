@@ -34,9 +34,12 @@ export function FishPicture({ fish, alt, emptyText = "No photo yet. An LGU Offic
   const url = photoUrl(fish);
   if (!url) return <div className="fish-picture fish-picture-empty">{emptyText}</div>;
   return (
-    <div className="fish-picture">
-      <img src={url} alt={alt || fish.name} />
-    </div>
+    <figure className="fish-picture-figure">
+      <div className="fish-picture">
+        <img src={url} alt={alt || fish.name} />
+      </div>
+      {fish.photo_credit && <figcaption className="fish-credit">Photo: {fish.photo_credit}</figcaption>}
+    </figure>
   );
 }
 
@@ -51,21 +54,8 @@ export function FishPicker({ species, value, onChange, myFish = [], disabled = f
   const selected = species.find((fish) => String(fish.id) === String(value));
   if (!species.length) return <div className="locked-field">{labels.empty || "No fish species registered"}</div>;
   return (
+    <div className="fish-picker-box">
     <div className="fish-picker">
-      {selected && (
-        <div className="fish-picker-selected">
-          <span className="fish-picker-photo">
-            {photoUrl(selected)
-              ? <img src={photoUrl(selected)} alt={selected.name} />
-              : <span>{labels.noPhoto || "No photo yet"}</span>}
-          </span>
-          <span>
-            <strong>{selected.name}</strong>
-            {selected.scientific_name && <em>{selected.scientific_name}</em>}
-            {myFish.includes(String(selected.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
-          </span>
-        </div>
-      )}
       <div className="fish-picker-grid" role="radiogroup" aria-label={labels.group || "Fish species"}>
         {species.map((fish) => {
           const on = String(fish.id) === String(value);
@@ -86,6 +76,20 @@ export function FishPicker({ species, value, onChange, myFish = [], disabled = f
           );
         })}
       </div>
+      {selected && (
+        <div className="fish-picker-selected">
+          <span className="fish-picker-photo">
+            {photoUrl(selected)
+              ? <img src={photoUrl(selected)} alt={selected.name} />
+              : <span>{labels.noPhoto || "No photo yet"}</span>}
+          </span>
+          <strong>{selected.name}</strong>
+          {selected.scientific_name && <em>{selected.scientific_name}</em>}
+          {myFish.includes(String(selected.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
+          {selected.photo_credit && photoUrl(selected) && <small className="fish-credit">{labels.credit || "Photo"}: {selected.photo_credit}</small>}
+        </div>
+      )}
+    </div>
     </div>
   );
 }
@@ -107,7 +111,7 @@ export async function uploadSpeciesPhoto(speciesId, file) {
 }
 
 // Photo picker for the species form: shows the current photo and the chosen file.
-export function FishPhotoInput({ fish, file, onChange }) {
+export function FishPhotoInput({ fish, file, onChange, credit, onCreditChange }) {
   const [error, setError] = useState("");
   return (
     <div className="form-group">
@@ -128,6 +132,16 @@ export function FishPhotoInput({ fish, file, onChange }) {
       <small style={{ display: "block", marginTop: 4, color: error ? "#b42318" : "#667085", fontSize: 12 }}>
         {error || "A clear photo of the whole fish helps vendors recognise it. JPG or PNG; large photos are reduced automatically."}
       </small>
+      {onCreditChange && (
+        <input
+          type="text"
+          maxLength={200}
+          value={credit || ""}
+          onChange={(event) => onCreditChange(event.target.value)}
+          placeholder="Photo credit, e.g. “Juan Dela Cruz, CC BY-SA 4.0, Wikimedia Commons” or “AquaTimbang team”"
+          style={{ marginTop: 8, width: "100%" }}
+        />
+      )}
     </div>
   );
 }
