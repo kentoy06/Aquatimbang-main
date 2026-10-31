@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useProtectedImage } from "../api/images.js";
 import "./ApplicantReview.css";
+import { FishThumb } from "./FishPhoto.jsx";
 
 // What a reviewer must confirm before approving a registration.
 // Every item has to be ticked before the account can be approved.
@@ -25,37 +26,65 @@ export const APPROVAL_CRITERIA = {
 
 export const criteriaFor = (role) => APPROVAL_CRITERIA[role] || APPROVAL_CRITERIA["Fish Vendor"];
 
-// Applicant photo, reason for registering and the fish they sell.
-export function ApplicantSummary({ account, onOpenPhoto }) {
+// Applicant photo and reason, then (for vendors) the stall photo and the
+// fish they sell as two separate blocks.
+export function ApplicantSummary({ account, onOpenPhoto, onOpenStall }) {
   const verification = account.verification || {};
   const hasPhoto = Boolean(verification.documents?.profile_photo);
+  const hasStall = Boolean(verification.documents?.stall_photo);
+  const isVendor = account.role === "Fish Vendor";
   const photo = useProtectedImage(hasPhoto ? `/auth/users/${account.id}/verification/profile-photo/` : "");
+  const stall = useProtectedImage(isVendor && hasStall ? `/auth/users/${account.id}/verification/vendor-stall/` : "");
   const species = verification.species_sold || [];
 
   return (
-    <div className="applicant-summary">
-      <button
-        type="button"
-        className="applicant-photo"
-        onClick={() => hasPhoto && onOpenPhoto?.()}
-        disabled={!hasPhoto}
-        title={hasPhoto ? "Open the full photo" : "No photo uploaded"}
-      >
-        {photo ? <img src={photo} alt={`Photo of ${account.name || account.username}`} /> : <span>{hasPhoto ? "…" : "No photo"}</span>}
-      </button>
-      <div className="applicant-text">
-        <span className="applicant-label">Reason for registering</span>
-        <p>{verification.registration_reason || <em>Not given (registered before this question was added).</em>}</p>
-        {account.role === "Fish Vendor" && (
-          <>
-            <span className="applicant-label">Fish they sell</span>
-            <div className="chip-row">
-              {species.length ? species.map((s) => <span className="chip" key={s.id}>{s.name}</span>) : <em>Not given</em>}
-            </div>
-          </>
-        )}
+    <>
+      <div className="applicant-summary">
+        <button
+          type="button"
+          className="applicant-photo"
+          onClick={() => hasPhoto && onOpenPhoto?.()}
+          disabled={!hasPhoto}
+          title={hasPhoto ? "Open the full photo" : "No photo uploaded"}
+        >
+          {photo ? <img src={photo} alt={`Photo of ${account.name || account.username}`} /> : <span>{hasPhoto ? "…" : "No photo"}</span>}
+        </button>
+        <div className="applicant-text">
+          <span className="applicant-label">Reason for registering</span>
+          <p>{verification.registration_reason || <em>Not given (registered before this question was added).</em>}</p>
+        </div>
       </div>
-    </div>
+
+      {isVendor && (
+        <div className="applicant-blocks">
+          <div className="applicant-block">
+            <span className="applicant-label">Stall photo</span>
+            {hasStall ? (
+              <button type="button" className="stall-preview" onClick={() => onOpenStall?.()} title="Open the full stall photo">
+                {stall ? <img src={stall} alt="Market stall" /> : <span>Loading…</span>}
+              </button>
+            ) : (
+              <p className="muted-text">No stall photo uploaded.</p>
+            )}
+          </div>
+          <div className="applicant-block">
+            <span className="applicant-label">Fish they sell ({species.length})</span>
+            {species.length ? (
+              <div className="fish-sold-list">
+                {species.map((fish) => (
+                  <span className="fish-sold" key={fish.id}>
+                    <FishThumb fish={fish} size={40} />
+                    {fish.name}
+                  </span>
+                ))}
+              </div>
+            ) : (
+              <p className="muted-text">Not given.</p>
+            )}
+          </div>
+        </div>
+      )}
+    </>
   );
 }
 

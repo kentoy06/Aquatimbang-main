@@ -3,6 +3,7 @@ import "./App.css";
 import "./Login.css";
 import { API_BASE_URL } from "./api/config.js";
 import { MAX_DOCUMENT_MB, checkUpload, compressImage } from "./api/images.js";
+import { FishThumb } from "./components/FishPhoto.jsx";
 
 function Register({ onBack, onGoToLogin }) {
   const [role, setRole] = useState("Fish Vendor");
@@ -497,12 +498,39 @@ if (role === "LGU Officer") {
               </div>
             </section>
 
+            {/* FISH YOU SELL (vendors only) */}
+            {role === "Fish Vendor" && (
+              <section className="register-section">
+                <h4 className="register-section-title">Fish You Sell</h4>
+                <p className="register-section-desc">
+                  Tap every fish you usually sell. Their prices will appear first on your dashboard.
+                </p>
+                {fishSpecies.length === 0 ? (
+                  <small className="field-help">{loadingOptions ? "Loading fish species…" : "No fish species are registered yet."}</small>
+                ) : (
+                  <div className="species-picker" role="group" aria-label="Fish you sell">
+                    {fishSpecies.map((fish) => {
+                      const on = form.species_sold.includes(fish.id);
+                      return (
+                        <label key={fish.id} className={`species-option ${on ? "species-option-on" : ""}`}>
+                          <input type="checkbox" checked={on} onChange={() => toggleSpecies(fish.id)} />
+                          <FishThumb fish={fish} size={52} />
+                          <span>{fish.name}</span>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
+                <small className="field-help">{form.species_sold.length} selected</small>
+              </section>
+            )}
+
             {/* FISH VENDOR VERIFICATION */}
             {role === "Fish Vendor" && (
               <section className="register-section register-section-verify">
                 <h4 className="register-section-title">Fish Vendor Verification</h4>
                 <p className="register-section-desc">
-                  Tell us where you sell so an Administrator can confirm you are a registered fish vendor.
+                  Tell us where you sell and show your stall so a reviewer can confirm you are a fish vendor.
                 </p>
 
                 <div className="form-row">
@@ -514,23 +542,6 @@ if (role === "LGU Officer") {
                     <label htmlFor="reg-stall">Stall Number</label>
                     <input id="reg-stall" type="text" placeholder="e.g. A-15" value={form.stall_number} onChange={(e) => update("stall_number", e.target.value)} />
                   </div>
-                </div>
-
-                <div className="form-group">
-                  <span className="file-field-label">Fish You Sell</span>
-                  {fishSpecies.length === 0 ? (
-                    <small className="field-help">{loadingOptions ? "Loading fish species…" : "No fish species are registered yet."}</small>
-                  ) : (
-                    <div className="species-picker" role="group" aria-label="Fish you sell">
-                      {fishSpecies.map((fish) => (
-                        <label key={fish.id} className={`species-option ${form.species_sold.includes(fish.id) ? "species-option-on" : ""}`}>
-                          <input type="checkbox" checked={form.species_sold.includes(fish.id)} onChange={() => toggleSpecies(fish.id)} />
-                          {fish.name}
-                        </label>
-                      ))}
-                    </div>
-                  )}
-                  <small className="field-help">Select every fish you usually sell. Their prices appear first on your dashboard.</small>
                 </div>
 
                 <div className="form-group">

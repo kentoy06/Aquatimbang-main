@@ -106,7 +106,7 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Common & scientific name registry | ✅ | |
 | Active/inactive status | ✅ | Inactive species hidden from price entry. |
 | Duplicate-name check | ✅ | |
-| Species photo | ✅ | LGU Officers and Administrators upload a photo; vendors tap a fish name to see the photo, description and latest price. |
+| Species photo | ✅ | LGU Officers and Administrators upload a photo. Vendors choose fish by photo (Submit Suggested Price, Fair Price Calculator, Price Trends, registration) and tap a fish name to see its photo, description and latest price. Fish photos are public; all other uploads need a login. |
 | Warn before deactivating a species with price entries | 🟡 | LGU page confirms; deletion is blocked when prices exist. |
 
 ## Accessibility (not in the paper)

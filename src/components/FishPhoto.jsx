@@ -1,16 +1,20 @@
 import React, { useState } from "react";
 import { apiUrl, authHeaders } from "../api/config.js";
-import { checkUpload, compressImage, useProtectedImage } from "../api/images.js";
+import { checkUpload, compressImage } from "../api/images.js";
 import "./FishPhoto.css";
 
-const photoPath = (fish) =>
+// Fish photos are public, so a plain <img> can load (and cache) them.
+const photoUrl = (fish) =>
   fish?.id && (fish.has_photo ?? fish.hasPhoto)
-    ? `/fish-species/${fish.id}/photo/?v=${encodeURIComponent(fish.updated_at || fish.photoVersion || "")}`
+    ? apiUrl(`/fish-species/${fish.id}/photo/?v=${encodeURIComponent(fish.updated_at || fish.photoVersion || "")}`)
     : "";
+
+const initialsOf = (fish) => String(fish?.name || "?").slice(0, 2).toUpperCase();
 
 // Small square picture of a fish, or its initials when there is no photo.
 export function FishThumb({ fish, size = 40 }) {
-  const url = useProtectedImage(photoPath(fish));
+  const url = photoUrl(fish);
+  const [failed, setFailed] = useState("");
   const style = {
     width: size, height: size, flex: `0 0 ${size}px`, borderRadius: 10, overflow: "hidden",
     display: "grid", placeItems: "center", background: "#e0f2f4", color: "#0e7c86",
@@ -18,21 +22,70 @@ export function FishThumb({ fish, size = 40 }) {
   };
   return (
     <span style={style} aria-hidden="true">
-      {url ? <img src={url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} /> : String(fish?.name || "?").slice(0, 2).toUpperCase()}
+      {url && failed !== url
+        ? <img src={url} alt="" loading="lazy" onError={() => setFailed(url)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        : initialsOf(fish)}
     </span>
   );
 }
 
 // Large picture for a details window.
-export function FishPicture({ fish, alt }) {
-  const path = photoPath(fish);
-  const url = useProtectedImage(path);
-  if (!path) {
-    return <div className="fish-picture fish-picture-empty">No photo yet. An LGU Officer or Administrator can add one in Fish Species.</div>;
-  }
+export function FishPicture({ fish, alt, emptyText = "No photo yet. An LGU Officer or Administrator can add one in Fish Species." }) {
+  const url = photoUrl(fish);
+  if (!url) return <div className="fish-picture fish-picture-empty">{emptyText}</div>;
   return (
     <div className="fish-picture">
-      {url ? <img src={url} alt={alt || fish.name} /> : <span>Loading photo…</span>}
+      <img src={url} alt={alt || fish.name} />
+    </div>
+  );
+}
+
+/**
+ * Choose a fish by its photo instead of a plain dropdown. Shows the
+ * chosen fish large, with every fish as a tile underneath.
+ *
+ * species: [{ id, name, has_photo, updated_at, scientific_name }]
+ * myFish:  ids of fish the vendor sells (marked and listed first by the caller)
+ */
+export function FishPicker({ species, value, onChange, myFish = [], disabled = false, labels = {} }) {
+  const selected = species.find((fish) => String(fish.id) === String(value));
+  if (!species.length) return <div className="locked-field">{labels.empty || "No fish species registered"}</div>;
+  return (
+    <div className="fish-picker">
+      {selected && (
+        <div className="fish-picker-selected">
+          <span className="fish-picker-photo">
+            {photoUrl(selected)
+              ? <img src={photoUrl(selected)} alt={selected.name} />
+              : <span>{labels.noPhoto || "No photo yet"}</span>}
+          </span>
+          <span>
+            <strong>{selected.name}</strong>
+            {selected.scientific_name && <em>{selected.scientific_name}</em>}
+            {myFish.includes(String(selected.id)) && <span className="badge success">{labels.yours || "Your fish"}</span>}
+          </span>
+        </div>
+      )}
+      <div className="fish-picker-grid" role="radiogroup" aria-label={labels.group || "Fish species"}>
+        {species.map((fish) => {
+          const on = String(fish.id) === String(value);
+          return (
+            <button
+              type="button"
+              key={fish.id}
+              role="radio"
+              aria-checked={on}
+              className={`fish-tile ${on ? "fish-tile-on" : ""}`}
+              onClick={() => onChange(String(fish.id))}
+              disabled={disabled}
+            >
+              <FishThumb fish={fish} size={44} />
+              <span>{fish.name}</span>
+              {myFish.includes(String(fish.id)) && <span className="fish-tile-star" title={labels.yours || "Your fish"}>★</span>}
+            </button>
+          );
+        })}
+      </div>
     </div>
   );
 }

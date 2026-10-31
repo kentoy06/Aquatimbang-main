@@ -94,6 +94,8 @@ const PHRASES = {
   "No description yet.": ["Wala pang paglalarawan.", "Wala pay paghulagway."],
   "No photo of this fish yet.": ["Wala pang larawan ang isdang ito.", "Wala pay hulagway kini nga isda."],
   "Close": ["Isara", "Sirado"],
+  "No photo yet": ["Wala pang larawan", "Wala pay hulagway"],
+  "No fish species registered": ["Wala pang nakarehistrong isda", "Wala pay narehistro nga isda"],
   "Compute Price": ["Kuwentahin ang Presyo", "Kuwentaha ang Presyo"],
 
   // Fair price calculator
