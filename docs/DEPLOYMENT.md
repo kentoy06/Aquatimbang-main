@@ -6,8 +6,17 @@ running somewhere on the internet to log in and load data. This guide uses
 **PythonAnywhere's free plan**, because it:
 
 - runs Django with HTTPS included,
-- includes a free **MySQL** database (the paper uses MySQL),
-- keeps uploaded photos and documents (many free hosts delete them on restart).
+- keeps the database file and uploaded photos and documents (many free hosts
+  delete them on restart).
+
+**Database:** the free plan does **not** include MySQL. On the free plan the
+backend uses **SQLite**, a database stored in one file
+(`backend/db.sqlite3`). It needs no setup and is fine for a capstone demo.
+Django works the same with both, so no code changes. If the panel asks:
+the system is built for MySQL (used on the development computers), and
+the demo server uses SQLite only because of the free plan. To use MySQL
+online, upgrade PythonAnywhere to a paid plan and follow
+[Using MySQL (paid plan)](#using-mysql-paid-plan) at the end.
 
 > These steps follow PythonAnywhere's documented setup. They could not be
 > tried from the development environment, so if a screen looks different,
@@ -17,15 +26,11 @@ Replace `yourname` below with your PythonAnywhere username.
 
 ---
 
-## 1. Create the account and the database
+## 1. Create the account
 
-1. Sign up at <https://www.pythonanywhere.com> (Beginner / free plan).
-   Your backend address will be `https://yourname.pythonanywhere.com`.
-2. Open the **Databases** tab:
-   - Set a MySQL password (save it).
-   - Under *Create a database*, type `aquatimbang` and create it.
-     Its full name is `yourname$aquatimbang`.
-   - Note the **Database host address**, e.g. `yourname.mysql.pythonanywhere-services.com`.
+Sign up at <https://www.pythonanywhere.com> (Beginner / free plan).
+Your backend address will be `https://yourname.pythonanywhere.com`.
+On the free plan there is nothing to set up in the Databases tab.
 
 ## 2. Get the code and install the packages
 
@@ -46,7 +51,7 @@ If the install stops with a disk-quota error, install only what the site
 needs and skip the auto-order search:
 
 ```bash
-pip install "Django>=5.2,<5.3" "djangorestframework>=3.18,<4" "django-cors-headers>=4.9,<5" Pillow mysqlclient
+pip install "Django>=5.2,<5.3" "djangorestframework>=3.18,<4" "django-cors-headers>=4.9,<5" Pillow
 ```
 
 Forecasts still work without `pmdarima`: when the SARIMAX libraries are
@@ -68,12 +73,7 @@ DJANGO_DEBUG=False
 DJANGO_ALLOWED_HOSTS=yourname.pythonanywhere.com
 CSRF_TRUSTED_ORIGINS=https://yourname.pythonanywhere.com
 
-DB_ENGINE=mysql
-DB_NAME=yourname$aquatimbang
-DB_USER=yourname
-DB_PASSWORD=your-mysql-password
-DB_HOST=yourname.mysql.pythonanywhere-services.com
-DB_PORT=3306
+# No DB_ENGINE line: the free plan uses SQLite (backend/db.sqlite3).
 
 CORS_ALLOWED_ORIGINS=https://kentoy06.github.io
 FRONTEND_URL=https://kentoy06.github.io/Aquatimbang-main/
@@ -189,3 +189,24 @@ Then click **Reload** on the Web tab.
   entered (or imported) there; your laptop's database is separate.
 - **Privacy:** uploaded IDs, permits and photos are only served to logged-in
   reviewers; only fish photos are public.
+
+## Using MySQL (paid plan)
+
+After upgrading PythonAnywhere to a paid plan:
+
+1. **Databases** tab → set a MySQL password → create a database named
+   `aquatimbang` (full name `yourname$aquatimbang`). The host is shown under
+   *Connecting:*, e.g. `yourname.mysql.pythonanywhere-services.com`.
+2. Add to `backend/.env`:
+
+   ```ini
+   DB_ENGINE=mysql
+   DB_NAME=yourname$aquatimbang
+   DB_USER=yourname
+   DB_PASSWORD=your-mysql-password
+   DB_HOST=yourname.mysql.pythonanywhere-services.com
+   DB_PORT=3306
+   ```
+
+3. Run `python manage.py migrate` and `python manage.py setup_aquatimbang`
+   again (the MySQL database starts empty), then **Reload** the web app.

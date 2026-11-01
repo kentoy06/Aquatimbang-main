@@ -125,7 +125,7 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | CORS restricted to trusted domains | ✅ | `CORS_ALLOWED_ORIGINS`. |
 | Login lockout, session timeout | ✅ | See Module 1. |
 | API rate limiting | ✅ | 120 requests/minute without login, 1,200 with login (configurable in `.env`). |
-| HTTPS, firewall, hosting | 🟡 | Ready to host: production settings (HTTPS-only cookies and redirect, secret key required) and a step-by-step guide in `docs/DEPLOYMENT.md`. Needs the team to create the hosting account. |
+| HTTPS, firewall, hosting | 🟡 | Ready to host: production settings (HTTPS-only cookies and redirect, secret key required) and a step-by-step guide in `docs/DEPLOYMENT.md` (PythonAnywhere free plan uses SQLite; MySQL needs a paid plan). Needs the team to create the hosting account. |
 
 ---
 
