@@ -795,12 +795,13 @@ class VendorPriceSuggestion(models.Model):
     STATUS_REVIEWED = "reviewed"
     STATUS_ADOPTED = "adopted"
     STATUS_REJECTED = "rejected"
-
+    STATUS_WITHDRAWN = "withdrawn"
     STATUS_CHOICES = [
         (STATUS_PENDING, "Pending Review"),
         (STATUS_REVIEWED, "Reviewed"),
         (STATUS_ADOPTED, "Adopted"),
         (STATUS_REJECTED, "Rejected"),
+        (STATUS_WITHDRAWN, "Withdrawn"),
     ]
 
     vendor = models.ForeignKey(
@@ -1150,3 +1151,63 @@ class ReportLog(models.Model):
 
     def __str__(self):
         return f"{self.report_type} ({self.format}) by {self.generated_by_id}"
+
+
+# ============================================================
+# SYSTEM ANNOUNCEMENTS AND MARKETS
+# ============================================================
+
+class Announcement(models.Model):
+    """A message from an Administrator shown on users' dashboards."""
+
+    AUDIENCE_ALL = "all"
+    AUDIENCE_VENDORS = "vendors"
+    AUDIENCE_LGU = "lgu"
+    AUDIENCE_CHOICES = [
+        (AUDIENCE_ALL, "Everyone"),
+        (AUDIENCE_VENDORS, "Fish Vendors"),
+        (AUDIENCE_LGU, "LGU Officers"),
+    ]
+
+    title = models.CharField(max_length=150)
+    message = models.TextField(max_length=2000)
+    audience = models.CharField(max_length=10, choices=AUDIENCE_CHOICES, default=AUDIENCE_ALL)
+    is_active = models.BooleanField(default=True)
+    created_by = models.ForeignKey(
+        "auth.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="announcements",
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at", "-id"]
+
+    def __str__(self):
+        return self.title
+
+
+class Market(models.Model):
+    """A public market where fish vendors sell, kept by Administrators."""
+
+    name = models.CharField(max_length=150)
+    municipality = models.ForeignKey(
+        Municipality,
+        on_delete=models.PROTECT,
+        related_name="markets",
+    )
+    is_active = models.BooleanField(default=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["municipality__name", "name"]
+        constraints = [
+            models.UniqueConstraint(fields=["municipality", "name"], name="unique_market_per_municipality"),
+        ]
+
+    def __str__(self):
+        return f"{self.name} ({self.municipality.name})"

@@ -1469,7 +1469,12 @@ def registration_options(request):
         is_active=True
     ).order_by("name")
     species = FishSpecies.objects.filter(is_active=True).order_by("name")
+    markets = Market.objects.filter(is_active=True, municipality__is_active=True).order_by("name")
     return Response({
+        "markets": [
+            {"id": market.id, "name": market.name, "municipality": market.municipality_id}
+            for market in markets
+        ],
         "fish_species": [
             {
                 "id": fish.id,
@@ -1572,7 +1577,7 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
     serializer_class = VendorPriceSuggestionSerializer
     authentication_classes = [ExpiringTokenAuthentication]
     permission_classes = [IsAuthenticated]
-    http_method_names = ["get", "post", "head", "options"]
+    http_method_names = ["get", "post", "patch", "head", "options"]
 
     def get_role(self):
         user = self.request.user
@@ -1644,6 +1649,61 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
                 "municipality": municipality.name,
             },
         )
+
+    def own_pending_suggestion(self):
+        """The vendor's own suggestion, if it is still waiting for review."""
+        if self.get_role() != "Fish Vendor":
+            raise PermissionDenied("Only the Fish Vendor who submitted a suggestion can change it.")
+        suggestion = self.get_object()
+        if suggestion.status != VendorPriceSuggestion.STATUS_PENDING:
+            raise PermissionDenied("Only suggestions that are still pending review can be changed.")
+        return suggestion
+
+    @transaction.atomic
+    def partial_update(self, request, *args, **kwargs):
+        """A vendor edits the price or comment of their own pending suggestion."""
+        suggestion = self.own_pending_suggestion()
+        changes = {key: request.data[key] for key in ("suggested_price", "comment") if key in request.data}
+        if not changes:
+            return Response({"message": "Nothing to change."}, status=status.HTTP_400_BAD_REQUEST)
+        before = {"suggested_price": str(suggestion.suggested_price), "comment": suggestion.comment}
+        serializer = self.get_serializer(suggestion, data=changes, partial=True)
+        serializer.is_valid(raise_exception=True)
+        suggestion = serializer.save()
+        after = {"suggested_price": str(suggestion.suggested_price), "comment": suggestion.comment}
+        ActivityLog.objects.create(
+            actor=request.user,
+            actor_username=request.user.username,
+            actor_role="Fish Vendor",
+            action="updated",
+            target_type="VendorPriceSuggestion",
+            target_id=suggestion.pk,
+            target_name=suggestion.fish_species.name,
+            details={"changes": {
+                field: {"from": before[field], "to": after[field]}
+                for field in after if before[field] != after[field]
+            }},
+        )
+        return Response(serializer.data)
+
+    @action(detail=True, methods=["post"])
+    @transaction.atomic
+    def withdraw(self, request, pk=None):
+        """A vendor withdraws their own pending suggestion; it is kept as Withdrawn."""
+        suggestion = self.own_pending_suggestion()
+        suggestion.status = VendorPriceSuggestion.STATUS_WITHDRAWN
+        suggestion.save(update_fields=["status", "updated_at"])
+        ActivityLog.objects.create(
+            actor=request.user,
+            actor_username=request.user.username,
+            actor_role="Fish Vendor",
+            action="withdrawn",
+            target_type="VendorPriceSuggestion",
+            target_id=suggestion.pk,
+            target_name=suggestion.fish_species.name,
+            details={"suggested_price": str(suggestion.suggested_price)},
+        )
+        return Response(self.get_serializer(suggestion).data)
 
     @action(detail=False, methods=["get"], url_path="community-average")
     def community_average(self, request):
@@ -2599,3 +2659,131 @@ def reports(request):
         row_count=row_count,
     )
     return Response(report_row(report), status=status.HTTP_201_CREATED)
+
+
+# ============================================================
+# SYSTEM ANNOUNCEMENTS AND MARKETS
+# ============================================================
+from .models import Announcement, Market
+from .serializers import AnnouncementSerializer, MarketSerializer
+
+AUDIENCE_FOR_ROLE = {
+    "Fish Vendor": Announcement.AUDIENCE_VENDORS,
+    "LGU Officer": Announcement.AUDIENCE_LGU,
+}
+
+
+def log_admin_change(user, action, target_type, instance, name, details=None):
+    ActivityLog.objects.create(
+        actor=user,
+        actor_username=user.username,
+        actor_role="Administrator",
+        action=action,
+        target_type=target_type,
+        target_id=instance.pk,
+        target_name=name,
+        details=details or {},
+    )
+
+
+class AdminWritableViewSet(viewsets.ModelViewSet):
+    """Approved users may read; only Administrators may change."""
+    authentication_classes = [ExpiringTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "patch", "delete", "head", "options"]
+
+    def role(self):
+        role = approved_role(self.request.user)
+        if role is None:
+            raise PermissionDenied("An approved account is required.")
+        return role
+
+    def check_admin(self):
+        if self.role() != "Administrator":
+            raise PermissionDenied("Only Administrators can change this.")
+
+
+class AnnouncementViewSet(AdminWritableViewSet):
+    """
+    Administrators manage announcements. Other users see the active
+    announcements meant for everyone or for their role.
+    """
+    serializer_class = AnnouncementSerializer
+
+    def get_queryset(self):
+        role = self.role()
+        queryset = Announcement.objects.select_related("created_by")
+        if role == "Administrator":
+            return queryset
+        return queryset.filter(
+            is_active=True,
+            audience__in=[Announcement.AUDIENCE_ALL, AUDIENCE_FOR_ROLE.get(role, "")],
+        )
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        self.check_admin()
+        item = serializer.save(created_by=self.request.user)
+        log_admin_change(self.request.user, "created", "Announcement", item, item.title, {"audience": item.audience})
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        self.check_admin()
+        item = serializer.save()
+        action = "updated"
+        if set(serializer.validated_data) == {"is_active"}:
+            action = "activated" if item.is_active else "deactivated"
+        log_admin_change(self.request.user, action, "Announcement", item, item.title)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        self.check_admin()
+        log_admin_change(self.request.user, "deleted", "Announcement", instance, instance.title)
+        instance.delete()
+
+
+class MarketViewSet(AdminWritableViewSet):
+    """
+    Public markets per municipality. Administrators manage the list;
+    other users see the active markets.
+    """
+    serializer_class = MarketSerializer
+
+    def get_queryset(self):
+        queryset = Market.objects.select_related("municipality")
+        if self.role() != "Administrator":
+            queryset = queryset.filter(is_active=True)
+        municipality = self.request.query_params.get("municipality")
+        if municipality:
+            queryset = queryset.filter(municipality_id=municipality)
+        return queryset
+
+    def get_serializer_context(self):
+        # How many registered vendors named each market.
+        counts = {}
+        rows = FishVendorVerification.objects.values_list("market_name", "profile__municipality_id")
+        for name, municipality_id in rows:
+            key = (" ".join((name or "").split()).lower(), municipality_id)
+            counts[key] = counts.get(key, 0) + 1
+        return {**super().get_serializer_context(), "vendor_counts": counts}
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        self.check_admin()
+        item = serializer.save()
+        log_admin_change(self.request.user, "created", "Market", item, item.name, {"municipality": item.municipality.name})
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        self.check_admin()
+        item = serializer.save()
+        action = "updated"
+        if set(serializer.validated_data) == {"is_active"}:
+            action = "activated" if item.is_active else "deactivated"
+        log_admin_change(self.request.user, action, "Market", item, item.name)
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        self.check_admin()
+        log_admin_change(self.request.user, "deleted", "Market", instance, instance.name)
+        instance.delete()

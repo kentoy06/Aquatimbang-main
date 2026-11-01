@@ -7,6 +7,7 @@ const STATUS_LABELS = {
   reviewed: "Reviewed",
   adopted: "Adopted",
   rejected: "Rejected",
+  withdrawn: "Withdrawn",
 };
 
 // Get the token saved when the user logs in.
@@ -125,4 +126,18 @@ export async function reviewVendorSuggestion(
   );
 
   return normalizeSuggestion(data);
+}
+// A vendor changes the price or comment of their own pending suggestion.
+export async function updateVendorSuggestion(id, changes) {
+  const result = await apiRequest(`/vendor-suggestions/${id}/`, {
+    method: "PATCH",
+    body: JSON.stringify(changes),
+  });
+  return normalizeSuggestion(result);
+}
+
+// A vendor withdraws their own pending suggestion (kept as "Withdrawn").
+export async function withdrawVendorSuggestion(id) {
+  const result = await apiRequest(`/vendor-suggestions/${id}/withdraw/`, { method: "POST" });
+  return normalizeSuggestion(result);
 }

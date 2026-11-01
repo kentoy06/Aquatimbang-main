@@ -5,6 +5,8 @@ import { API_BASE_URL } from "./api/config.js";
 import { MAX_DOCUMENT_MB, checkUpload, compressImage } from "./api/images.js";
 import { FishThumb } from "./components/FishPhoto.jsx";
 
+const OTHER_MARKET = "__other__";
+
 function Register({ onBack, onGoToLogin }) {
   const [role, setRole] = useState("Fish Vendor");
   const [form, setForm] = useState({
@@ -50,6 +52,7 @@ function Register({ onBack, onGoToLogin }) {
   const [roles, setRoles] = useState([]);
   const [municipalities, setMunicipalities] = useState([]);
   const [fishSpecies, setFishSpecies] = useState([]);
+  const [markets, setMarkets] = useState([]);
   const [fileErrors, setFileErrors] = useState({});
   const [loadingOptions, setLoadingOptions] = useState(true);
 
@@ -69,6 +72,7 @@ function Register({ onBack, onGoToLogin }) {
         setRoles(data.roles);
         setMunicipalities(data.municipalities);
         setFishSpecies(data.fish_species || []);
+        setMarkets(data.markets || []);
 
         // Select the first municipality returned by Django.
         if (data.municipalities.length > 0) {
@@ -91,6 +95,10 @@ function Register({ onBack, onGoToLogin }) {
   }, []);
 
   const update = (key, value) => setForm((previous) => ({ ...previous, [key]: value }));
+
+  // Markets listed by the Administrator for the chosen municipality.
+  const [marketChoice, setMarketChoice] = useState("");
+  const marketsHere = markets.filter((m) => String(m.municipality) === String(form.municipality));
 
   // Check a chosen file, shrinking large photos before they are uploaded.
   const pickFile = async (key, file, image) => {
@@ -450,7 +458,12 @@ if (role === "LGU Officer") {
                 <select
                   id="reg-municipality"
                   value={form.municipality}
-                  onChange={(e) => update("municipality", e.target.value)}
+                  onChange={(e) => {
+                    update("municipality", e.target.value);
+                    // A different municipality has different markets.
+                    setMarketChoice("");
+                    update("market_name", "");
+                  }}
                   disabled={loadingOptions || municipalities.length === 0}
                 >
                   {loadingOptions ? (
@@ -536,7 +549,31 @@ if (role === "LGU Officer") {
                 <div className="form-row">
                   <div className="form-group">
                     <label htmlFor="reg-market">Public Market Name</label>
-                    <input id="reg-market" type="text" placeholder="e.g. Carbon Market" value={form.market_name} onChange={(e) => update("market_name", e.target.value)} />
+                    {marketsHere.length > 0 && (
+                      <select
+                        id="reg-market"
+                        value={marketChoice}
+                        onChange={(e) => {
+                          setMarketChoice(e.target.value);
+                          update("market_name", e.target.value === OTHER_MARKET ? "" : e.target.value);
+                        }}
+                      >
+                        <option value="">Select your market</option>
+                        {marketsHere.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
+                        <option value={OTHER_MARKET}>Other (not listed)</option>
+                      </select>
+                    )}
+                    {(marketsHere.length === 0 || marketChoice === OTHER_MARKET) && (
+                      <input
+                        id={marketsHere.length ? "reg-market-other" : "reg-market"}
+                        type="text"
+                        placeholder="e.g. Carbon Market"
+                        value={form.market_name}
+                        onChange={(e) => update("market_name", e.target.value)}
+                        style={marketsHere.length ? { marginTop: 8 } : undefined}
+                        aria-label="Market name"
+                      />
+                    )}
                   </div>
                   <div className="form-group">
                     <label htmlFor="reg-stall">Stall Number</label>

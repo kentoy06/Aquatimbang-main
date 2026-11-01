@@ -1212,3 +1212,66 @@ class SystemSettingSerializer(serializers.ModelSerializer):
         if low is not None and high is not None and high <= low:
             raise serializers.ValidationError({"max_price_per_kg": "The maximum must be higher than the minimum."})
         return attrs
+
+
+from .models import Announcement, Market
+
+
+class AnnouncementSerializer(serializers.ModelSerializer):
+    audience_display = serializers.CharField(source="get_audience_display", read_only=True)
+    created_by_name = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Announcement
+        fields = [
+            "id", "title", "message", "audience", "audience_display", "is_active",
+            "created_by_name", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "created_at", "updated_at"]
+
+    def get_created_by_name(self, obj):
+        user = obj.created_by
+        return (user.get_full_name() or user.username) if user else None
+
+    def validate_title(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Give the announcement a title.")
+        return value
+
+    def validate_message(self, value):
+        value = value.strip()
+        if not value:
+            raise serializers.ValidationError("Write the announcement message.")
+        return value
+
+
+class MarketSerializer(serializers.ModelSerializer):
+    municipality_name = serializers.CharField(source="municipality.name", read_only=True)
+    vendor_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = Market
+        fields = ["id", "name", "municipality", "municipality_name", "is_active", "vendor_count", "created_at"]
+        read_only_fields = ["id", "created_at"]
+        validators = []
+
+    def get_vendor_count(self, obj):
+        counts = self.context.get("vendor_counts", {})
+        return counts.get((obj.name.lower(), obj.municipality_id), 0)
+
+    def validate_name(self, value):
+        value = " ".join(value.split())
+        if not value:
+            raise serializers.ValidationError("Market name is required.")
+        return value
+
+    def validate(self, attrs):
+        name = attrs.get("name", getattr(self.instance, "name", ""))
+        municipality = attrs.get("municipality", getattr(self.instance, "municipality", None))
+        duplicate = Market.objects.filter(name__iexact=name, municipality=municipality)
+        if self.instance:
+            duplicate = duplicate.exclude(pk=self.instance.pk)
+        if duplicate.exists():
+            raise serializers.ValidationError({"name": "This market is already listed for that municipality."})
+        return attrs

@@ -179,6 +179,27 @@ const PHRASES = {
   "COMMENT": ["KOMENTO", "KOMENTO"],
   "LGU FEEDBACK": ["TUGON NG LGU", "TUBAG SA LGU"],
   "ACTIONS": ["AKSYON", "AKSYON"],
+  "Announcements": ["Mga Anunsyo", "Mga Pahibalo gikan sa Admin"],
+  "Pending Review": ["Naghihintay ng Pagsusuri", "Naghulat sa Pagsusi"],
+  "Reviewed": ["Nasuri na", "Nasusi na"],
+  "Adopted": ["Tinanggap", "Gidawat"],
+  "Rejected": ["Hindi tinanggap", "Wala gidawat"],
+  "Withdrawn": ["Binawi", "Gibawi"],
+  "Edit": ["I-edit", "Usba"],
+  "Withdraw": ["Bawiin", "Bawia"],
+  "Save": ["I-save", "I-save"],
+  "Cancel": ["Kanselahin", "Kanselahon"],
+  "Enter a price greater than zero.": ["Maglagay ng presyong higit sa zero.", "Pagbutang og presyo nga labaw sa zero."],
+  "Suggestion updated.": ["Na-update ang mungkahi.", "Na-update ang sugyot."],
+  "Suggestion withdrawn.": ["Binawi ang mungkahi.", "Gibawi ang sugyot."],
+  "Withdraw your {fish} suggestion? The LGU will no longer review it.": [
+    "Bawiin ang iyong mungkahi para sa {fish}? Hindi na ito susuriin ng LGU.",
+    "Bawion ang imong sugyot para sa {fish}? Dili na kini susihon sa LGU.",
+  ],
+  "You can edit or withdraw a suggestion until the LGU reviews it.": [
+    "Maaari mong i-edit o bawiin ang mungkahi hangga't hindi pa ito nasusuri ng LGU.",
+    "Mahimo nimong usbon o bawion ang sugyot samtang wala pa kini masusi sa LGU.",
+  ],
   "You haven't submitted any suggestions yet.": ["Wala ka pang naipapasang mungkahi.", "Wala ka pay napasa nga sugyot."],
 
   // Notifications
