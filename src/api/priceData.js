@@ -42,6 +42,11 @@ export function lastDays(series, days) {
   return series.filter((p) => p.date >= from);
 }
 
+// Keep only the series points between two "YYYY-MM-DD" dates (either may be empty).
+export function betweenDates(series, from, to) {
+  return series.filter((p) => (!from || p.date >= from) && (!to || p.date <= to));
+}
+
 // Latest record for each key (e.g. species + municipality).
 export function latestBy(records, keyOf) {
   const latest = new Map();

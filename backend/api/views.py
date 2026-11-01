@@ -2461,6 +2461,9 @@ def record_failed_login(username):
         if user is not None:
             log_activity(user, "locked", "Authentication", user.pk, user.username,
                          {"minutes": settings.LOGIN_LOCKOUT_MINUTES})
+            # Email the owner once the lock is saved (UC-1 3d).
+            locked_until = record.locked_until
+            transaction.on_commit(lambda: send_lockout_notice(user, locked_until))
         return lockout_response(record.locked_until)
     record.save()
     return None
@@ -2787,3 +2790,122 @@ class MarketViewSet(AdminWritableViewSet):
         self.check_admin()
         log_admin_change(self.request.user, "deleted", "Market", instance, instance.name)
         instance.delete()
+
+
+# ============================================================
+# PASSWORD RESET BY EMAIL AND LOCKOUT NOTICES (UC-1 3d, 3e)
+# ============================================================
+import logging
+from urllib.parse import urlencode
+
+from django.contrib.auth.tokens import default_token_generator
+from django.core.mail import send_mail
+from django.utils.encoding import force_bytes, force_str
+from django.utils.http import urlsafe_base64_decode, urlsafe_base64_encode
+from rest_framework.decorators import throttle_classes
+from rest_framework.throttling import AnonRateThrottle
+
+email_logger = logging.getLogger("aquatimbang.email")
+
+
+def send_account_email(user, subject, body):
+    """Send an email to a user; a mail failure never breaks the request."""
+    if not user.email:
+        return False
+    try:
+        send_mail(subject, body, settings.DEFAULT_FROM_EMAIL, [user.email])
+        return True
+    except Exception:  # SMTP errors, bad settings, no network
+        email_logger.exception("Could not send %r to user %s", subject, user.pk)
+        return False
+
+
+def send_lockout_notice(user, locked_until):
+    minutes = settings.LOGIN_LOCKOUT_MINUTES
+    send_account_email(
+        user,
+        "AquaTimbang: your account was locked",
+        f"Hello {user.get_full_name() or user.username},\n\n"
+        f"Someone entered the wrong password for your AquaTimbang account "
+        f"{settings.LOGIN_MAX_ATTEMPTS} times in a row, so the account is locked for {minutes} minutes "
+        f"(until {timezone.localtime(locked_until):%B %d, %Y %I:%M %p}).\n\n"
+        f"If this was you, wait and try again, or use \"Forgot password?\" on the login page.\n"
+        f"If it was not you, reset your password and tell your administrator.\n\n"
+        f"— AquaTimbang",
+    )
+
+
+class PasswordResetThrottle(AnonRateThrottle):
+    scope = "password_reset"
+    rate = "5/hour"
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def request_password_reset(request):
+    """
+    Email a reset link valid for one hour. The answer is the same whether
+    or not the email is registered, so it cannot be used to find accounts.
+    """
+    email = str(request.data.get("email", "")).strip()
+    if not email:
+        return Response({"email": "Enter your email address."}, status=status.HTTP_400_BAD_REQUEST)
+    users = User.objects.filter(email__iexact=email, is_active=True).select_related("aquatimbang_profile")
+    for user in users:
+        profile = getattr(user, "aquatimbang_profile", None)
+        if profile is None or profile.account_status != UserProfile.STATUS_APPROVED or not profile.is_active:
+            continue
+        query = urlencode({
+            "reset_uid": urlsafe_base64_encode(force_bytes(user.pk)),
+            "reset_token": default_token_generator.make_token(user),
+        })
+        link = f"{settings.FRONTEND_URL}?{query}"
+        send_account_email(
+            user,
+            "AquaTimbang: reset your password",
+            f"Hello {user.get_full_name() or user.username},\n\n"
+            f"Open this link to choose a new password for your AquaTimbang account ({user.username}):\n\n"
+            f"{link}\n\n"
+            f"The link works once and expires in 1 hour. If you did not ask for this, ignore this email; "
+            f"your password stays the same.\n\n— AquaTimbang",
+        )
+        log_activity(user, "password reset requested", "Authentication", user.pk, user.username)
+    return Response({
+        "message": "If that email belongs to an approved account, a reset link has been sent. "
+                   "Check your inbox (and spam folder). The link expires in 1 hour."
+    })
+
+
+@api_view(["POST"])
+@permission_classes([AllowAny])
+@throttle_classes([PasswordResetThrottle])
+def confirm_password_reset(request):
+    """Set a new password using the link from the reset email."""
+    invalid = Response(
+        {"message": "This reset link is invalid or has expired. Please request a new one."},
+        status=status.HTTP_400_BAD_REQUEST,
+    )
+    try:
+        user_id = force_str(urlsafe_base64_decode(str(request.data.get("uid", ""))))
+        user = User.objects.get(pk=user_id, is_active=True)
+    except (TypeError, ValueError, OverflowError, User.DoesNotExist):
+        return invalid
+    if not default_token_generator.check_token(user, str(request.data.get("token", ""))):
+        return invalid
+
+    password = request.data.get("new_password", "")
+    if not isinstance(password, str) or not password:
+        return Response({"new_password": "Enter a new password."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        validate_password(password, user)
+    except DjangoValidationError as error:
+        return Response({"new_password": " ".join(error.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+    with transaction.atomic():
+        user.set_password(password)  # also makes the link unusable
+        user.save(update_fields=["password"])
+        Token.objects.filter(user=user).delete()  # log out other devices
+        LoginLockout.objects.filter(username=user.username.lower()).delete()
+        log_activity(user, "password reset", "Authentication", user.pk, user.username)
+    return Response({"message": "Your password has been changed. You can now log in."})

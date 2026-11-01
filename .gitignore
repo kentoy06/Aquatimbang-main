@@ -32,4 +32,5 @@ backend/.env
 backend/db.sqlite3
 backend/*.sqlite3
 backend/media/
+backend/staticfiles/
 backend/verification/

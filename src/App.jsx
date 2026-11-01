@@ -17,12 +17,22 @@ const LGU = lazy(() => import("./Lgu.jsx"));
 const dashboardFallback = <div style={{ padding: 40, textAlign: "center", color: "#667085" }}>Loading your dashboard…</div>;
 import { API_BASE_URL } from "./api/config.js";
 import { logout, SESSION_ENDED_EVENT, useIdleLogout } from "./api/session.js";
+import { ForgotPasswordForm, ResetPasswordPage } from "./components/PasswordReset.jsx";
+
+// Reset-password link from the email: ?reset_uid=...&reset_token=...
+function readResetLink() {
+  const params = new URLSearchParams(window.location.search);
+  const uid = params.get("reset_uid");
+  const token = params.get("reset_token");
+  return uid && token ? { uid, token } : null;
+}
 
 
 function App() {
   // Controls which page/dashboard is currently displayed.
   
 // Restore the correct dashboard when refreshing the browser.
+  const [resetLink, setResetLink] = useState(readResetLink);
   const [page, setPage] = useState(() => {
   // Retrieve the saved authentication information.
   const token = localStorage.getItem("authToken");
@@ -80,6 +90,22 @@ function App() {
   const goLanding = () => setPage("landing");
   const goLogin = () => setPage("login");
   const goRegister = () => setPage("register");
+
+  // Choosing a new password from the emailed link.
+  if (resetLink) {
+    return (
+      <ResetPasswordPage
+        uid={resetLink.uid}
+        token={resetLink.token}
+        onDone={() => {
+          // Remove the link from the address bar so a refresh does not reuse it.
+          window.history.replaceState(null, "", window.location.pathname);
+          setResetLink(null);
+          setPage("login");
+        }}
+      />
+    );
+  }
 
   // Display the correct dashboard.
   if (page === "Admin") {
@@ -368,26 +394,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
 
           {forgotMode ? (
 
-            <>
-              <div className="login-head">
-
-                <h3>Reset your password</h3>
-
-                <p>
-                  AquaTimbang does not send password reset emails yet.
-                  Please contact your AquaTimbang Administrator to
-                  have your password reset.
-                </p>
-
-              </div>
-
-              <button
-                className="primary-btn full-btn"
-                onClick={backToLoginForm}
-              >
-                ← Back to Login
-              </button>
-            </>
+            <ForgotPasswordForm onBack={backToLoginForm} />
 
           ) : (
 

@@ -1200,3 +1200,106 @@ td strong {
     width: 100%;
   }
 }
+/* =========================================================
+   PHONES — keep every dashboard page within the screen width
+========================================================= */
+@media (max-width: 800px) {
+  /* Hide menu labels, including items that also show a badge. */
+  .nav-item span:not(.nav-icon):not(.nav-badge) {
+    display: none;
+  }
+
+  .nav-item {
+    position: relative;
+  }
+
+  .nav-item .nav-badge {
+    position: absolute;
+    top: 4px;
+    right: 6px;
+  }
+
+  .main {
+    min-width: 0;
+  }
+
+  .topbar {
+    height: auto;
+    min-height: 64px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 10px 14px;
+  }
+
+  .topbar h1 {
+    font-size: 20px;
+  }
+
+  .topbar p {
+    display: none;
+  }
+
+  .topbar-right {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+
+  .page-title {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .filter-row {
+    flex-wrap: wrap;
+  }
+
+  .config-grid,
+  .profile-grid {
+    grid-template-columns: 1fr;
+  }
+
+  /* Wide tables scroll inside their panel instead of widening the page. */
+  .panel,
+  .config-card {
+    min-width: 0;
+    overflow-x: auto;
+  }
+
+  .welcome-fish {
+    display: none;
+  }
+
+  .modal {
+    width: calc(100vw - 24px);
+    max-width: calc(100vw - 24px);
+    box-sizing: border-box;
+  }
+
+  input,
+  select,
+  textarea {
+    max-width: 100%;
+  }
+
+  /* Keep Logout reachable on phones, as an icon. */
+  .logout-btn {
+    display: block;
+    font-size: 0;
+    padding: 10px 0;
+  }
+
+  .logout-btn::before {
+    content: "↪";
+    font-size: 18px;
+  }
+}
+
+/* Date labels inside filter rows (From / To / As of) */
+.filter-row label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475467;
+}

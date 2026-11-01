@@ -46,6 +46,22 @@ DEBUG = os.environ.get("DJANGO_DEBUG", "True").lower() in ("1", "true", "yes")
 
 ALLOWED_HOSTS = env_list("DJANGO_ALLOWED_HOSTS", "localhost,127.0.0.1")
 
+# Sites allowed to send forms to Django itself (the /admin/ pages), e.g.
+# https://yourname.pythonanywhere.com. The React site uses tokens, not cookies.
+CSRF_TRUSTED_ORIGINS = env_list("CSRF_TRUSTED_ORIGINS", "")
+
+if not DEBUG:
+    from django.core.exceptions import ImproperlyConfigured
+
+    if SECRET_KEY.startswith("django-insecure") or SECRET_KEY.startswith("change-me"):
+        raise ImproperlyConfigured("Set a long random DJANGO_SECRET_KEY in backend/.env before turning DEBUG off.")
+    # Online: HTTPS only (the hosting service handles the certificate).
+    SECURE_PROXY_SSL_HEADER = ("HTTP_X_FORWARDED_PROTO", "https")
+    SECURE_SSL_REDIRECT = os.environ.get("SECURE_SSL_REDIRECT", "True").lower() in ("1", "true", "yes")
+    SESSION_COOKIE_SECURE = True
+    CSRF_COOKIE_SECURE = True
+    SECURE_HSTS_SECONDS = int(os.environ.get("SECURE_HSTS_SECONDS", "0"))
+
 
 # Application definition
 
@@ -198,16 +214,34 @@ USE_TZ = True
 # https://docs.djangoproject.com/en/6.1/howto/static-files/
 
 STATIC_URL = 'static/'
+# "python manage.py collectstatic" copies the Django admin's files here.
+STATIC_ROOT = BASE_DIR / "staticfiles"
 
 
 # Email
 # https://docs.djangoproject.com/en/6.1/topics/email/#topic-email-configuration
 
-MAILERS = {
-    'default': {
-        'BACKEND': 'django.core.mail.backends.console.EmailBackend',
-    },
-}
+# With EMAIL_HOST set (e.g. smtp.gmail.com) emails are really sent;
+# otherwise they are printed in the terminal running the server, which is
+# enough to test password resets on your own computer.
+EMAIL_HOST = os.environ.get("EMAIL_HOST", "")
+EMAIL_BACKEND = (
+    "django.core.mail.backends.smtp.EmailBackend"
+    if EMAIL_HOST
+    else "django.core.mail.backends.console.EmailBackend"
+)
+EMAIL_PORT = int(os.environ.get("EMAIL_PORT", "587"))
+EMAIL_HOST_USER = os.environ.get("EMAIL_HOST_USER", "")
+EMAIL_HOST_PASSWORD = os.environ.get("EMAIL_HOST_PASSWORD", "")
+EMAIL_USE_TLS = os.environ.get("EMAIL_USE_TLS", "True").lower() in ("1", "true", "yes")
+EMAIL_TIMEOUT = 15
+DEFAULT_FROM_EMAIL = os.environ.get("DEFAULT_FROM_EMAIL", EMAIL_HOST_USER or "AquaTimbang <no-reply@aquatimbang.local>")
+
+# Address of the website, used for links in emails (password reset).
+FRONTEND_URL = os.environ.get("FRONTEND_URL", "http://localhost:5173/Aquatimbang-main/")
+
+# Password reset links stop working after one hour (UC-1 3e).
+PASSWORD_RESET_TIMEOUT = 60 * 60
 
 # Websites allowed to call this API: the Vite dev server and the
 # GitHub Pages site. Override with CORS_ALLOWED_ORIGINS in backend/.env.
@@ -228,4 +262,6 @@ DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # Uploaded files configuration
 MEDIA_URL = "/media/"
-MEDIA_ROOT = BASE_DIR / "media" 
+# Uploaded photos and documents. Must be a folder that is kept between
+# restarts when the backend is hosted online.
+MEDIA_ROOT = Path(os.environ.get("MEDIA_ROOT", BASE_DIR / "media")) 

@@ -17,6 +17,7 @@ import { LANGUAGES, LanguageContext, translate, useLanguageSetting, useT } from 
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
+const TrendChart = lazy(() => import("./components/TrendChart.jsx"));
 
 /* ================================================================
    HELPERS
@@ -599,7 +600,12 @@ function PriceTrends({ registeredSpecies = [], myFish = [], speciesLoadError = "
           </div>
           <div className="panel">
             <div className="panel-header"><div><h3>{speciesName} — Published Price History</h3><p>{firstDate} to {lastDate} · {filtered.length} published record(s) · {rows.length} day(s)</p></div></div>
-            <PublishedPriceLineChart rows={rows} />
+            <div style={{ padding: "12px 10px 4px" }}>
+              <Suspense fallback={<p className="chart-note">Loading chart…</p>}>
+                <TrendChart rows={rows} label={speciesName} />
+              </Suspense>
+              <p className="chart-note" style={{ textAlign: "center" }}>{t("Hover or tap a point to see that day's price.")}</p>
+            </div>
             <div style={{ overflowX: "auto", marginTop: 16 }}><table><thead><tr><th>DATE</th><th>AVERAGE PRICE / KG</th><th>PUBLISHED RECORDS</th></tr></thead><tbody>
               {rows.slice().reverse().map((r) => <tr key={r.date}><td>{r.date}</td><td><strong>{peso(r.price)}</strong></td><td>{r.count}</td></tr>)}
             </tbody></table></div>
@@ -607,40 +613,6 @@ function PriceTrends({ registeredSpecies = [], myFish = [], speciesLoadError = "
         </>}
     </>
   );
-}
-
-// An SVG line chart with real observation dates; no invented intermediate prices.
-function PublishedPriceLineChart({ rows }) {
-  const width = 900, height = 310, left = 76, right = 30, top = 36, bottom = 65;
-  const plotWidth = width - left - right, plotHeight = height - top - bottom;
-  const values = rows.map((r) => r.price);
-  const low = Math.min(...values), high = Math.max(...values);
-  const padding = Math.max((high - low) * 0.15, 5);
-  const minY = Math.max(0, low - padding), maxY = high + padding;
-  const timeValues = rows.map((r) => new Date(`${r.date}T00:00:00`).getTime());
-  const minTime = Math.min(...timeValues), maxTime = Math.max(...timeValues);
-  const xAt = (index) => minTime === maxTime ? left + plotWidth / 2 : left + (timeValues[index] - minTime) / (maxTime - minTime) * plotWidth;
-  const yAt = (value) => top + (maxY - value) / (maxY - minY || 1) * plotHeight;
-  const points = rows.map((r, i) => ({ ...r, x: xAt(i), y: yAt(r.price) }));
-  const line = points.map((p) => `${p.x},${p.y}`).join(" ");
-  const tickIndices = [...new Set([0, Math.floor((rows.length - 1) / 2), rows.length - 1])];
-  return <div style={{ overflowX: "auto", padding: "12px 10px 4px" }}>
-    <svg viewBox={`0 0 ${width} ${height}`} role="img" aria-label={`Historical published prices across ${rows.length} recorded dates`} style={{ width: "100%", minWidth: 540, height: "auto", display: "block" }}>
-      {[0, 1, 2, 3, 4].map((i) => {
-        const value = minY + (maxY - minY) * (4 - i) / 4;
-        const y = top + plotHeight * i / 4;
-        return <g key={i}><line x1={left} x2={width - right} y1={y} y2={y} stroke="#dce6ec" strokeDasharray="4 5" /><text x={left - 12} y={y + 4} fontSize="12" fill="#64748b" textAnchor="end">₱{value.toFixed(0)}</text></g>;
-      })}
-      {points.length > 1 && <polyline points={line} fill="none" stroke="#0f8995" strokeWidth="3" strokeLinejoin="round" strokeLinecap="round" />}
-      {points.map((p, i) => <g key={p.date}>
-        <circle cx={p.x} cy={p.y} r="5" fill="#0f8995" stroke="white" strokeWidth="2"><title>{p.date}: {peso(p.price)} / kg ({p.count} published record(s))</title></circle>
-        {(rows.length <= 12 || i === 0 || i === rows.length - 1) && <text x={p.x} y={Math.max(17, p.y - 14)} fontSize="12" textAnchor="middle" fontWeight="600" fill="#0f6171">{peso(p.price)}</text>}
-      </g>)}
-      {tickIndices.map((i) => <text key={i} x={points[i].x} y={height - 30} fontSize="12" textAnchor="middle" fill="#475569">{points[i].date}</text>)}
-      <text x={width / 2} y={height - 5} fontSize="12" textAnchor="middle" fill="#64748b">Recorded date</text>
-    </svg>
-    <p className="chart-note" style={{ textAlign: "center" }}>Only dates with published records are plotted. Hover over points for details; the table below shows every date.</p>
-  </div>;
 }
 
 /* ================================================================

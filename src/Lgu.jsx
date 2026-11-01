@@ -9,6 +9,7 @@ import {
 import { API_BASE_URL, fetchAll } from "./api/config.js";
 import { fullName as profileName, useMyProfile } from "./api/account.js";
 import {
+  betweenDates,
   dailySeries,
   isPublished,
   lastDays,
@@ -17,6 +18,9 @@ import {
   speciesNames as recordSpeciesNames,
 } from "./api/priceData.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+
+// Loaded only when a chart is shown (the chart library is large).
+const TrendChart = lazy(() => import("./components/TrendChart.jsx"));
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
 import { listExternalFactors } from "./api/forecast.js";
@@ -3181,9 +3185,15 @@ function PriceTrends({ priceRecords, loading, error }) {
   const [selected, setSelected] = useState("");
   const [municipality, setMunicipality] = useState("");
   const [range, setRange] = useState("30");
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
   const current = species.includes(selected) ? selected : species[0] || "";
+  const seriesFor = (sp) => {
+    const series = dailySeries(published, sp, municipality);
+    return range === "custom" ? betweenDates(series, from, to) : lastDays(series, range);
+  };
 
-  const rows = lastDays(dailySeries(published, current, municipality), range);
+  const rows = seriesFor(current);
   const prices = rows.map((r) => r.price);
   const hasData = prices.length > 0;
   const avg = hasData ? prices.reduce((a, b) => a + b, 0) / prices.length : null;
@@ -3191,7 +3201,6 @@ function PriceTrends({ priceRecords, loading, error }) {
   const low = hasData ? Math.min(...prices) : null;
   const change = hasData ? prices[prices.length - 1] - prices[0] : 0;
   const pctChange = hasData && prices[0] ? (change / prices[0]) * 100 : 0;
-  const max = Math.max(...prices, 1);
 
   return (
     <>
@@ -3214,12 +3223,19 @@ function PriceTrends({ priceRecords, loading, error }) {
             <option value="14">Last 14 days</option>
             <option value="30">Last 30 days</option>
             <option value="90">Last 90 days</option>
+            <option value="custom">Custom dates</option>
           </select>
+          {range === "custom" && (
+            <>
+              <label>From <input className="date-input" type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></label>
+              <label>To <input className="date-input" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></label>
+            </>
+          )}
         </div>
       </div>
 
       {loading ? <EmptyPanel>Loading published prices…</EmptyPanel> : error ? <EmptyPanel>{error}</EmptyPanel> : !hasData ? (
-        <EmptyPanel>No published prices yet. Trends appear once prices are published in Review &amp; Publish.</EmptyPanel>
+        <EmptyPanel>{published.length ? "No published prices for these filters. Try another species, municipality or date range." : "No published prices yet. Trends appear once prices are published in Review & Publish."}</EmptyPanel>
       ) : (
         <>
           <div className="stats-grid">
@@ -3240,15 +3256,11 @@ function PriceTrends({ priceRecords, loading, error }) {
             <div className="panel-header">
               <div><h3>{current} — Price History</h3><p>{rows.length} day{rows.length !== 1 ? "s" : ""} with published prices · {municipality || "all municipalities"}</p></div>
             </div>
-            <div className="chart-area">
-              <div className="chart-placeholder">
-                <div className="bars">
-                  {rows.map((r) => (
-                    <div key={r.date} className="bar" style={{ height: `${20 + (r.price / max) * 75}%` }} title={`${fmtDate(r.date)} — ${peso(r.price)}`}></div>
-                  ))}
-                </div>
-                <p className="chart-note">Hover a bar to see that day's price.</p>
-              </div>
+            <div style={{ padding: "8px 12px 4px" }}>
+              <Suspense fallback={<p className="chart-note">Loading chart…</p>}>
+                <TrendChart rows={rows} label={current} />
+              </Suspense>
+              <p className="chart-note">Hover or tap a point to see that day's price.</p>
             </div>
           </div>
         </>
@@ -3263,7 +3275,7 @@ function PriceTrends({ priceRecords, loading, error }) {
             <thead><tr><th>SPECIES</th><th>START PRICE</th><th>CURRENT PRICE</th><th>CHANGE</th><th>% CHANGE</th></tr></thead>
             <tbody>
               {species.map((sp) => {
-                const p = lastDays(dailySeries(published, sp, municipality), range).map((x) => x.price);
+                const p = seriesFor(sp).map((x) => x.price);
                 if (!p.length) return <tr key={sp}><td><strong>{sp}</strong></td><td colSpan="4">No published prices in this range.</td></tr>;
                 const d = p[p.length - 1] - p[0];
                 const pc = p[0] ? (d / p[0]) * 100 : 0;
@@ -3293,10 +3305,11 @@ function PriceComparison({ priceRecords, loading, error }) {
   const published = priceRecords.filter(isPublished);
   const species = recordSpeciesNames(published);
   const [selected, setSelected] = useState("");
+  const [asOf, setAsOf] = useState("");
   const current = species.includes(selected) ? selected : species[0] || "";
 
-  // Latest published price for the species in each municipality.
-  const rows = latestBy(published.filter((r) => r.fish_name === current), (r) => r.municipality)
+  // Latest published price for the species in each municipality, on or before the chosen date.
+  const rows = latestBy(published.filter((r) => r.fish_name === current && (!asOf || r.recorded_date <= asOf)), (r) => r.municipality)
     .map((r) => ({ municipality: r.municipality_name, price: Number(r.price_per_kg), date: r.recorded_date }))
     .sort((a, b) => b.price - a.price);
   const highest = rows.length ? Math.max(...rows.map((r) => r.price)) : null;
@@ -3309,15 +3322,19 @@ function PriceComparison({ priceRecords, loading, error }) {
           <h2>Price Comparison</h2>
           <p>Compare the latest published price for a species across municipalities.</p>
         </div>
-        <select className="date-input" value={current} onChange={(e) => setSelected(e.target.value)} disabled={!species.length}>
-          {!species.length && <option value="">No published prices</option>}
-          {species.map((s) => <option key={s}>{s}</option>)}
-        </select>
+        <div className="filter-row">
+          <select className="date-input" value={current} onChange={(e) => setSelected(e.target.value)} disabled={!species.length}>
+            {!species.length && <option value="">No published prices</option>}
+            {species.map((s) => <option key={s}>{s}</option>)}
+          </select>
+          <label>As of <input className="date-input" type="date" value={asOf} onChange={(e) => setAsOf(e.target.value)} /></label>
+          {asOf && <button className="secondary-btn" onClick={() => setAsOf("")}>Today</button>}
+        </div>
       </div>
 
       <div className="panel">
         <div className="panel-header">
-          <div><h3>{current || "—"} — Price by Municipality</h3><p>Latest published rates</p></div>
+          <div><h3>{current || "—"} — Price by Municipality</h3><p>{asOf ? `Latest published rates on or before ${fmtDate(asOf)}` : "Latest published rates"}</p></div>
         </div>
         <table>
           <thead><tr><th>MUNICIPALITY</th><th>PRICE / KG</th><th>PRICE DATE</th><th>VS. HIGHEST</th><th>NOTE</th></tr></thead>
@@ -3357,6 +3374,9 @@ function PriceComparison({ priceRecords, loading, error }) {
 
 function PriceAnomalies({ priceRecords, suggestions }) {
   const [range, setRange] = useState(DEFAULT_PRICE_RANGE);
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  const inDates = (day) => (!from || day >= from) && (!to || day <= to);
 
   // The allowed range is set by the Administrator in System Configuration.
   useEffect(() => {
@@ -3373,11 +3393,11 @@ function PriceAnomalies({ priceRecords, suggestions }) {
   // Flagged entries plus any entry priced outside the allowed range.
   const anomalousEntries = priceRecords.filter((r) => {
     const price = Number(r.price_per_kg);
-    return r.status === "flagged" || price < range.min || price > range.max;
+    return (r.status === "flagged" || price < range.min || price > range.max) && inDates(r.recorded_date);
   });
 
   const suggestionAnomalies = [...new Set(suggestions.map((s) => s.species))].flatMap((sp) => {
-    const rows = suggestions.filter((s) => s.species === sp);
+    const rows = suggestions.filter((s) => s.species === sp && inDates(s.date));
     if (rows.length < 3) return [];
     const avg = rows.reduce((a, b) => a + b.suggestedPrice, 0) / rows.length;
     return rows.filter((r) => Math.abs(r.suggestedPrice - avg) / avg > 0.3).map((r) => ({ ...r, avg }));
@@ -3389,6 +3409,11 @@ function PriceAnomalies({ priceRecords, suggestions }) {
         <div>
           <h2>Price Anomalies</h2>
           <p>Entries and suggestions that fall well outside expected price ranges.</p>
+        </div>
+        <div className="filter-row">
+          <label>From <input className="date-input" type="date" value={from} max={to || undefined} onChange={(e) => setFrom(e.target.value)} /></label>
+          <label>To <input className="date-input" type="date" value={to} min={from || undefined} onChange={(e) => setTo(e.target.value)} /></label>
+          {(from || to) && <button className="secondary-btn" onClick={() => { setFrom(""); setTo(""); }}>All dates</button>}
         </div>
       </div>
 

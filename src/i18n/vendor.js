@@ -179,6 +179,10 @@ const PHRASES = {
   "COMMENT": ["KOMENTO", "KOMENTO"],
   "LGU FEEDBACK": ["TUGON NG LGU", "TUBAG SA LGU"],
   "ACTIONS": ["AKSYON", "AKSYON"],
+  "Hover or tap a point to see that day's price.": [
+    "Pindutin o itapat ang cursor sa tuldok para makita ang presyo sa araw na iyon.",
+    "Pindota o itutok ang cursor sa tulbok aron makita ang presyo niadtong adlawa.",
+  ],
   "Announcements": ["Mga Anunsyo", "Mga Pahibalo gikan sa Admin"],
   "Pending Review": ["Naghihintay ng Pagsusuri", "Naghulat sa Pagsusi"],
   "Reviewed": ["Nasuri na", "Nasusi na"],
