@@ -22,8 +22,8 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Login with role-based dashboard | ✅ | |
 | "Pending approval" / "Registration rejected" / "Account disabled" login messages | ✅ | UC-1 3b, 3c and E2 wording. A wrong password never reveals the account status. |
 | Logout ends the session | ✅ | The server deletes the login token (`/api/auth/logout/`). |
-| Lock account for 15 min after 5 failed logins (UC-1 3d) | 🟡 | Locked even with the right password; logged. The email notice needs an email server. |
-| Forgot password → reset link valid 1 hour (UC-1 3e) | ❌ | Login page currently says to contact an Administrator. |
+| Lock account for 15 min after 5 failed logins (UC-1 3d) | ✅ | Locked even with the right password; logged; the owner gets an email notice (once email is set up in `.env`). |
+| Forgot password → reset link valid 1 hour (UC-1 3e) | ✅ | "Forgot password?" emails a one-time link that expires in 1 hour. The answer is the same for unknown emails, so accounts cannot be guessed. |
 | Session expires after inactivity (Table 24/41) | ✅ | 30 minutes by default (`SESSION_IDLE_MINUTES`); enforced by the server and by an idle timer in the browser. |
 | Log every login with timestamp (UC-1 step 6, AccessLogs) | ✅ | Logged in, logged out, login failed and locked appear in Activity Logs. |
 
@@ -33,11 +33,11 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 |---|---|---|
 | Real-time (latest) price display | ✅ | Vendor, LGU and Admin dashboards. |
 | Historical price visualization | ✅ | Price Trends pages. |
-| Filters: species, date range, municipality | 🟡 | Species and municipality yes; date-range filter not on every view. |
-| Interactive charts (Chart.js / Recharts in the paper) | 🟡 | Forecast pages use Recharts (hover tooltips, confidence band); trend pages still use simple charts. |
+| Filters: species, date range, municipality | ✅ | Price Trends (vendor and LGU) have preset and custom date ranges; Price Comparison has an "as of" date; Price Anomalies, Reports, Activity/Audit logs and Fisherfolk Suggestions have From/To; Price Records has a date filter. |
+| Interactive charts (Chart.js / Recharts in the paper) | ✅ | Forecast and Price Trends pages use Recharts with hover/tap tooltips. |
 | Forecast integration (SARIMAX) | ✅ | Vendor, LGU and Admin forecast pages use the SARIMAX API. |
 | Data export & sharing (LGU, Admin) | ✅ | CSV and PDF export. |
-| Responsive interface | 🟡 | Login/Register checked on phone width; dashboards not yet checked. |
+| Responsive interface | ✅ | Every Admin, LGU and Vendor page checked at phone width (390 px): nothing wider than the screen; wide tables scroll inside their panel; menu becomes icons with Logout kept. |
 | "No data available for the selected filters" message | ✅ | |
 
 ## 3. Fair Price Calculator Module (UC-3)
@@ -94,7 +94,7 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Edit / update user information | ✅ | Name, username, email, contact, municipality. |
 | Deactivate / delete accounts | ✅ | Deactivating logs the user out. Accounts with price suggestions can only be deactivated, to keep their history. |
 | Role assignment & management | ✅ | One role per account; changing it logs the user out. The last active Administrator cannot be removed or demoted. |
-| Password reset & recovery | 🟡 | Administrator gives a one-time temporary password; users change their password in My Profile. Email reset links (UC-1 3e) need an email server. |
+| Password reset & recovery | ✅ | Email reset links (UC-1 3e), plus Administrator temporary passwords and Change Password in My Profile. |
 | User activity logs | ✅ | |
 | Block approval when required fields are missing (e.g. no municipality) | ✅ | |
 
@@ -125,7 +125,7 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | CORS restricted to trusted domains | ✅ | `CORS_ALLOWED_ORIGINS`. |
 | Login lockout, session timeout | ✅ | See Module 1. |
 | API rate limiting | ✅ | 120 requests/minute without login, 1,200 with login (configurable in `.env`). |
-| HTTPS, firewall, hosting | ❌ | Backend is not deployed yet. |
+| HTTPS, firewall, hosting | 🟡 | Ready to host: production settings (HTTPS-only cookies and redirect, secret key required) and a step-by-step guide in `docs/DEPLOYMENT.md`. Needs the team to create the hosting account. |
 
 ---
 
@@ -155,4 +155,5 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
    login logging, rate limiting. Still needs an email server for reset links and lock notices.
 5. ~~**Price corrections and bounds**~~ — done: correction history, configurable price range.
 6. ~~**Smaller items**~~ — done: calculator history, PDF export, external factor reports, report log.
-7. **Email server** (optional) — reset links and lockout notices (UC-1 3d, 3e).
+7. ~~**Email**~~ — done: reset links and lockout notices (UC-1 3d, 3e).
+8. **Host the backend online** — follow `docs/DEPLOYMENT.md`.

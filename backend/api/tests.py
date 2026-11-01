@@ -1406,3 +1406,88 @@ class SuggestionEditAnnouncementMarketTests(TestCase):
         self.assertEqual(self.client_for("se_lgu").post("/api/markets/", {"name": "X", "municipality": self.cebu.id}, format="json").status_code, 403)
         options = APIClient().get("/api/auth/registration-options/").data
         self.assertEqual([m["name"] for m in options["markets"]], ["Carbon Market"])
+
+
+class PasswordResetEmailTests(TestCase):
+    """Forgot password by email (UC-1 3e) and the lockout email (UC-1 3d)."""
+
+    def setUp(self):
+        cache.clear()
+        role = Role.objects.create(name="Fish Vendor")
+        city = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.user = User.objects.create_user("pr_vendor", "pr_vendor@example.com", "OldPass123!")
+        UserProfile.objects.create(user=self.user, role=role, municipality=city, account_status="approved", is_active=True)
+        pending = User.objects.create_user("pr_pending", "pending@example.com", "OldPass123!")
+        UserProfile.objects.create(user=pending, role=role, municipality=city)
+
+    def reset_params(self):
+        from django.core import mail
+        from urllib.parse import parse_qs, urlparse
+        link = next(line for line in mail.outbox[-1].body.splitlines() if "reset_uid=" in line)
+        query = parse_qs(urlparse(link.strip()).query)
+        return query["reset_uid"][0], query["reset_token"][0]
+
+    def test_reset_flow(self):
+        from django.core import mail
+        client = APIClient()
+        response = client.post("/api/auth/password-reset/", {"email": "PR_VENDOR@example.com"}, format="json")
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("expires in 1 hour", mail.outbox[0].body)
+        uid, token = self.reset_params()
+
+        weak = client.post("/api/auth/password-reset/confirm/", {"uid": uid, "token": token, "new_password": "123"}, format="json")
+        self.assertEqual(weak.status_code, 400)
+        done = client.post("/api/auth/password-reset/confirm/", {"uid": uid, "token": token, "new_password": "NewPass456!"}, format="json")
+        self.assertEqual(done.status_code, 200, done.data)
+        self.user.refresh_from_db()
+        self.assertTrue(self.user.check_password("NewPass456!"))
+        # The link works only once.
+        again = client.post("/api/auth/password-reset/confirm/", {"uid": uid, "token": token, "new_password": "Other789!"}, format="json")
+        self.assertEqual(again.status_code, 400)
+        self.assertTrue(ActivityLog.objects.filter(action="password reset", actor=self.user).exists())
+
+    def test_unknown_or_unapproved_email_gets_same_answer_and_no_mail(self):
+        from django.core import mail
+        client = APIClient()
+        unknown = client.post("/api/auth/password-reset/", {"email": "nobody@example.com"}, format="json")
+        pending = client.post("/api/auth/password-reset/", {"email": "pending@example.com"}, format="json")
+        self.assertEqual(unknown.data, pending.data)
+        self.assertEqual(len(mail.outbox), 0)
+
+    def test_expired_link_is_refused(self):
+        from datetime import timedelta as td
+        from unittest import mock
+        from django.contrib.auth.tokens import default_token_generator
+        client = APIClient()
+        client.post("/api/auth/password-reset/", {"email": "pr_vendor@example.com"}, format="json")
+        uid, token = self.reset_params()
+        later = default_token_generator._now() + td(hours=1, minutes=1)
+        with mock.patch.object(default_token_generator, "_now", return_value=later):
+            response = client.post("/api/auth/password-reset/confirm/", {"uid": uid, "token": token, "new_password": "NewPass456!"}, format="json")
+        self.assertEqual(response.status_code, 400)
+
+    def test_lockout_sends_email(self):
+        from django.core import mail
+        from django.test.utils import override_settings
+        client = APIClient()
+        with self.captureOnCommitCallbacks(execute=True):
+            for _ in range(5):
+                client.post("/api/auth/login/", {"username": "pr_vendor", "password": "wrong"}, format="json")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("locked", mail.outbox[0].subject)
+        self.assertEqual(mail.outbox[0].to, ["pr_vendor@example.com"])
+
+
+class SetupCommandTests(TestCase):
+    def test_setup_creates_roles_and_admin_once(self):
+        from io import StringIO
+        from django.core.management import call_command
+        call_command("setup_aquatimbang", admin_username="boss", admin_email="boss@example.com", admin_password="StrongPass123!", stdout=StringIO())
+        call_command("setup_aquatimbang", admin_username="boss", admin_password="StrongPass123!", stdout=StringIO())
+        self.assertEqual(Role.objects.count(), 3)
+        profile = UserProfile.objects.get(user__username="boss")
+        self.assertEqual(profile.role.name, "Administrator")
+        self.assertTrue(profile.is_active)
+        login = APIClient().post("/api/auth/login/", {"username": "boss", "password": "StrongPass123!"}, format="json")
+        self.assertEqual(login.status_code, 200, login.data)

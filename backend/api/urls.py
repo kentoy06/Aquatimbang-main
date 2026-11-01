@@ -15,6 +15,8 @@ from .views import (
     public_summary,
     my_profile,
     my_photo,
+    request_password_reset,
+    confirm_password_reset,
     AnnouncementViewSet,
     MarketViewSet,
     list_fisherfolk,
@@ -176,6 +178,10 @@ urlpatterns = [
         my_profile,
         name="my-profile"
     ),
+
+    # Forgot password: email a reset link, then set the new password.
+    path("auth/password-reset/", request_password_reset, name="password-reset"),
+    path("auth/password-reset/confirm/", confirm_password_reset, name="password-reset-confirm"),
 
     # The logged-in user's own profile photo.
     path(

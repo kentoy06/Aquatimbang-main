@@ -14,7 +14,8 @@ source .venv/bin/activate          # Windows: .venv\Scripts\activate
 pip install -r requirements.txt
 cp .env.example .env               # then edit .env with your own values
 python manage.py migrate
-python manage.py createsuperuser   # optional, for Django admin
+# First time only: create the roles and the first Administrator account.
+python manage.py setup_aquatimbang --admin-username admin --admin-email you@example.com
 python manage.py runserver
 ```
 
@@ -23,6 +24,10 @@ hosts, CORS origins) are read from `backend/.env`, which git ignores. Leave
 `DB_ENGINE` empty in `.env` to use a local SQLite file instead of MySQL.
 Login security can also be tuned there: `SESSION_IDLE_MINUTES` (default 30),
 `LOGIN_MAX_ATTEMPTS` (5) and `LOGIN_LOCKOUT_MINUTES` (15).
+
+Password reset links and lockout notices are emailed. Until `EMAIL_HOST` is
+set in `.env`, those emails are printed in the terminal running
+`runserver`, so you can copy the reset link from there while testing.
 
 ## Run the front-end
 
@@ -44,6 +49,9 @@ To make the published site talk to a hosted backend, set the repository variable
 `VITE_API_BASE_URL` (Settings → Secrets and variables → Actions → Variables) to
 that backend's `/api` address, and add `https://kentoy06.github.io` to
 `CORS_ALLOWED_ORIGINS` in the backend's `.env`.
+
+Step-by-step hosting of the backend (PythonAnywhere, free, with MySQL and
+email) is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
 ## Tests
 
