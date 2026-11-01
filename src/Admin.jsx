@@ -11,6 +11,7 @@ import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFor } from "./components/ApplicantReview.jsx";
 import { useProtectedImage } from "./api/images.js";
 import { FishPhotoInput, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
+import { AnnouncementsManager } from "./components/Announcements.jsx";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -559,19 +560,6 @@ useEffect(() => {
     status: m.is_active ? "Active" : "Inactive",
   }));
 
-  // Markets come from the market names fish vendors gave when registering.
-  const markets = [
-    ...new Map(
-      databaseUsers
-        .filter((u) => u.verification?.details?.market_name)
-        .map((u) => {
-          const name = u.verification.details.market_name.trim();
-          const key = `${name}|${u.municipality}`;
-          return [key, { id: key, name, municipality: u.municipality || "—", status: "Active" }];
-        })
-    ).values(),
-  ].sort((a, b) => a.name.localeCompare(b.name));
-
   const { records: activityLogs } = useDjangoActivityLogs(`${activePage}-${reloadKey}`);
   const logs = activityLogs.map(toLogRow);
 
@@ -652,7 +640,7 @@ useEffect(() => {
       case "Municipality & Market":
         return (
           <MunicipalityMarket
-            municipalities={municipalities} markets={markets}
+            municipalities={municipalities}
             onChanged={reloadData} notify={notify}
           />
         );
@@ -707,7 +695,7 @@ useEffect(() => {
       case "Activity Logs":
         return <ActivityLogs notify={notify} />;
       case "System Announcements":
-        return <SystemAnnouncements />;
+        return <AnnouncementsManager notify={notify} />;
       case "Admin Profile":
         return <AccountProfile account={account} notify={notify} description="Your administrator account details and recent activity." />;
       default:
@@ -2396,7 +2384,144 @@ const toggleStatus = async (s) => {
    MUNICIPALITY & MARKET MANAGEMENT
    ================================================================ */
 
-function MunicipalityMarket({ municipalities, markets, onChanged, notify }) {
+// Public markets per municipality, stored in the database. Vendors pick
+// from this list when they register.
+function MarketsCard({ municipalities, notify }) {
+  const [markets, setMarkets] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [reloadKey, setReloadKey] = useState(0);
+  const [form, setForm] = useState(null); // null: closed; { id?, name, municipality }
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchAll("/markets/")
+      .then((rows) => { if (!cancelled) { setMarkets(rows); setError(""); } })
+      .catch((err) => { if (!cancelled) setError(err.message); })
+      .finally(() => { if (!cancelled) setLoading(false); });
+    return () => { cancelled = true; };
+  }, [reloadKey]);
+
+  const send = async (path, method, body) => {
+    const response = await fetch(apiUrl(path), {
+      method,
+      headers: authHeaders(body ? { "Content-Type": "application/json" } : {}),
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    if (response.status === 204) return null;
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = data && typeof data === "object" ? Object.values(data).flat().map(String).join(" ") : "";
+      throw new Error(message || `Request failed (HTTP ${response.status}).`);
+    }
+    return data;
+  };
+
+  const save = async () => {
+    if (!form.name.trim() || !form.municipality) {
+      notify("Enter the market name and choose its municipality.");
+      return;
+    }
+    setSaving(true);
+    try {
+      const body = { name: form.name.trim(), municipality: Number(form.municipality) };
+      if (form.id) await send(`/markets/${form.id}/`, "PATCH", body);
+      else await send("/markets/", "POST", body);
+      notify(form.id ? "Market updated." : "Market added.");
+      setForm(null);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const toggle = async (m) => {
+    try {
+      await send(`/markets/${m.id}/`, "PATCH", { is_active: !m.is_active });
+      notify(`${m.name} ${m.is_active ? "deactivated" : "activated"}.`);
+      setReloadKey((k) => k + 1);
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
+  const activeMunicipalities = municipalities.filter((m) => m.status === "Active");
+
+  return (
+    <div className="config-card">
+      <div className="config-header">
+        <div className="config-icon orange">▤</div>
+        <div>
+          <h3>Markets</h3>
+          <p>{markets.filter((m) => m.is_active).length} active · vendors choose from this list when registering</p>
+        </div>
+      </div>
+
+      {form && (
+        <div className="info-box" style={{ display: "grid", gap: 10, marginBottom: 12 }}>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label htmlFor="market-name">Market name</label>
+            <input id="market-name" maxLength={150} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Carbon Market" />
+          </div>
+          <div className="form-group" style={{ margin: 0 }}>
+            <label htmlFor="market-municipality">Municipality</label>
+            <select id="market-municipality" value={form.municipality} onChange={(e) => setForm({ ...form, municipality: e.target.value })}>
+              <option value="">Choose…</option>
+              {activeMunicipalities.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+            </select>
+          </div>
+          <div className="button-row" style={{ margin: 0 }}>
+            <button className="secondary-btn" onClick={() => setForm(null)}>Cancel</button>
+            <button className="primary-btn" onClick={save} disabled={saving}>{saving ? "Saving…" : form.id ? "Save Changes" : "Add Market"}</button>
+          </div>
+        </div>
+      )}
+
+      <table className="inner-table">
+        <thead>
+          <tr>
+            <th>MARKET</th>
+            <th>MUNICIPALITY</th>
+            <th>VENDORS</th>
+            <th>STATUS</th>
+            <th>ACTIONS</th>
+          </tr>
+        </thead>
+        <tbody>
+          {loading ? (
+            <tr><td colSpan="5" className="empty-row">Loading markets…</td></tr>
+          ) : error ? (
+            <tr><td colSpan="5" className="empty-row">{error}</td></tr>
+          ) : markets.length === 0 ? (
+            <tr><td colSpan="5" className="empty-row">No markets yet. Add the public markets in your area.</td></tr>
+          ) : markets.map((m) => (
+            <tr key={m.id}>
+              <td><strong>{m.name}</strong></td>
+              <td>{m.municipality_name}</td>
+              <td>{m.vendor_count}</td>
+              <td><span className={`badge ${m.is_active ? "success" : "inactive"}`}>{m.is_active ? "Active" : "Inactive"}</span></td>
+              <td>
+                <div className="action-icons">
+                  <button title="Edit" onClick={() => setForm({ id: m.id, name: m.name, municipality: String(m.municipality) })}>✎</button>
+                  <button title={m.is_active ? "Deactivate" : "Activate"} onClick={() => toggle(m)}>◉</button>
+                </div>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+
+      {!form && (
+        <button className="primary-btn full-btn" style={{ marginTop: 14 }} onClick={() => setForm({ name: "", municipality: "" })}>+ Add Market</button>
+      )}
+    </div>
+  );
+}
+
+function MunicipalityMarket({ municipalities, onChanged, notify }) {
   const [muniForm, setMuniForm] = useState({ name: "", province: "" });
   const [showMuniForm, setShowMuniForm] = useState(false);
   const [editingMuni, setEditingMuni] = useState(null);
@@ -2468,7 +2593,7 @@ function MunicipalityMarket({ municipalities, markets, onChanged, notify }) {
       <div className="page-title">
         <div>
           <h2>Municipality &amp; Market Management</h2>
-          <p>Manage municipalities and see the markets that registered vendors work in.</p>
+          <p>Manage municipalities and the public markets where fish vendors sell.</p>
         </div>
       </div>
 
@@ -2547,39 +2672,7 @@ function MunicipalityMarket({ municipalities, markets, onChanged, notify }) {
           <button className="primary-btn full-btn" onClick={openAddMuni}>+ Add Municipality</button>
         </div>
 
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon orange">▤</div>
-            <div>
-              <h3>Markets</h3>
-              <p>Markets named by registered fish vendors</p>
-            </div>
-          </div>
-
-          <table className="inner-table">
-            <thead>
-              <tr>
-                <th>MARKET</th>
-                <th>MUNICIPALITY</th>
-              </tr>
-            </thead>
-            <tbody>
-              {markets.length === 0 ? (
-                <tr><td colSpan="2" className="empty-row">No vendor has registered a market yet.</td></tr>
-              ) : markets.map((m) => (
-                <tr key={m.id}>
-                  <td><strong>{m.name}</strong></td>
-                  <td>{m.municipality}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="info-box" style={{ marginTop: 14 }}>
-            Markets are taken from fish vendor registrations. A separate market list
-            that can be edited here is not stored in the database yet.
-          </div>
-        </div>
+        <MarketsCard municipalities={municipalities} notify={notify} />
 
       </div>
     </>
@@ -3614,23 +3707,5 @@ function ReportsManagement({ users, species, logs, priceRecords, notify }) {
 /* ================================================================
    SYSTEM ANNOUNCEMENTS
    ================================================================ */
-
-function SystemAnnouncements() {
-  return (
-    <>
-      <div className="page-title">
-        <div>
-          <h2>System Announcements</h2>
-          <p>Messages shown to AquaTimbang users.</p>
-        </div>
-      </div>
-      <div className="panel">
-        <p className="empty-row" style={{ padding: 24 }}>
-          Announcements are not stored in the AquaTimbang database yet, so none can be published here.
-        </p>
-      </div>
-    </>
-  );
-}
 
 export default Admin;

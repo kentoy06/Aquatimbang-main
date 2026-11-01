@@ -5,11 +5,14 @@ import "./Vendor.css";
 import {
   listVendorSuggestions,
   createVendorSuggestion,
+  updateVendorSuggestion,
+  withdrawVendorSuggestion,
 } from "./api/vendorSuggestions";
 import { API_BASE_URL } from "./api/config.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
+import { AnnouncementBanner, useAnnouncements } from "./components/Announcements.jsx";
 import { LANGUAGES, LanguageContext, translate, useLanguageSetting, useT } from "./i18n/vendor.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
@@ -208,7 +211,8 @@ useEffect(() => {
   const speciesForVendor = mineFirst(registeredFishSpecies);
   const openFish = (id) => setFishInfoId(String(id));
 
-  const notifications = buildVendorNotifications(mySuggestions, publishedPrices);
+  const { announcements } = useAnnouncements();
+  const notifications = buildVendorNotifications(mySuggestions, publishedPrices, announcements);
   const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
 
   const menuGroups = [
@@ -303,7 +307,7 @@ useEffect(() => {
       case "Help / How to Use":
         return <HelpPage />;
       default:
-        return <LiveVendorDashboard records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} vendorName={identity.name} goTo={setActivePage} mySuggestions={mySuggestions} species={registeredFishSpecies} myFish={myFish} onFishClick={openFish} />;
+        return <LiveVendorDashboard records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} vendorName={identity.name} goTo={setActivePage} mySuggestions={mySuggestions} species={registeredFishSpecies} myFish={myFish} onFishClick={openFish} announcements={announcements} />;
     }
   };
 
@@ -470,9 +474,13 @@ function MyFishCard({ account, species, notify }) {
   );
 }
 
-function buildVendorNotifications(mySuggestions, publishedPrices = []) {
+function buildVendorNotifications(mySuggestions, publishedPrices = [], announcements = []) {
   const notifs = [];
   let id = 1;
+
+  announcements.filter((a) => a.is_active).forEach((a) => {
+    notifs.push({ id: `announcement-${a.id}`, type: "info", page: "Dashboard", title: `📢 ${a.title}`, detail: a.message });
+  });
 
   mySuggestions.forEach((s) => {
     if (s.status === "Reviewed" || s.status === "Adopted" || s.status === "Rejected") {
@@ -854,28 +862,55 @@ function SubmitSuggestedPrice({
 function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
   const t = useT();
   const [editingId, setEditingId] = useState(null);
-  const [draftComment, setDraftComment] = useState("");
+  const [draft, setDraft] = useState({ price: "", comment: "" });
+  const [busyId, setBusyId] = useState(null);
 
   const statusClass = (s) => {
     if (s === "Adopted") return "success";
     if (s === "Rejected") return "deleted";
     if (s === "Reviewed") return "approved";
+    if (s === "Withdrawn") return "inactive";
     return "pending";
   };
 
+  const replace = (updated) =>
+    setMySuggestions((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+
   const startEdit = (s) => {
     setEditingId(s.id);
-    setDraftComment(s.comment);
+    setDraft({ price: String(s.suggestedPrice), comment: s.comment });
   };
 
-  const saveComment = () => {
-  notify("Editing suggestions is not available yet.");
-  setEditingId(null);
-};
+  const saveEdit = async (s) => {
+    const price = Number(draft.price);
+    if (!Number.isFinite(price) || price <= 0) {
+      notify(t("Enter a price greater than zero."));
+      return;
+    }
+    setBusyId(s.id);
+    try {
+      replace(await updateVendorSuggestion(s.id, { suggested_price: price.toFixed(2), comment: draft.comment.trim() }));
+      setEditingId(null);
+      notify(t("Suggestion updated."));
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
 
-  const withdraw = () => {
-  notify("Withdrawing suggestions is not available yet.");
-};
+  const withdraw = async (s) => {
+    if (!window.confirm(t("Withdraw your {fish} suggestion? The LGU will no longer review it.", { fish: s.species }))) return;
+    setBusyId(s.id);
+    try {
+      replace(await withdrawVendorSuggestion(s.id));
+      notify(t("Suggestion withdrawn."));
+    } catch (err) {
+      notify(err.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
 
   return (
     <>
@@ -886,7 +921,7 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
         </div>
       </div>
 
-      <div className="panel">
+      <div className="panel" style={{ overflowX: "auto" }}>
         <table>
           <thead>
             <tr>
@@ -903,47 +938,65 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
             {mySuggestions.length === 0 ? (
               <tr><td colSpan="7" className="empty-row">{t("You haven't submitted any suggestions yet.")}</td></tr>
             ) : (
-              mySuggestions.map((s) => (
-                <tr key={s.id}>
-                  <td>{s.date}</td>
-                  <td><strong>{s.species}</strong></td>
-                  <td><strong>{peso(s.suggestedPrice)}</strong></td>
-                  <td>
-                    {editingId === s.id ? (
-                      <input
-                        className="inline-input"
-                        value={draftComment}
-                        onChange={(e) => setDraftComment(e.target.value)}
-                        placeholder="Add a note for the LGU officer..."
-                      />
-                    ) : (
-                      s.comment || <span className="muted-text">No comment</span>
-                    )}
-                  </td>
-                  <td><span className={`badge ${statusClass(s.status)}`}>{s.status}</span></td>
-                  <td>{s.lguFeedback || <span className="muted-text">—</span>}</td>
-                  <td>
-                    {s.status === "Pending Review" ? (
-                      editingId === s.id ? (
+              mySuggestions.map((s) => {
+                const editing = editingId === s.id;
+                return (
+                  <tr key={s.id}>
+                    <td>{s.date}</td>
+                    <td><strong>{s.species}</strong></td>
+                    <td>
+                      {editing ? (
+                        <input
+                          className="inline-input"
+                          type="number"
+                          min="0.01"
+                          step="0.01"
+                          value={draft.price}
+                          onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))}
+                          aria-label={t("Your Suggested Price per KG")}
+                          style={{ width: 110 }}
+                        />
+                      ) : (
+                        <strong>{peso(s.suggestedPrice)}</strong>
+                      )}
+                    </td>
+                    <td>
+                      {editing ? (
+                        <input
+                          className="inline-input"
+                          value={draft.comment}
+                          maxLength={1000}
+                          onChange={(e) => setDraft((d) => ({ ...d, comment: e.target.value }))}
+                          placeholder={t("Explain the market conditions or price difference")}
+                        />
+                      ) : (
+                        s.comment || <span className="muted-text">—</span>
+                      )}
+                    </td>
+                    <td><span className={`badge ${statusClass(s.status)}`}>{t(s.status)}</span></td>
+                    <td>{s.lguFeedback || <span className="muted-text">—</span>}</td>
+                    <td>
+                      {s.status !== "Pending Review" ? (
+                        <span className="muted-text">—</span>
+                      ) : editing ? (
                         <div className="action-icons">
-                          <button title="Save" onClick={() => saveComment(s)}>✔</button>
-                          <button title="Cancel" onClick={() => setEditingId(null)}>✕</button>
+                          <button title={t("Save")} onClick={() => saveEdit(s)} disabled={busyId === s.id}>✔</button>
+                          <button title={t("Cancel")} onClick={() => setEditingId(null)} disabled={busyId === s.id}>✕</button>
                         </div>
                       ) : (
                         <div className="action-icons">
-                          <button title="Edit comment" onClick={() => startEdit(s)}>✎</button>
-                          <button title="Withdraw" onClick={() => withdraw(s)}>🗑</button>
+                          <button title={t("Edit")} onClick={() => startEdit(s)} disabled={busyId === s.id}>✎</button>
+                          <button title={t("Withdraw")} onClick={() => withdraw(s)} disabled={busyId === s.id}>↩</button>
                         </div>
-                      )
-                    ) : (
-                      <span className="muted-text">No actions</span>
-                    )}
-                  </td>
-                </tr>
-              ))
+                      )}
+                    </td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
+        <p className="chart-note" style={{ padding: "0 16px 12px" }}>{t("You can edit or withdraw a suggestion until the LGU reviews it.")}</p>
       </div>
     </>
   );
@@ -1440,7 +1493,7 @@ function LivePublishedPrices({ records, loading, error, municipality, onMunicipa
     </table></div>}
   </>;
 }
-function LiveVendorDashboard({ records, loading, error, municipality, onMunicipalityChange, availableMunicipalities, defaultMunicipality, vendorName, goTo, mySuggestions, species = [], myFish = [], onFishClick }) {
+function LiveVendorDashboard({ records, loading, error, municipality, onMunicipalityChange, availableMunicipalities, defaultMunicipality, vendorName, goTo, mySuggestions, species = [], myFish = [], onFishClick, announcements = [] }) {
   const t = useT();
   const rows = latestPublishedRows(records, municipality);
   // The vendor's own fish, with the latest price in the selected municipality.
@@ -1451,6 +1504,7 @@ function LiveVendorDashboard({ records, loading, error, municipality, onMunicipa
   const average = rows.length ? rows.reduce((sum, r) => sum + Number(r.price_per_kg), 0) / rows.length : null;
   const pending = mySuggestions.filter((s) => s.status === "Pending Review").length;
   return <>
+    <AnnouncementBanner announcements={announcements} title={t("Announcements")} />
     <div className="welcome-card"><div><span className="eyebrow">{t("FISH VENDOR")}</span><h2>{t("Welcome, {name}!", { name: vendorName.split(" ")[0] })}</h2><p>{t("Official LGU prices for {place}.", { place: municipality || t("all municipalities") })}</p></div><div className="welcome-fish">🐟</div></div>
     <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
     <div className="panel my-fish-panel">

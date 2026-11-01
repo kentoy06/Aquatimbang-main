@@ -1335,3 +1335,74 @@ class RegistrationPhotoAndSpeciesTests(TestCase):
         stale = APIClient()
         stale.credentials(HTTP_AUTHORIZATION="Token expired-or-invalid")
         self.assertEqual(stale.get(f"/api/fish-species/{self.bangus.id}/photo/").status_code, 200)
+
+
+class SuggestionEditAnnouncementMarketTests(TestCase):
+    """Editing/withdrawing suggestions, announcements, and the market list."""
+
+    def setUp(self):
+        cache.clear()
+        roles = {name: Role.objects.create(name=name) for name in ("Administrator", "LGU Officer", "Fish Vendor")}
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.fish = FishSpecies.objects.create(name="Bangus")
+        self.users = {}
+        for username, role in (("se_admin", "Administrator"), ("se_lgu", "LGU Officer"), ("se_vendor", "Fish Vendor"), ("se_vendor2", "Fish Vendor")):
+            user = User.objects.create_user(username, f"{username}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=user, role=roles[role], municipality=self.cebu, account_status="approved", is_active=True)
+            self.users[username] = user
+
+    def client_for(self, username):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=self.users[username])[0].key}")
+        return client
+
+    def test_vendor_edits_and_withdraws_own_pending_suggestion(self):
+        vendor = self.client_for("se_vendor")
+        created = vendor.post("/api/vendor-suggestions/", {"fish_species": self.fish.id, "municipality": self.cebu.id, "suggested_price": "180.00", "comment": "Low catch"}, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        url = f"/api/vendor-suggestions/{created.data['id']}/"
+
+        edited = vendor.patch(url, {"suggested_price": "175.50", "comment": "Many boats today"}, format="json")
+        self.assertEqual(edited.status_code, 200, edited.data)
+        self.assertEqual(edited.data["suggested_price"], "175.50")
+        self.assertEqual(vendor.patch(url, {"suggested_price": "0"}, format="json").status_code, 400)
+        # Another vendor cannot see it; the LGU Officer cannot edit it.
+        self.assertEqual(self.client_for("se_vendor2").patch(url, {"comment": "x"}, format="json").status_code, 404)
+        self.assertEqual(self.client_for("se_lgu").patch(url, {"comment": "x"}, format="json").status_code, 403)
+
+        withdrawn = vendor.post(f"{url}withdraw/")
+        self.assertEqual(withdrawn.data["status"], "withdrawn")
+        # Withdrawn suggestions can no longer be changed or reviewed.
+        self.assertEqual(vendor.patch(url, {"comment": "again"}, format="json").status_code, 403)
+        review = self.client_for("se_lgu").post(f"{url}review/", {"status": "reviewed"}, format="json")
+        self.assertEqual(review.status_code, 400)
+        self.assertTrue(ActivityLog.objects.filter(action="withdrawn", target_type="VendorPriceSuggestion").exists())
+
+    def test_announcements_by_audience(self):
+        admin = self.client_for("se_admin")
+        for title, audience in (("Market closed Monday", "all"), ("Vendor meeting", "vendors"), ("Encoding deadline", "lgu")):
+            self.assertEqual(admin.post("/api/announcements/", {"title": title, "message": "Details here.", "audience": audience}, format="json").status_code, 201)
+        hidden = admin.post("/api/announcements/", {"title": "Draft", "message": "Not yet.", "is_active": False}, format="json")
+
+        titles = lambda name: sorted(a["title"] for a in self.client_for(name).get("/api/announcements/").data)
+        self.assertEqual(titles("se_vendor"), ["Market closed Monday", "Vendor meeting"])
+        self.assertEqual(titles("se_lgu"), ["Encoding deadline", "Market closed Monday"])
+        self.assertEqual(len(titles("se_admin")), 4)
+        self.assertEqual(self.client_for("se_vendor").post("/api/announcements/", {"title": "x", "message": "y"}, format="json").status_code, 403)
+        self.assertEqual(admin.patch(f"/api/announcements/{hidden.data['id']}/", {"is_active": True}, format="json").status_code, 200)
+        self.assertEqual(len(titles("se_vendor")), 3)
+
+    def test_market_list(self):
+        from .models import FishVendorVerification
+        FishVendorVerification.objects.create(profile=self.users["se_vendor"].aquatimbang_profile, market_name="Carbon  Market", stall_number="A1")
+        admin = self.client_for("se_admin")
+        created = admin.post("/api/markets/", {"name": "Carbon Market", "municipality": self.cebu.id}, format="json")
+        self.assertEqual(created.status_code, 201, created.data)
+        self.assertEqual(created.data["vendor_count"], 1)
+        duplicate = admin.post("/api/markets/", {"name": "carbon market", "municipality": self.cebu.id}, format="json")
+        self.assertEqual(duplicate.status_code, 400)
+        admin.post("/api/markets/", {"name": "Pasil Market", "municipality": self.cebu.id, "is_active": False}, format="json")
+        self.assertEqual([m["name"] for m in self.client_for("se_vendor").get("/api/markets/").data], ["Carbon Market"])
+        self.assertEqual(self.client_for("se_lgu").post("/api/markets/", {"name": "X", "municipality": self.cebu.id}, format="json").status_code, 403)
+        options = APIClient().get("/api/auth/registration-options/").data
+        self.assertEqual([m["name"] for m in options["markets"]], ["Carbon Market"])

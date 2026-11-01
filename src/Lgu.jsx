@@ -21,6 +21,7 @@ import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
 import { listExternalFactors } from "./api/forecast.js";
 import { FishPhotoInput, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
+import { AnnouncementBanner, useAnnouncements } from "./components/Announcements.jsx";
 import { describeFilters, exportReport } from "./api/reportExport.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
@@ -641,6 +642,7 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk) {
    ================================================================ */
 
 function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, fisherfolk, goTo, userName }) {
+  const { announcements } = useAnnouncements();
   // Build today's local date as YYYY-MM-DD, matching Django's recorded_date field.
   const today = new Date().toLocaleDateString("en-CA");
 
@@ -705,6 +707,7 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
 
   return (
     <>
+      <AnnouncementBanner announcements={announcements} />
       <div className="welcome-card">
         <div>
           <span className="eyebrow">LGU OFFICER</span>

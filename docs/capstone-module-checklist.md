@@ -134,7 +134,7 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 | Feature | Decide |
 |---|---|
 | Vendor suggested prices, community average, LGU/Admin suggestion review | UC-2 says "No vendor suggestions are shown", but its postcondition mentions "average suggestions". Keep and add to the paper, or remove? |
-| Markets list, System Announcements, Notifications pages | Not described in the paper. |
+| Markets list, System Announcements, Notifications pages | Not described in the paper. Markets are now a list kept by Administrators (vendors pick from it at registration, or type "Other"); announcements are written by Administrators for everyone, vendors or LGU Officers and appear on their dashboards and notifications. |
 | Fisherfolk Management (LGU) | Not described in the paper. |
 
 ## Contradictions inside the paper to settle with the team

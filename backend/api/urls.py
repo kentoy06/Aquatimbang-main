@@ -15,6 +15,8 @@ from .views import (
     public_summary,
     my_profile,
     my_photo,
+    AnnouncementViewSet,
+    MarketViewSet,
     list_fisherfolk,
     login_user,
     register_user,
@@ -90,6 +92,9 @@ router.register(
 # PATCH  /api/fish-species/<id>/
 # PUT    /api/fish-species/<id>/
 # DELETE /api/fish-species/<id>/
+router.register(r"announcements", AnnouncementViewSet, basename="announcements")
+router.register(r"markets", MarketViewSet, basename="markets")
+
 router.register(
     r"fish-species",
     FishSpeciesViewSet,
