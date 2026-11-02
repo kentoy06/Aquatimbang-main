@@ -1013,7 +1013,7 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
           <option value="">All fish species</option>
           {options.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
         </select>
-        <button type="button" onClick={onRefresh}>Refresh averages</button>
+        <button type="button" className="secondary-btn" onClick={onRefresh}>↻ Refresh averages</button>
       </div>
       {loading ? <div className="panel" style={{ padding: 20 }}>Loading community averages...</div> :
        error ? <div className="panel" style={{ padding: 20, color: "#b91c1c" }}>Unable to load community averages: {error}</div> :

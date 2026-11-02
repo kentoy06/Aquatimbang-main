@@ -642,6 +642,10 @@ class ProfileAndSummaryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertEqual([row["actor_username"] for row in response.data], ["me_vendor"])
 
+    def test_login_ignores_spaces_around_username(self):
+        response = APIClient().post("/api/auth/login/", {"username": "  me_vendor ", "password": "TestPass123!"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+
     def test_login_records_last_login(self):
         self.assertIsNone(self.user.last_login)
         response = APIClient().post("/api/auth/login/", {"username": "me_vendor", "password": "TestPass123!"}, format="json")
