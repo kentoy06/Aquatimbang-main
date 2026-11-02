@@ -372,6 +372,8 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
    ================================================================ */
 
 function Admin({ onLogout }) {
+  // Phones: the menu slides in from the left.
+  const [menuOpen, setMenuOpen] = useState(false);
   const [activePage, setActivePage] = useState("Dashboard");
   const [toast, setToast] = useState("");
 
@@ -728,7 +730,7 @@ useEffect(() => {
     <div className="app">
 
       {/* SIDEBAR */}
-      <aside className="sidebar">
+      <aside className={`sidebar${menuOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-icon">🐟</div>
           <div>
@@ -747,7 +749,7 @@ useEffect(() => {
                 <button
                   key={item.name}
                   className={`nav-item ${activePage === item.name ? "active" : ""}`}
-                  onClick={() => setActivePage(item.name)}
+                  onClick={() => { setActivePage(item.name); setMenuOpen(false); }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{item.name}</span>
@@ -776,9 +778,11 @@ useEffect(() => {
       </aside>
 
       {/* MAIN */}
+      {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
       <main className="main">
 
         <header className="topbar">
+          <button className="menu-toggle" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>☰</button>
           <div>
             <h1>{activePage}</h1>
             <p>Manage and monitor the AquaTimbang system</p>

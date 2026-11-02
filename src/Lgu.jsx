@@ -336,6 +336,8 @@ useEffect(() => {
 
   // Dashboard navigation state.
   // Restore the last visited LGU page after refreshing.
+// Phones: the menu slides in from the left.
+const [menuOpen, setMenuOpen] = useState(false);
 const [activePage, setActivePage] = useState(() => {
   return sessionStorage.getItem("lguActivePage") || "Dashboard";
 });
@@ -503,7 +505,7 @@ useEffect(() => {
   return (
     <div className="app">
 
-      <aside className="sidebar">
+      <aside className={`sidebar${menuOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-icon">🐟</div>
           <div>
@@ -522,7 +524,7 @@ useEffect(() => {
                 <button
                   key={item.name}
                   className={`nav-item ${activePage === item.name ? "active" : ""}`}
-                  onClick={() => setActivePage(item.name)}
+                  onClick={() => { setActivePage(item.name); setMenuOpen(false); }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{item.name}</span>
@@ -563,8 +565,10 @@ useEffect(() => {
 
     </aside>
 
-    <main className="main">
+    {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
+      <main className="main">
         <header className="topbar">
+          <button className="menu-toggle" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>☰</button>
           <div>
             <h1>{activePage}</h1>
             <p>Encode, validate, and publish official fish prices</p>

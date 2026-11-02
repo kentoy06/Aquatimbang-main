@@ -47,6 +47,8 @@ const peso = (n) => {
 function Vendor({ onLogout, currentUser }) {
   const account = useMyProfile();
   const identity = getVendorIdentity(account.profile ? { ...currentUser, ...account.profile, name: fullName(account.profile) } : currentUser);
+  // Phones: the menu slides in from the left.
+  const [menuOpen, setMenuOpen] = useState(false);
   const [activePage, setActivePage] = useState("Dashboard");
   const [toast, setToast] = useState("");
   const [language, setLanguage] = useLanguageSetting();
@@ -319,7 +321,7 @@ useEffect(() => {
     <LanguageContext.Provider value={language}>
     <div className="app">
 
-      <aside className="sidebar">
+      <aside className={`sidebar${menuOpen ? " open" : ""}`}>
         <div className="brand">
           <div className="brand-icon">🐟</div>
           <div>
@@ -338,7 +340,7 @@ useEffect(() => {
                 <button
                   key={item.name}
                   className={`nav-item ${activePage === item.name ? "active" : ""}`}
-                  onClick={() => setActivePage(item.name)}
+                  onClick={() => { setActivePage(item.name); setMenuOpen(false); }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{t(item.name)}</span>
@@ -364,8 +366,10 @@ useEffect(() => {
         </div>
       </aside>
 
+      {menuOpen && <div className="sidebar-backdrop" onClick={() => setMenuOpen(false)} />}
       <main className="main">
         <header className="topbar">
+          <button className="menu-toggle" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>☰</button>
           <div>
             <h1>{t(activePage)}</h1>
             <p>{t("View official fish prices and compute fair selling amounts")}</p>
