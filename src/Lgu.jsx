@@ -1049,7 +1049,7 @@ function LGUFishSpeciesManagement({ notify }) {
           <input aria-label="Search fish species" placeholder="Search species..." value={search}
             onChange={(event) => setSearch(event.target.value)} style={{ padding: 10, maxWidth: 260, width: "100%" }} />
         </div>
-        {error && <div className="info-box" role="alert">{error} <button onClick={loadSpecies}>Retry</button></div>}
+        {error && <div className="info-box" role="alert">{error} <button className="secondary-btn" onClick={loadSpecies}>Retry</button></div>}
         <div style={{ overflowX: "auto" }}>
           <table style={{ width: "100%" }}>
             <thead><tr><th>COMMON NAME</th><th>SCIENTIFIC NAME</th><th>STATUS</th><th>ACTIONS</th></tr></thead>

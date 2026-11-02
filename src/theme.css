@@ -571,3 +571,39 @@ table th {
 .profile-photo-card {
   align-self: start;
 }
+
+/* Any button inside a page that has no style of its own */
+.content button:not([class]) {
+  border: 1px solid #c9d6e2;
+  border-radius: 999px;
+  background: #ffffff;
+  color: var(--navy-800);
+  padding: 9px 18px;
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.content button:not([class]):hover {
+  border-color: var(--navy-800);
+  background: #f4f8fb;
+}
+
+/* My Profile: two columns that each stack their own cards */
+.profile-columns {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+  align-items: start;
+}
+
+.profile-column {
+  display: grid;
+  gap: 18px;
+  min-width: 0;
+}
+
+@media (max-width: 900px) {
+  .profile-columns {
+    grid-template-columns: 1fr;
+  }
+}

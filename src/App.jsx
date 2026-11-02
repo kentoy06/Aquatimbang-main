@@ -219,7 +219,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
 
           // Convert the username/password into JSON.
           body: JSON.stringify({
-            username: username,
+            username: username.trim(),
             password: password,
           }),
         }

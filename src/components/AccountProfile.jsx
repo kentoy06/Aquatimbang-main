@@ -193,9 +193,38 @@ function AccountProfile({ account, notify, description = "Manage your account de
         </button>
       </div>
 
-      <div className="config-grid">
-        <ProfilePhotoCard account={account} photo={photo} notify={notify} />
+      {/* Two independent columns, so a short card never leaves a gap. */}
+      <div className="profile-columns">
+        <div className="profile-column">
+          <ProfilePhotoCard account={account} photo={photo} notify={notify} />
+          <ChangePasswordCard notify={notify} />
+        <div className="config-card">
+          <div className="config-header">
+            <div className="config-icon orange">◷</div>
+            <div>
+              <h3>My Activity</h3>
+              <p>Your recent actions recorded by AquaTimbang</p>
+            </div>
+          </div>
 
+          {activityLoading && <div className="info-box">Loading activity…</div>}
+          {activityError && <div className="warn-box" role="alert">{activityError}</div>}
+          {!activityLoading && !activityError && activity.length === 0 && (
+            <div className="info-box">No recorded activity yet.</div>
+          )}
+          <div className="history-list">
+            {activity.slice(0, 15).map((log) => (
+              <div className="history-item" key={log.id}>
+                <div><strong>{describeActivity(log)}</strong></div>
+                <small>{formatDateTime(log.created_at)}</small>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        </div>
+
+        <div className="profile-column">
         <div className="config-card">
           <div className="config-header">
             {photo
@@ -240,33 +269,8 @@ function AccountProfile({ account, notify, description = "Manage your account de
           </p>
         </div>
 
-        <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon orange">◷</div>
-            <div>
-              <h3>My Activity</h3>
-              <p>Your recent actions recorded by AquaTimbang</p>
-            </div>
-          </div>
-
-          {activityLoading && <div className="info-box">Loading activity…</div>}
-          {activityError && <div className="warn-box" role="alert">{activityError}</div>}
-          {!activityLoading && !activityError && activity.length === 0 && (
-            <div className="info-box">No recorded activity yet.</div>
-          )}
-          <div className="history-list">
-            {activity.slice(0, 15).map((log) => (
-              <div className="history-item" key={log.id}>
-                <div><strong>{describeActivity(log)}</strong></div>
-                <small>{formatDateTime(log.created_at)}</small>
-              </div>
-            ))}
-          </div>
+          {children}
         </div>
-
-        {children}
-
-        <ChangePasswordCard notify={notify} />
       </div>
     </>
   );

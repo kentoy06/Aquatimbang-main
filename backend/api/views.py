@@ -70,7 +70,8 @@ def login_user(request):
     """
     Authenticate an AquaTimbang user and return a login token.
     """
-    username = request.data.get("username")
+    # Spaces typed before or after the username are ignored.
+    username = str(request.data.get("username") or "").strip()
     password = request.data.get("password")
     # Require both login credentials.
     if not username or not password:
