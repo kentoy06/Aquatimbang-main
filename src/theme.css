@@ -874,3 +874,27 @@ table th {
   font-size: 17px;
   border-width: 2px;
 }
+
+/* My Profile: show the whole photo (no circle crop) in a rounded frame. */
+.profile-photo-big {
+  width: 150px;
+  height: auto;
+  min-height: 120px;
+  max-height: 200px;
+  border-radius: 18px;
+  background: #ffffff;
+  padding: 4px;
+}
+
+.profile-photo-big img {
+  width: 100%;
+  height: auto;
+  max-height: 190px;
+  object-fit: contain;
+  border-radius: 14px;
+}
+
+/* Small round avatars: keep the face in view. */
+.avatar-photo img {
+  object-position: center 30%;
+}

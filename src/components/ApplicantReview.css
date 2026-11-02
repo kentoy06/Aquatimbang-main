@@ -30,9 +30,11 @@
 }
 
 .applicant-photo img {
+  /* Reviewers see the whole photo, not a crop. */
   width: 100%;
   height: 100%;
-  object-fit: cover;
+  object-fit: contain;
+  background: #ffffff;
 }
 
 .applicant-text {
