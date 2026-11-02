@@ -9,6 +9,7 @@ import {
   withdrawVendorSuggestion,
 } from "./api/vendorSuggestions";
 import { API_BASE_URL } from "./api/config.js";
+import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
@@ -69,7 +70,8 @@ function Vendor({ onLogout, currentUser }) {
         const base = API_BASE_URL;
         const token = localStorage.getItem("authToken");
         if (!token) throw new Error("Please log in again.");
-        const response = await fetch(`${base}/prices/published/`, {
+        // Only the last 12 months; older prices are loaded when a page asks for them.
+        const response = await fetch(`${base}${withRecentWindow("/prices/published/")}`, {
           headers: { Authorization: `Token ${token}` },
         });
         const data = await response.json().catch(() => null);
@@ -511,12 +513,17 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
    PRICE TRENDS (past)
    ================================================================ */
 
-function PriceTrends({ registeredSpecies = [], myFish = [], speciesLoadError = "", records = [], loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "" }) {
+function PriceTrends({ registeredSpecies = [], myFish = [], speciesLoadError = "", records: recentRecords = [], loading: recentLoading, error: recentError, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "" }) {
   const t = useT();
   const [speciesId, setSpeciesId] = useState("");
   const [range, setRange] = useState("30");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  // A custom range may reach back before the prices already loaded.
+  const older = useOlderPublished(range === "custom" ? fromDate : "", toDate);
+  const records = mergeRecords(recentRecords, older.records);
+  const loading = recentLoading || older.loading;
+  const error = recentError || older.error;
 
   const speciesOptions = Array.from(new Map([
     ...records.filter((r) => r.status === "published" || r.status === undefined)
@@ -1197,11 +1204,15 @@ function ExportReports(props) {
   return <ExportReportsPage {...props} title={t("Export Reports")} />;
 }
 
-function ExportReportsPage({ title, mySuggestions = [], suggestionsLoading, suggestionsError, records = [], loading, error, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", registeredSpecies = [], notify }) {
+function ExportReportsPage({ title, mySuggestions = [], suggestionsLoading, suggestionsError, records: recentRecords = [], loading: recentLoading, error: recentError, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", registeredSpecies = [], notify }) {
   const [reportType, setReportType] = useState("Published LGU Price History");
   const [speciesId, setSpeciesId] = useState("");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
+  const older = useOlderPublished(fromDate, toDate);
+  const records = mergeRecords(recentRecords, older.records);
+  const loading = recentLoading || older.loading;
+  const error = recentError || older.error;
 
   const speciesOptions = [...new Map([
     ...registeredSpecies.map((s) => [String(s.id), { id: String(s.id), name: s.name }]),

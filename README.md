@@ -53,6 +53,19 @@ that backend's `/api` address, and add `https://kentoy06.github.io` to
 Step-by-step hosting of the backend (PythonAnywhere, free, with MySQL and
 email) is in [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
 
+## Importing price history
+
+LGU Officers and Administrators can load past prices (for example years of
+DVFM records) from **Import Price History**. Save the spreadsheet as CSV
+(Excel: File → Save As → CSV UTF-8). Either layout works:
+
+- one row per price: `Date, Fish, Municipality, Price`
+- one column per fish: `Date, Bangus, Galunggong, …` (pick the municipality on the page)
+
+Fish and municipality names must already exist in AquaTimbang. Dashboards
+load only the last 12 months of published prices; older prices are fetched
+when a page's date range reaches further back.
+
 ## Tests
 
 ```bash

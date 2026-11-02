@@ -7,6 +7,8 @@ import { listVendorSuggestions, reviewVendorSuggestion } from "./api/vendorSugge
 import { getForecastHistory, listExternalFactors } from "./api/forecast.js";
 import { describeFilters, exportReport } from "./api/reportExport.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import PriceImport from "./components/PriceImport.jsx";
+import { withRecentWindow } from "./api/prices.js";
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFor } from "./components/ApplicantReview.jsx";
 import { useProtectedImage } from "./api/images.js";
@@ -538,7 +540,8 @@ useEffect(() => {
     fetchAll("/fish-species/")
       .then((rows) => { if (!cancelled) setSpecies(rows.map(mapDatabaseSpecies)); })
       .catch((error) => console.error("Fish species loading error:", error));
-    fetchAll("/prices/")
+    // Published prices from the last 12 months (plus everything still in review).
+    fetchAll(withRecentWindow("/prices/"))
       .then((rows) => { if (!cancelled) { setApiPriceRecords(rows); setPriceRecordsError(""); } })
       .catch((error) => { if (!cancelled) setPriceRecordsError(error.message); });
     fetchAll("/municipalities/")
@@ -581,6 +584,7 @@ useEffect(() => {
         { name: "Fish Species", icon: "🐟" },
         { name: "Municipality & Market", icon: "⚑" },
         { name: "Price Records", icon: "₱" },
+        { name: "Import Price History", icon: "⇪" },
         { name: "System Configuration", icon: "⚙" },
       ],
     },
@@ -644,6 +648,8 @@ useEffect(() => {
             onChanged={reloadData} notify={notify}
           />
         );
+      case "Import Price History":
+        return <PriceImport notify={notify} onImported={reloadData} />;
       case "Price Records":
         return (
           <PriceRecords
@@ -2799,7 +2805,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
       <div className="page-title">
         <div>
           <h2>Price Records</h2>
-          <p>View, filter, and audit every price entry logged in the system.</p>
+          <p>View, filter, and audit price entries. Published prices from the last 12 months are shown; older history appears in Price Trends and Reports when you choose an older date range.</p>
         </div>
         <button className="secondary-btn" onClick={exportCSV} disabled={!visible.length}>↓ Export CSV</button>
       </div>

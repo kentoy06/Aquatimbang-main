@@ -239,6 +239,180 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
     authentication_classes = [ExpiringTokenAuthentication]
     # Apply AquaTimbang price permissions.
     permission_classes = [CanManagePriceRecords]
+
+    def get_queryset(self):
+        """
+        ?since=YYYY-MM-DD and ?until=YYYY-MM-DD limit which *published*
+        prices are returned, so dashboards need not download years of
+        history. Drafts and records under review are always included.
+        """
+        from datetime import date as _date
+        from django.db.models import Q
+        from rest_framework.exceptions import ValidationError as DRFValidationError
+
+        queryset = super().get_queryset()
+        for name, lookup in (("since", "recorded_date__gte"), ("until", "recorded_date__lte")):
+            value = self.request.query_params.get(name)
+            if not value:
+                continue
+            try:
+                day = _date.fromisoformat(value)
+            except ValueError:
+                raise DRFValidationError({name: "Use the date format YYYY-MM-DD."})
+            queryset = queryset.filter(Q(**{lookup: day}) | ~Q(status=PriceRecord.STATUS_PUBLISHED))
+        return queryset
+
+    # --------------------------------------------------------
+    # IMPORT PRICE HISTORY (e.g. a DVFM spreadsheet saved as CSV)
+    # --------------------------------------------------------
+    IMPORT_MAX_ROWS = 5000
+
+    @action(detail=False, methods=["post"], url_path="import")
+    def import_history(self, request):
+        """
+        Import historical prices as published records.
+
+        Body: {"rows": [{"row": 2, "date": "2024-01-05", "fish": "Bangus",
+               "municipality": "Cebu City", "price": "180.50"}, ...],
+               "source": "DVFM historical data", "dry_run": true}
+
+        Every row is checked first. With dry_run the rows are only checked;
+        otherwise the valid rows are saved and the others are reported.
+        Prices already recorded for that fish, municipality and day are
+        skipped, never overwritten.
+        """
+        from datetime import date as _date
+        from .models import SystemSetting
+
+        if approved_role(request.user) not in ("LGU Officer", "Administrator"):
+            raise PermissionDenied("Only LGU Officers and Administrators can import prices.")
+        rows = request.data.get("rows")
+        if not isinstance(rows, list) or not rows:
+            return Response({"message": "No rows to import."}, status=status.HTTP_400_BAD_REQUEST)
+        if len(rows) > self.IMPORT_MAX_ROWS:
+            return Response(
+                {"message": f"Send at most {self.IMPORT_MAX_ROWS:,} rows at a time."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        source = str(request.data.get("source") or "Imported price history").strip()[:150]
+        dry_run = bool(request.data.get("dry_run"))
+
+        species = {fish.name.strip().lower(): fish for fish in FishSpecies.objects.all()}
+        places = {place.name.strip().lower(): place for place in Municipality.objects.all()}
+        bounds = SystemSetting.load()
+        today = timezone.localdate()
+
+        errors, candidates, seen = [], [], set()
+        for index, row in enumerate(rows):
+            row_number = row.get("row", index + 1) if isinstance(row, dict) else index + 1
+            if not isinstance(row, dict):
+                errors.append({"row": row_number, "message": "Not a valid row."})
+                continue
+            problems = []
+            try:
+                day = _date.fromisoformat(str(row.get("date", "")).strip())
+                if day > today:
+                    problems.append("date is in the future")
+            except ValueError:
+                day = None
+                problems.append(f"unreadable date \"{row.get('date', '')}\"")
+            fish = species.get(str(row.get("fish", "")).strip().lower())
+            if fish is None:
+                problems.append(f"unknown fish \"{row.get('fish', '')}\" (add it in Fish Species first)")
+            place = places.get(str(row.get("municipality", "")).strip().lower())
+            if place is None:
+                problems.append(f"unknown municipality \"{row.get('municipality', '')}\"")
+            try:
+                price = Decimal(str(row.get("price", "")).replace(",", "").replace("₱", "").strip())
+                if not price.is_finite():
+                    raise InvalidOperation
+                price = price.quantize(Decimal("0.01"))
+                if price < bounds.min_price_per_kg or price > bounds.max_price_per_kg:
+                    problems.append(
+                        f"price ₱{price:,.2f} is outside the allowed ₱{bounds.min_price_per_kg:,.2f}–"
+                        f"₱{bounds.max_price_per_kg:,.2f} (System Configuration)"
+                    )
+            except (InvalidOperation, ValueError):
+                price = None
+                problems.append(f"unreadable price \"{row.get('price', '')}\"")
+            if not problems:
+                key = (fish.id, place.id, day)
+                if key in seen:
+                    problems.append("same fish, municipality and date appears earlier in the file")
+                seen.add(key)
+            if problems:
+                errors.append({"row": row_number, "message": "; ".join(problems)})
+            else:
+                candidates.append((row_number, fish, place, day, price))
+
+        # Prices already in AquaTimbang are kept; the file's row is skipped.
+        existing = set()
+        if candidates:
+            days = [c[3] for c in candidates]
+            existing = set(
+                PriceRecord.objects.filter(
+                    fish_species_id__in={c[1].id for c in candidates},
+                    municipality_id__in={c[2].id for c in candidates},
+                    recorded_date__gte=min(days),
+                    recorded_date__lte=max(days),
+                ).values_list("fish_species_id", "municipality_id", "recorded_date")
+            )
+        new_rows = [c for c in candidates if (c[1].id, c[2].id, c[3]) not in existing]
+
+        imported = 0
+        if new_rows and not dry_run:
+            now = timezone.now()
+            with transaction.atomic():
+                PriceRecord.objects.bulk_create(
+                    [
+                        PriceRecord(
+                            fish_species=fish,
+                            municipality=place,
+                            recorded_date=day,
+                            price_per_kg=price,
+                            source=source,
+                            remarks="Imported price history",
+                            status=PriceRecord.STATUS_PUBLISHED,
+                            recorded_by=request.user,
+                            reviewed_by=request.user,
+                            reviewed_at=now,
+                            published_by=request.user,
+                            published_at=now,
+                        )
+                        for _, fish, place, day, price in new_rows
+                    ],
+                    batch_size=1000,
+                )
+                imported = len(new_rows)
+                dates = [c[3] for c in new_rows]
+                ActivityLog.objects.create(
+                    actor=request.user,
+                    actor_username=request.user.username,
+                    actor_role=approved_role(request.user),
+                    action="imported",
+                    target_type="PriceRecord",
+                    target_id=0,  # one entry for the whole import, not a single record
+                    target_name=f"{imported:,} historical prices",
+                    details={
+                        "source": source,
+                        "imported": imported,
+                        "from": min(dates).isoformat(),
+                        "to": max(dates).isoformat(),
+                    },
+                )
+
+        all_dates = [c[3] for c in new_rows]
+        return Response({
+            "dry_run": dry_run,
+            "rows": len(rows),
+            "ready": len(new_rows),
+            "imported": imported,
+            "already_recorded": len(candidates) - len(new_rows),
+            "error_count": len(errors),
+            "errors": errors[:300],
+            "first_date": min(all_dates).isoformat() if all_dates else None,
+            "last_date": max(all_dates).isoformat() if all_dates else None,
+        })
     def _log_price(self, action, record, details=None):
         user = self.request.user
         profile = getattr(user, "aquatimbang_profile", None)

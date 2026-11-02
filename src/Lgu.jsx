@@ -18,6 +18,7 @@ import {
   speciesNames as recordSpeciesNames,
 } from "./api/priceData.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import PriceImport from "./components/PriceImport.jsx";
 
 // Loaded only when a chart is shown (the chart library is large).
 const TrendChart = lazy(() => import("./components/TrendChart.jsx"));
@@ -27,6 +28,7 @@ import { listExternalFactors } from "./api/forecast.js";
 import { FishPhotoInput, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 import { AnnouncementBanner, useAnnouncements } from "./components/Announcements.jsx";
 import { describeFilters, exportReport } from "./api/reportExport.js";
+import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -237,9 +239,9 @@ const refreshPrices = async () => {
       return;
     }
 
-    // Request all price records from Django.
+    // Request price records from Django (published ones from the last 12 months).
     const response = await fetch(
-      `${API_BASE_URL}/prices/`,
+      `${API_BASE_URL}${withRecentWindow("/prices/")}`,
       {
         method: "GET",
         headers: {
@@ -379,6 +381,7 @@ useEffect(() => {
         { name: "Price Entry", icon: "✎" },
         { name: "Fish Species Management", icon: "🐟" },
         { name: "Review & Publish", icon: "✔" },
+        { name: "Import Price History", icon: "⇪" },
         { name: "External Factors", icon: "☁" },
       ],
     },
@@ -441,6 +444,8 @@ useEffect(() => {
             notify={notify}
           />
         );
+      case "Import Price History":
+        return <PriceImport notify={notify} onImported={refreshPrices} />;
       case "Fish Species Management":
         return <LGUFishSpeciesManagement notify={notify} />;
       case "External Factors":
@@ -1334,7 +1339,7 @@ function PriceEntry({
       const token = getToken();
 
       const response = await fetch(
-        `${API_BASE_URL}/prices/`,
+        `${API_BASE_URL}${withRecentWindow("/prices/")}`,
         {
           headers: {
             Authorization: `Token ${token}`,
@@ -3178,15 +3183,20 @@ function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
    PRICE TRENDS (broader LGU view)
    ================================================================ */
 
-function PriceTrends({ priceRecords, loading, error }) {
-  const published = priceRecords.filter(isPublished);
-  const species = recordSpeciesNames(published);
-  const municipalities = municipalityNames(published);
+function PriceTrends({ priceRecords: recentRecords, loading: recentLoading, error: recentError }) {
   const [selected, setSelected] = useState("");
   const [municipality, setMunicipality] = useState("");
   const [range, setRange] = useState("30");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // A custom range may reach back before the prices already loaded.
+  const older = useOlderPublished(range === "custom" ? from : "", to);
+  const priceRecords = mergeRecords(recentRecords, older.records);
+  const loading = recentLoading || older.loading;
+  const error = recentError || older.error;
+  const published = priceRecords.filter(isPublished);
+  const species = recordSpeciesNames(published);
+  const municipalities = municipalityNames(published);
   const current = species.includes(selected) ? selected : species[0] || "";
   const seriesFor = (sp) => {
     const series = dailySeries(published, sp, municipality);
@@ -3475,12 +3485,15 @@ function PriceAnomalies({ priceRecords, suggestions }) {
    REPORTS
    ================================================================ */
 
-function Reports({ priceRecords, notify }) {
+function Reports({ priceRecords: recentRecords, notify }) {
   const [type, setType] = useState("Price History Report");
   const [statusFilter, setStatusFilter] = useState("");
   const [speciesFilter, setSpeciesFilter] = useState("");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
+  // Reports for older periods fetch those published prices too.
+  const older = useOlderPublished(from, to);
+  const priceRecords = mergeRecords(recentRecords, older.records);
   const [exporting, setExporting] = useState("");
   const { records: logs } = useDjangoActivityLogs();
   const [factors, setFactors] = useState([]);
@@ -3572,6 +3585,8 @@ function Reports({ priceRecords, notify }) {
         </div>
       </div>
 
+      {older.loading && <div className="info-box">Loading older published prices for this date range…</div>}
+      {older.error && <div className="warn-box" role="alert">Could not load older prices: {older.error}</div>}
       <div className="log-summary">
         {summary.map(([label, value]) => (
           <div className="mini-stat" key={label}><span>{label}</span><strong>{value}</strong></div>

@@ -1491,3 +1491,75 @@ class SetupCommandTests(TestCase):
         self.assertTrue(profile.is_active)
         login = APIClient().post("/api/auth/login/", {"username": "boss", "password": "StrongPass123!"}, format="json")
         self.assertEqual(login.status_code, 200, login.data)
+
+
+class PriceImportTests(TestCase):
+    """Importing historical prices and loading only recent published prices."""
+
+    def setUp(self):
+        cache.clear()
+        roles = {name: Role.objects.create(name=name) for name in ("Administrator", "LGU Officer", "Fish Vendor")}
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.bangus = FishSpecies.objects.create(name="Bangus")
+        self.users = {}
+        for username, role in (("im_lgu", "LGU Officer"), ("im_vendor", "Fish Vendor")):
+            user = User.objects.create_user(username, f"{username}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=user, role=roles[role], municipality=self.cebu, account_status="approved", is_active=True)
+            self.users[username] = user
+
+    def client_for(self, username):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=self.users[username])[0].key}")
+        return client
+
+    def rows(self):
+        return [
+            {"row": 2, "date": "2022-01-03", "fish": "bangus", "municipality": "CEBU CITY", "price": "150.00"},
+            {"row": 3, "date": "2022-01-04", "fish": "Bangus", "municipality": "Cebu City", "price": "₱152.5"},
+            {"row": 4, "date": "2022-01-04", "fish": "Bangus", "municipality": "Cebu City", "price": "153"},
+            {"row": 5, "date": "2022-13-01", "fish": "Bangus", "municipality": "Cebu City", "price": "150"},
+            {"row": 6, "date": "2022-01-05", "fish": "Tuna", "municipality": "Cebu City", "price": "150"},
+            {"row": 7, "date": "2022-01-06", "fish": "Bangus", "municipality": "Cebu City", "price": "5"},
+            {"row": 8, "date": "2099-01-01", "fish": "Bangus", "municipality": "Cebu City", "price": "150"},
+        ]
+
+    def test_check_then_import(self):
+        lgu = self.client_for("im_lgu")
+        check = lgu.post("/api/prices/import/", {"rows": self.rows(), "source": "DVFM", "dry_run": True}, format="json")
+        self.assertEqual(check.status_code, 200, check.data)
+        self.assertEqual(check.data["ready"], 2)
+        self.assertEqual(check.data["imported"], 0)
+        self.assertEqual(sorted(e["row"] for e in check.data["errors"]), [4, 5, 6, 7, 8])
+        self.assertEqual(PriceRecord.objects.count(), 0)
+
+        done = lgu.post("/api/prices/import/", {"rows": self.rows(), "source": "DVFM"}, format="json")
+        self.assertEqual(done.data["imported"], 2)
+        record = PriceRecord.objects.get(recorded_date="2022-01-04")
+        self.assertEqual(record.status, "published")
+        self.assertEqual(str(record.price_per_kg), "152.50")
+        self.assertEqual(record.source, "DVFM")
+        self.assertTrue(ActivityLog.objects.filter(action="imported").exists())
+
+        again = lgu.post("/api/prices/import/", {"rows": self.rows(), "source": "DVFM"}, format="json")
+        self.assertEqual(again.data["imported"], 0)
+        self.assertEqual(again.data["already_recorded"], 2)
+
+    def test_vendor_cannot_import(self):
+        response = self.client_for("im_vendor").post("/api/prices/import/", {"rows": self.rows()}, format="json")
+        self.assertEqual(response.status_code, 403)
+
+    def test_since_limits_published_prices_only(self):
+        from datetime import date
+        PriceRecord.objects.create(fish_species=self.bangus, municipality=self.cebu, price_per_kg=Decimal("150"), recorded_date=date(2022, 1, 3), status="published")
+        PriceRecord.objects.create(fish_species=self.bangus, municipality=self.cebu, price_per_kg=Decimal("170"), recorded_date=date(2022, 1, 4), status="pending")
+        recent = PriceRecord.objects.create(fish_species=self.bangus, municipality=self.cebu, price_per_kg=Decimal("180"), recorded_date=timezone.localdate(), status="published")
+        lgu = self.client_for("im_lgu")
+        published = lgu.get("/api/prices/published/?since=2023-01-01").data
+        ids = [r["id"] for r in (published if isinstance(published, list) else published["results"])]
+        self.assertEqual(ids, [recent.id])
+        listed = lgu.get("/api/prices/?since=2023-01-01").data
+        statuses = sorted(r["status"] for r in (listed if isinstance(listed, list) else listed["results"]))
+        self.assertEqual(statuses, ["pending", "published"])
+        old = lgu.get("/api/prices/published/?since=2022-01-01&until=2022-12-31").data
+        self.assertEqual(len(old if isinstance(old, list) else old["results"]), 1)
+        self.assertEqual(lgu.get("/api/prices/?since=yesterday").status_code, 400)
