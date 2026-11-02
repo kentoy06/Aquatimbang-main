@@ -84,7 +84,9 @@ function Landing({ onGetStarted, onRegister }) {
       .catch(() => setSummary(null));
   }, []);
 
-  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
+  // One screen only: the top buttons switch what is shown (no scrolling).
+  const [section, setSection] = useState("home");
+  const show = (name) => setSection(name);
 
   const count = (value) => (summary ? Number(value ?? 0).toLocaleString() : "—");
   const stats = [
@@ -111,15 +113,16 @@ function Landing({ onGetStarted, onRegister }) {
         </div>
 
         <header className="landing-nav">
-          <button className="landing-brand" onClick={() => scrollTo("home")}>
+          <button className="landing-brand" onClick={() => show("home")}>
             <span className="landing-logo">A</span>
             <span className="landing-brand-name">AquaTimbang</span>
           </button>
           <nav className="landing-links" aria-label="Main">
-            <button onClick={() => scrollTo("home")} className="active">Home</button>
-            <button onClick={() => scrollTo("prices")}>Prices</button>
-            <button onClick={() => scrollTo("about")}>About</button>
-            <button onClick={() => scrollTo("contact")}>Contact</button>
+            {[["home", "Home"], ["prices", "Prices"], ["about", "About"], ["contact", "Contact"]].map(([key, label]) => (
+              <button key={key} onClick={() => show(key)} className={section === key ? "active" : ""} aria-current={section === key ? "page" : undefined}>
+                {label}
+              </button>
+            ))}
           </nav>
           <div className="landing-actions">
             <button className="landing-login" onClick={onGetStarted}>Login</button>
@@ -127,6 +130,8 @@ function Landing({ onGetStarted, onRegister }) {
           </div>
         </header>
 
+        {section === "home" && (
+        <>
         <div className="hero-content">
           <span className="hero-tag">Fish price transparency · Cebu · Philippines</span>
           <span className="hero-eyebrow">Official · LGU-validated · Forecasted</span>
@@ -136,7 +141,7 @@ function Landing({ onGetStarted, onRegister }) {
             calculator, price trends and forecasts for fisherfolk, vendors and LGUs.
           </p>
           <div className="hero-buttons">
-            <button className="pill-btn pill-orange" onClick={() => scrollTo("prices")}>See Today's Prices</button>
+            <button className="pill-btn pill-orange" onClick={() => show("prices")}>See Today's Prices</button>
             <button className="pill-btn pill-glass" onClick={onRegister}>Register as a Vendor</button>
           </div>
           <div className="hero-stats">
@@ -161,11 +166,12 @@ function Landing({ onGetStarted, onRegister }) {
         </div>
 
         <div className="hero-side-label" aria-hidden="true"><span>TRANSPARENCY</span></div>
-        <button className="hero-scroll" onClick={() => scrollTo("prices")} aria-label="Scroll to today's prices">↓</button>
-      </section>
+        </>
+        )}
 
       {/* TODAY'S PRICES */}
-      <section className="landing-section" id="prices">
+        {section === "prices" && (
+        <div className="landing-panel" id="prices">
         <span className="section-eyebrow">Today's market</span>
         <h2>Official Fish Prices</h2>
         <p className="section-lead">
@@ -192,10 +198,12 @@ function Landing({ onGetStarted, onRegister }) {
         <div className="section-cta">
           <button className="pill-btn pill-orange" onClick={onGetStarted}>Log in for trends &amp; forecasts</button>
         </div>
-      </section>
+        </div>
+        )}
 
       {/* ABOUT */}
-      <section className="landing-section landing-about" id="about">
+        {section === "about" && (
+        <div className="landing-panel" id="about">
         <span className="section-eyebrow">About the system</span>
         <h2>Prices Everyone Can Trust</h2>
         <p className="section-lead">
@@ -212,10 +220,12 @@ function Landing({ onGetStarted, onRegister }) {
             </div>
           ))}
         </div>
-      </section>
+        </div>
+        )}
 
       {/* CONTACT */}
-      <section className="landing-section landing-contact" id="contact">
+        {section === "contact" && (
+        <div className="landing-panel" id="contact">
         <span className="section-eyebrow">Get in touch</span>
         <h2>Contact Us</h2>
         <div className="contact-grid">
@@ -223,12 +233,11 @@ function Landing({ onGetStarted, onRegister }) {
           <div><span>✉️</span><strong>Email</strong><p>support@aquatimbang.ph</p></div>
           <div><span>📞</span><strong>Phone</strong><p>(032) 000 0000</p></div>
         </div>
+        </div>
+        )}
       </section>
 
-      <footer className="landing-footer">
-        <span className="landing-logo small">A</span>
-        <span>© 2026 AquaTimbang — Fish Price Transparency System</span>
-      </footer>
+      <footer className="landing-footer">© 2026 AquaTimbang — Fish Price Transparency System</footer>
     </div>
   );
 }

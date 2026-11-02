@@ -2,19 +2,21 @@
   display: grid;
   place-items: center;
   width: 100%;
-  aspect-ratio: 16 / 10;
   margin: 10px 0 14px;
   border-radius: 12px;
   overflow: hidden;
   background: #eef6f7;
   color: #667085;
-  font-size: 13px;
+  font-size: 13px
 }
 
 .fish-picture img {
+  /* The photo keeps its own shape: nothing is cropped. */
+  display: block;
   width: 100%;
-  height: 100%;
-  object-fit: contain;
+  height: auto;
+  max-height: 420px;
+  object-fit: contain
 }
 
 .fish-picture-empty {
@@ -51,7 +53,7 @@
 
 .fish-preview-photo {
   width: 100%;
-  aspect-ratio: 4 / 3;
+  min-height: 160px;
   border-radius: 10px;
   overflow: hidden;
   display: grid;
@@ -59,14 +61,17 @@
   background: #eef6f7;
   color: #667085;
   font-size: 13px;
-  text-align: center;
+  text-align: center
 }
 
 .fish-preview-photo img {
+  /* The photo keeps its own shape: nothing is cropped. */
+  display: block;
   width: 100%;
-  height: 100%;
+  height: auto;
+  max-height: 360px;
   object-fit: contain;
-  background: #ffffff;
+  background: #ffffff
 }
 
 .fish-preview-info {
