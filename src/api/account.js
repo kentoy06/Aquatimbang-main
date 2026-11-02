@@ -79,6 +79,9 @@ export function useMyProfile() {
     }
     const response = await fetch(apiUrl("/auth/me/photo/"), options);
     const data = await response.json().catch(() => null);
+    if (response.status === 405) {
+      throw new Error("The server has not been updated for photo uploads yet. Ask the administrator to update the backend.");
+    }
     if (!response.ok) {
       const message = data && typeof data === "object" ? Object.values(data).flat().map(String).join(" ") : "";
       throw new Error(message || `Unable to update your photo (HTTP ${response.status}).`);
