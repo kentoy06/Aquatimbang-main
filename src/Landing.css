@@ -16,11 +16,15 @@ html, body, #root {
   --orange: #ff7a1a;
   --orange-dark: #e8650a;
   --coral: #ff4d5e;
-  min-height: 100vh;
+  /* Exactly one screen: the top buttons switch sections, nothing scrolls. */
+  height: 100vh;
+  height: 100dvh;
+  display: flex;
+  flex-direction: column;
   background: var(--navy-950);
   color: #ffffff;
   font-family: "Poppins", "Segoe UI", Arial, sans-serif;
-  overflow-x: hidden;
+  overflow: hidden;
 }
 
 .landing button {
@@ -66,7 +70,8 @@ html, body, #root {
 
 .hero {
   position: relative;
-  min-height: 100vh;
+  flex: 1;
+  min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
@@ -252,6 +257,8 @@ html, body, #root {
   justify-content: center;
   max-width: 760px;
   padding: 40px 0 70px 72px;
+  /* Centre when there is room; otherwise start at the top (never hidden). */
+  justify-content: safe center;
 }
 
 .hero-tag {
@@ -413,29 +420,6 @@ html, body, #root {
   background: rgba(255, 255, 255, 0.4);
 }
 
-.hero-scroll {
-  position: absolute;
-  z-index: 1;
-  left: 50%;
-  bottom: 28px;
-  translate: -50% 0;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  border: none;
-  background: #ffffff;
-  color: var(--navy-900);
-  font-size: 18px;
-  font-weight: 700;
-  cursor: pointer;
-  animation: bob 2.4s ease-in-out infinite;
-}
-
-@keyframes bob {
-  0%, 100% { translate: -50% 0; }
-  50% { translate: -50% 6px; }
-}
-
 /* ---------- Sections below the cover ---------- */
 
 .landing-section {
@@ -467,7 +451,8 @@ html, body, #root {
   background: currentColor;
 }
 
-.landing-section h2 {
+.landing-section h2,
+.landing-panel h2 {
   font-family: "Playfair Display", Georgia, serif;
   font-size: clamp(32px, 4vw, 50px);
   font-weight: 800;
@@ -616,15 +601,48 @@ html, body, #root {
 }
 
 .landing-footer {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 26px;
-  font-size: 13px;
-  color: rgba(255, 255, 255, 0.55);
+  flex-shrink: 0;
+  padding: 10px 20px;
+  text-align: center;
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.5);
   background: var(--navy-950);
   border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+/* Prices, About and Contact appear in a glass panel over the ocean.
+   Only the panel's own content scrolls if it is longer than the screen. */
+.landing-panel {
+  position: relative;
+  z-index: 1;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  margin: 22px 28px 22px;
+  padding: 38px 44px;
+  border-radius: 26px;
+  background: rgba(3, 11, 20, 0.72);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(14px);
+  animation: panel-in 0.35s ease-out;
+}
+
+.landing-panel h2 {
+  margin-top: 10px;
+}
+
+@keyframes panel-in {
+  from { opacity: 0; translate: 0 12px; }
+  to { opacity: 1; translate: 0 0; }
+}
+
+.landing-panel::-webkit-scrollbar {
+  width: 8px;
+}
+
+.landing-panel::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
 }
 
 /* ---------- Tablets and phones ---------- */
@@ -668,8 +686,21 @@ html, body, #root {
     display: none;
   }
 
+  /* On phones the section buttons move to their own row. */
+  .landing-nav {
+    flex-wrap: wrap;
+  }
+
   .landing-links {
-    display: none;
+    order: 3;
+    width: 100%;
+    justify-content: center;
+    gap: 6px;
+  }
+
+  .landing-links button {
+    padding: 6px 13px;
+    font-size: 12.5px;
   }
 
   .landing-brand-name {
@@ -687,11 +718,34 @@ html, body, #root {
   }
 
   .hero-content {
-    padding: 36px 20px 90px;
+    padding: 18px 20px 24px;
+  }
+
+  .hero-tag {
+    font-size: 12px;
+    padding: 7px 14px;
+    margin-bottom: 14px;
+  }
+
+  .hero-content h1 {
+    font-size: 36px;
+    margin-bottom: 14px;
   }
 
   .hero-content p {
-    font-size: 16px;
+    margin-bottom: 22px;
+  }
+
+  .hero-buttons .pill-btn {
+    padding: 12px 24px;
+  }
+
+  .hero-stats {
+    margin-top: 26px;
+  }
+
+  .hero-content p {
+    font-size: 15px;
   }
 
   .hero-eyebrow {
@@ -713,6 +767,15 @@ html, body, #root {
 
   .landing-section {
     padding: 64px 20px;
+  }
+
+  .hero-content {
+    overflow-y: auto;
+  }
+
+  .landing-panel {
+    margin: 12px;
+    padding: 26px 20px;
   }
 
   .price-board {
