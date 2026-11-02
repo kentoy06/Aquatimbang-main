@@ -898,3 +898,258 @@ table th {
 .avatar-photo img {
   object-position: center 30%;
 }
+
+/* =========================================================
+   PHONES — app-style layout
+   The menu hides behind ☰ and slides in with full labels;
+   pages use the whole screen; everything is easier to tap.
+========================================================= */
+
+.menu-toggle {
+  display: none;
+}
+
+.sidebar-backdrop {
+  display: none;
+}
+
+@media (max-width: 800px) {
+  /* Slide-in menu */
+  .sidebar {
+    width: 280px;
+    max-width: 84vw;
+    z-index: 1000;
+    transform: translateX(-105%);
+    transition: transform 0.25s ease;
+    box-shadow: none;
+  }
+
+  .sidebar.open {
+    transform: translateX(0);
+    box-shadow: 8px 0 30px rgba(3, 11, 20, 0.45);
+  }
+
+  .sidebar-backdrop {
+    display: block;
+    position: fixed;
+    inset: 0;
+    z-index: 999;
+    background: rgba(3, 11, 20, 0.5);
+  }
+
+  /* Bring back the menu labels hidden by the old icon-only layout. */
+  .brand {
+    justify-content: flex-start;
+    padding: 20px 18px;
+  }
+
+  .brand > div:last-child,
+  .admin-label,
+  .admin-profile div:last-child {
+    display: block;
+  }
+
+  .nav-item {
+    justify-content: flex-start;
+    min-height: 46px;
+    font-size: 15px;
+  }
+
+  .nav-item span:not(.nav-icon):not(.nav-badge) {
+    display: inline;
+  }
+
+  .nav-item .nav-badge {
+    position: static;
+    margin-left: auto;
+    transform: none;
+  }
+
+  .logout-btn {
+    display: block;
+    font-size: 15px;
+    padding: 11px;
+  }
+
+  .logout-btn::before {
+    content: none;
+  }
+
+  /* Pages use the full width */
+  .main {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .content {
+    padding: 16px 14px 40px;
+  }
+
+  /* Top bar: ☰, page name, then bell and photo */
+  .topbar {
+    position: sticky;
+    top: 0;
+    z-index: 50;
+    min-height: 60px;
+    padding: 8px 12px;
+    flex-wrap: nowrap;
+    justify-content: flex-start;
+    gap: 10px;
+  }
+
+  .menu-toggle {
+    display: inline-grid;
+    place-items: center;
+    flex-shrink: 0;
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    background: var(--navy-800);
+    color: #ffffff;
+    font-size: 20px;
+  }
+
+  .topbar > div:not(.topbar-right):not(.top-profile) {
+    min-width: 0;
+    flex: 1;
+  }
+
+  .topbar h1 {
+    font-size: 18px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .topbar p,
+  .top-profile div:last-child {
+    display: none;
+  }
+
+  .topbar-right {
+    margin-left: auto;
+    flex-wrap: nowrap;
+    gap: 8px;
+  }
+
+  .language-picker {
+    padding: 6px 8px;
+  }
+
+  .language-picker select {
+    max-width: 92px;
+    font-size: 13px;
+  }
+
+  /* Page headings and their buttons */
+  .page-title {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .page-title h2 {
+    font-size: 22px;
+  }
+
+  .page-title > button,
+  .page-title .filter-row > button {
+    width: 100%;
+  }
+
+  .page-title .filter-row {
+    width: 100%;
+  }
+
+  .page-title .filter-row > * {
+    flex: 1 1 140px;
+  }
+
+  /* Bigger, easier-to-tap fields. 16px text stops iPhones zooming in. */
+  .content input:not([type="checkbox"]):not([type="radio"]):not([type="file"]),
+  .content select,
+  .content textarea {
+    min-height: 46px;
+    font-size: 16px;
+  }
+
+  .primary-btn,
+  .secondary-btn {
+    min-height: 44px;
+    padding: 11px 18px;
+    font-size: 14px;
+  }
+
+  .content .action-icons button {
+    width: 42px;
+    height: 42px;
+  }
+
+  /* Cards and panels */
+  .stats-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 10px;
+  }
+
+  .stat-card {
+    padding: 14px;
+  }
+
+  .config-card,
+  .panel-header {
+    padding: 16px;
+  }
+
+  .welcome-card {
+    padding: 22px 18px;
+  }
+
+  .welcome-card h2 {
+    font-size: 22px;
+  }
+
+  /* Tables scroll sideways inside their card. */
+  .panel table,
+  .config-card table {
+    min-width: 560px;
+  }
+
+  /* Windows (pop-ups) fill the screen width. */
+  .modal {
+    width: calc(100vw - 16px);
+    max-width: calc(100vw - 16px);
+    max-height: calc(100vh - 24px);
+    overflow-y: auto;
+    padding: 18px 16px;
+  }
+
+  .toast {
+    left: 12px;
+    right: 12px;
+    transform: none;
+    text-align: center;
+  }
+}
+
+@media (max-width: 380px) {
+  .stats-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .language-picker span {
+    display: none;
+  }
+}
+
+@media (max-width: 800px) {
+  /* Summary boxes: icon above the numbers so two fit side by side. */
+  .stat-card {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .stat-card h2 {
+    font-size: 20px;
+  }
+}
