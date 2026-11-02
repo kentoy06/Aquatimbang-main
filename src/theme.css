@@ -797,3 +797,68 @@ table th {
   border-color: #d84e4e;
   color: #ffffff;
 }
+
+/* Icon buttons: larger, darker, and coloured by what they do. */
+.content .action-icons button {
+  width: 36px;
+  height: 36px;
+  font-size: 15px;
+  border: 1.5px solid #9fb4c7;
+  color: var(--navy-900);
+  background: #f3f7fa;
+  box-shadow: 0 2px 6px rgba(7, 26, 43, 0.08);
+}
+
+/* View / details: navy */
+.content .action-icons button[title^="View" i],
+.content .action-icons button[title*="open" i] {
+  background: #e7eef5;
+  border-color: #7f9bb4;
+  color: var(--navy-900);
+}
+
+/* Edit / correct / reset: blue */
+.content .action-icons button[title*="edit" i],
+.content .action-icons button[title*="correct" i],
+.content .action-icons button[title*="reset" i] {
+  background: #e3f1fa;
+  border-color: #6fb0d6;
+  color: #0d5f8c;
+}
+
+/* Activate / deactivate / mark reviewed: amber */
+.content .action-icons button[title*="activate" i],
+.content .action-icons button[title*="reviewed" i],
+.content .action-icons button[title*="hide" i],
+.content .action-icons button[title*="show" i] {
+  background: #fff4e0;
+  border-color: #f0b65a;
+  color: #a2600a;
+}
+
+/* Approve / adopt / save: green */
+.content .action-icons button[title*="adopt" i],
+.content .action-icons button[title*="approve" i],
+.content .action-icons button[title^="Save" i] {
+  background: #e6f6ec;
+  border-color: #79c897;
+  color: #157a41;
+}
+
+/* Delete / remove / reject / dismiss / withdraw: red */
+.content .action-icons button[title*="delete" i],
+.content .action-icons button[title*="remove" i],
+.content .action-icons button[title*="reject" i],
+.content .action-icons button[title*="dismiss" i],
+.content .action-icons button[title*="withdraw" i],
+.content .action-icons button[title^="Cancel" i] {
+  background: #fdecec;
+  border-color: #ee9a9a;
+  color: #c0392b;
+}
+
+.content .action-icons button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 10px rgba(7, 26, 43, 0.16);
+  filter: brightness(0.97);
+}
