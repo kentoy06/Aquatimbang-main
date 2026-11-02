@@ -1,0 +1,47 @@
+.photo-source-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.camera-backdrop {
+  z-index: 100000;
+}
+
+.camera-modal {
+  width: min(640px, calc(100vw - 24px));
+}
+
+.camera-view {
+  width: 100%;
+  border-radius: 16px;
+  overflow: hidden;
+  background: #071a2b;
+  display: grid;
+  place-items: center;
+  aspect-ratio: 4 / 3;
+}
+
+.camera-view video,
+.camera-view img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #071a2b;
+}
+
+.camera-view video.mirrored {
+  transform: scaleX(-1);
+}
+
+.camera-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 16px;
+}
+
+.camera-shutter {
+  min-width: 150px;
+}

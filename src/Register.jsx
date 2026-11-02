@@ -4,6 +4,7 @@ import "./Login.css";
 import { API_BASE_URL } from "./api/config.js";
 import { MAX_DOCUMENT_MB, checkUpload, compressImage } from "./api/images.js";
 import { FishThumb } from "./components/FishPhoto.jsx";
+import { TakePhotoButton } from "./components/CameraCapture.jsx";
 
 const OTHER_MARKET = "__other__";
 
@@ -493,6 +494,8 @@ if (role === "LGU Officer") {
                 file={form.profile_photo}
                 error={fileErrors.profile_photo}
                 onChange={(file) => pickFile("profile_photo", file, true)}
+                camera="user"
+                cameraTitle="Take a photo of your face"
               />
 
               <div className="form-group">
@@ -605,6 +608,8 @@ if (role === "LGU Officer") {
                   file={form.stall_photo}
                   error={fileErrors.stall_photo}
                   onChange={(file) => pickFile("stall_photo", file, true)}
+                  camera="environment"
+                  cameraTitle="Take a photo of your stall"
                 />
               </section>
             )}
@@ -674,7 +679,7 @@ if (role === "LGU Officer") {
 }
 
 // File picker styled as an upload box that shows the chosen file name.
-function FileField({ id, label, hint, accept, file, onChange, error = "", optional = false }) {
+function FileField({ id, label, hint, accept, file, onChange, error = "", optional = false, camera = "", cameraTitle }) {
   return (
     <div className="form-group">
       <span className="file-field-label">
@@ -688,6 +693,12 @@ function FileField({ id, label, hint, accept, file, onChange, error = "", option
         </span>
         <input id={id} type="file" accept={accept} onChange={(e) => onChange(e.target.files?.[0] || null)} />
       </label>
+      {camera && (
+        <div className="file-field-camera">
+          <span>or</span>
+          <TakePhotoButton onFile={onChange} facing={camera} cameraTitle={cameraTitle} />
+        </div>
+      )}
       {error && <small className="field-error" role="alert">{error}</small>}
     </div>
   );

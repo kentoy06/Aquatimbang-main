@@ -607,3 +607,193 @@ table th {
     grid-template-columns: 1fr;
   }
 }
+
+/* =========================================================
+   BUTTON AND FIELD TIDY-UP
+========================================================= */
+
+/* Buttons never wrap their label onto two lines. */
+.primary-btn,
+.secondary-btn {
+  white-space: nowrap;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+}
+
+.full-btn {
+  display: flex;
+  width: 100%;
+}
+
+/* Round icon buttons in tables (edit, deactivate, delete, view...). */
+.content .action-icons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.content .action-icons button {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  border-radius: 50%;
+  border: 1px solid #d3dee8;
+  background: #ffffff;
+  color: var(--navy-800);
+  display: inline-grid;
+  place-items: center;
+  font-size: 14px;
+  line-height: 1;
+}
+
+.content .action-icons button:hover {
+  border-color: var(--orange);
+  color: var(--orange-dark);
+  background: #fff6ef;
+}
+
+.content .action-icons button:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+/* Dropdowns: rounded, with a matching arrow (also overrides plain inline styles). */
+.content select {
+  -webkit-appearance: none;
+  appearance: none;
+  min-height: 40px;
+  padding: 8px 38px 8px 14px;
+  border: 1px solid #cfdbe6;
+  border-radius: 12px;
+  background-color: #ffffff;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='8' viewBox='0 0 12 8'%3E%3Cpath d='M1 1.5l5 5 5-5' fill='none' stroke='%230b2740' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E") !important;
+  background-repeat: no-repeat !important;
+  background-position: right 14px center !important;
+  background-size: 12px 8px !important;
+  color: var(--ink);
+  font-size: 13.5px;
+  cursor: pointer;
+}
+
+.content select:hover {
+  border-color: #9fb4c7;
+}
+
+.content select:focus {
+  outline: none;
+  border-color: var(--ocean);
+  box-shadow: 0 0 0 3px rgba(23, 105, 143, 0.15);
+}
+
+.content select:disabled {
+  background-color: #f3f6f9;
+  cursor: not-allowed;
+}
+
+/* Date boxes match the dropdowns. */
+.content input[type="date"] {
+  min-height: 40px;
+  padding: 8px 12px;
+  border: 1px solid #cfdbe6;
+  border-radius: 12px;
+  background: #ffffff;
+  color: var(--ink);
+  font-family: inherit;
+}
+
+/* File picker box: room around the Choose File button. */
+.content input[type="file"],
+.form-group input[type="file"] {
+  height: auto;
+  min-height: 52px;
+  padding: 7px 8px;
+  border: 1px dashed #b8c9d8;
+  border-radius: 14px;
+  background: #f8fbfd;
+  line-height: 36px;
+}
+
+.content input[type="file"]:hover {
+  border-color: var(--orange);
+  background: #fffaf6;
+}
+
+/* Small text-style button (e.g. "Remove photo"). */
+.text-link-btn {
+  border: none;
+  background: none;
+  padding: 2px 0;
+  color: #b42318;
+  font-size: 13px;
+  font-weight: 500;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.text-link-btn:hover {
+  color: #8f1b13;
+}
+
+/* Rows of filters and buttons line up and wrap neatly. */
+.filter-row,
+.button-row,
+.page-title > .filter-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.page-title {
+  gap: 16px;
+}
+
+/* Text never runs under the dropdown arrow, even with inline padding. */
+.content select {
+  padding-right: 38px !important;
+}
+
+/* Approve / Reject buttons in review tables */
+.content .action-buttons {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.content button.approve,
+.content button.reject {
+  min-width: 84px;
+  padding: 8px 16px;
+  border-radius: 999px;
+  font-size: 12.5px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.content button.approve {
+  border: 1px solid #a6dfbb;
+  background: #e8f7ee;
+  color: #157a41;
+}
+
+.content button.approve:hover {
+  background: #1f9a55;
+  border-color: #1f9a55;
+  color: #ffffff;
+}
+
+.content button.reject {
+  border: 1px solid #f5b8b8;
+  background: #fff0f0;
+  color: #c43c3c;
+}
+
+.content button.reject:hover {
+  background: #d84e4e;
+  border-color: #d84e4e;
+  color: #ffffff;
+}

@@ -7,6 +7,7 @@ import {
   useMyActivity,
 } from "../api/account.js";
 import { checkUpload, compressImage, useProtectedImage } from "../api/images.js";
+import { PhotoSourceButtons } from "./CameraCapture.jsx";
 
 // Change your own password. The server returns a new login token, which
 // replaces the old one so this browser stays logged in.
@@ -122,11 +123,9 @@ function ProfilePhotoCard({ account, photo, notify }) {
           {photo ? <img src={photo} alt="Your profile" /> : <span>No photo yet</span>}
         </div>
         <div className="profile-photo-actions">
-          <label className="primary-btn photo-upload-btn">
-            {busy ? "Saving…" : hasPhoto ? "Change Photo" : "Upload Photo"}
-            <input type="file" accept=".jpg,.jpeg,.png" disabled={busy} onChange={(e) => { upload(e.target.files?.[0] || null); e.target.value = ""; }} />
-          </label>
-          {hasPhoto && <button className="secondary-btn" onClick={remove} disabled={busy}>Remove</button>}
+          <PhotoSourceButtons onFile={upload} facing="user" disabled={busy} cameraTitle="Take your profile photo" />
+          {busy && <small>Saving…</small>}
+          {hasPhoto && <button className="text-link-btn" onClick={remove} disabled={busy}>Remove photo</button>}
           <small>A clear photo of your face. JPG or PNG; large photos are reduced automatically.</small>
           {error && <small style={{ color: "#b42318" }}>{error}</small>}
         </div>
