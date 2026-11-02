@@ -862,3 +862,15 @@ table th {
   box-shadow: 0 4px 10px rgba(7, 26, 43, 0.16);
   filter: brightness(0.97);
 }
+
+/* Slightly bigger icon buttons and icons. */
+.content .action-icons {
+  gap: 10px;
+}
+
+.content .action-icons button {
+  width: 40px;
+  height: 40px;
+  font-size: 17px;
+  border-width: 2px;
+}
