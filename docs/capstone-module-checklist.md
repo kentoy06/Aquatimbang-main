@@ -53,7 +53,8 @@ Tables 15–23 = Data Dictionary, Tables 24/41 = Security.
 
 | Function | Status | Notes |
 |---|---|---|
-| Daily price input | ✅ | |
+| Daily price input | ✅ | Any past date can be entered (only future dates are blocked). |
+| Import price history (e.g. DVFM records) | ✅ | Import Price History page (LGU Officer, Administrator): CSV with one row per price or one column per fish; checks every row first (unknown fish/municipality, unreadable dates, prices outside the allowed range, duplicates); saves valid rows as published prices on their original dates; never overwrites existing prices; logged. |
 | Submission & review panel | ✅ | Draft → Pending → Approved → Published, plus Flag/Reject. |
 | Official price publication | ✅ | Paper UC-4 says prices publish **immediately**; system requires review first. Decide which is correct. |
 | Audit & logging | ✅ | Every create/edit/submit/approve/publish/flag/reject is logged. |
