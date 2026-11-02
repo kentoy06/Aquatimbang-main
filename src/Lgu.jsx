@@ -18,6 +18,7 @@ import {
   speciesNames as recordSpeciesNames,
 } from "./api/priceData.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import PriceImport from "./components/PriceImport.jsx";
 
 // Loaded only when a chart is shown (the chart library is large).
@@ -539,7 +540,7 @@ useEffect(() => {
 
         <div className="admin-profile">
           {/* Display initials of the actual logged-in user. */}
-          <div className="avatar">{userInitials}</div>
+          <UserAvatar profile={account.profile} initials={userInitials} />
 
           <div>
             {/* Display the actual logged-in user's name. */}
@@ -569,9 +570,11 @@ useEffect(() => {
             <p>Encode, validate, and publish official fish prices</p>
           </div>
 
+          <div className="topbar-right">
+          <NotificationBell count={unread.length} onClick={() => setActivePage("Notifications")} />
           <div className="top-profile">
     {/* Actual user's initials. */}
-          <div className="avatar small">{userInitials}</div>
+          <UserAvatar profile={account.profile} initials={userInitials} small />
 
            <div>
         {/* Actual logged-in user. */}
@@ -579,6 +582,7 @@ useEffect(() => {
 
         {/* Actual role from Django. */}
            <span>{currentUser?.role || "LGU Officer"}</span>
+          </div>
           </div>
           </div>
         </header>

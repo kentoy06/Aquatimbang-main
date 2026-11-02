@@ -7,6 +7,7 @@ import { listVendorSuggestions, reviewVendorSuggestion } from "./api/vendorSugge
 import { getForecastHistory, listExternalFactors } from "./api/forecast.js";
 import { describeFilters, exportReport } from "./api/reportExport.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import PriceImport from "./components/PriceImport.jsx";
 import { withRecentWindow } from "./api/prices.js";
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
@@ -761,7 +762,7 @@ useEffect(() => {
 
         <div className="sidebar-bottom">
           <div className="admin-profile">
-            <div className="avatar">{adminInitials}</div>
+            <UserAvatar profile={account.profile} initials={adminInitials} />
             <div>
               <strong>{adminName}</strong>
               <small>Administrator</small>
@@ -784,15 +785,9 @@ useEffect(() => {
           </div>
 
           <div className="topbar-right">
-            <button
-              className="notification"
-              onClick={() => setActivePage("Notifications")}
-            >
-              🔔
-              {unreadNotifs.length > 0 && <span className="notif-dot"></span>}
-            </button>
+            <NotificationBell count={unreadNotifs.length} onClick={() => setActivePage("Notifications")} />
             <div className="top-profile">
-              <div className="avatar small">{adminInitials}</div>
+              <UserAvatar profile={account.profile} initials={adminInitials} small />
               <div>
                 <strong>{adminName}</strong>
                 <span>Administrator</span>

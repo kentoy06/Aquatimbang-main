@@ -6,7 +6,7 @@ import {
   formatDateTime,
   useMyActivity,
 } from "../api/account.js";
-import { useProtectedImage } from "../api/images.js";
+import { checkUpload, compressImage, useProtectedImage } from "../api/images.js";
 
 // Change your own password. The server returns a new login token, which
 // replaces the old one so this browser stays logged in.
@@ -75,11 +75,71 @@ function ChangePasswordCard({ notify }) {
   );
 }
 
+// Upload, change or remove your own profile photo.
+function ProfilePhotoCard({ account, photo, notify }) {
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState("");
+  const hasPhoto = Boolean(account.profile?.has_photo);
+
+  const upload = async (file) => {
+    if (!file) return;
+    setError("");
+    const ready = await compressImage(file);
+    const problem = checkUpload(ready, { image: true });
+    if (problem) { setError(problem); return; }
+    setBusy(true);
+    try {
+      await account.changePhoto(ready);
+      notify?.("Profile photo updated.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const remove = async () => {
+    if (!window.confirm("Remove your profile photo?")) return;
+    setBusy(true);
+    try {
+      await account.changePhoto(null);
+      notify?.("Profile photo removed.");
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <div className="config-card profile-photo-card">
+      <div className="config-header">
+        <div className="config-icon blue">📷</div>
+        <div><h3>Profile Photo</h3><p>Shown beside your name in AquaTimbang</p></div>
+      </div>
+      <div className="profile-photo-row">
+        <div className="profile-photo-big">
+          {photo ? <img src={photo} alt="Your profile" /> : <span>No photo yet</span>}
+        </div>
+        <div className="profile-photo-actions">
+          <label className="primary-btn photo-upload-btn">
+            {busy ? "Saving…" : hasPhoto ? "Change Photo" : "Upload Photo"}
+            <input type="file" accept=".jpg,.jpeg,.png" disabled={busy} onChange={(e) => { upload(e.target.files?.[0] || null); e.target.value = ""; }} />
+          </label>
+          {hasPhoto && <button className="secondary-btn" onClick={remove} disabled={busy}>Remove</button>}
+          <small>A clear photo of your face. JPG or PNG; large photos are reduced automatically.</small>
+          {error && <small style={{ color: "#b42318" }}>{error}</small>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // Profile page shared by the Administrator, LGU Officer and Fish Vendor
 // dashboards. Reads and saves the logged-in user's own record in Django.
 function AccountProfile({ account, notify, description = "Manage your account details and see your recent activity.", children }) {
   const { profile, loading, error, save } = account;
-  const photo = useProtectedImage(profile?.has_photo ? "/auth/me/photo/" : "");
+  const photo = useProtectedImage(profile?.has_photo ? `/auth/me/photo/?v=${encodeURIComponent(profile.photo_version || "")}` : "");
   const { activity, loading: activityLoading, error: activityError } = useMyActivity();
   const [draft, setDraft] = useState(null);
   const [saving, setSaving] = useState(false);
@@ -134,6 +194,8 @@ function AccountProfile({ account, notify, description = "Manage your account de
       </div>
 
       <div className="config-grid">
+        <ProfilePhotoCard account={account} photo={photo} notify={notify} />
+
         <div className="config-card">
           <div className="config-header">
             {photo

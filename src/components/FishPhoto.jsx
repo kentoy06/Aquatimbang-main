@@ -23,7 +23,7 @@ export function FishThumb({ fish, size = 40 }) {
   return (
     <span style={style} aria-hidden="true">
       {url && failed !== url
-        ? <img src={url} alt="" loading="lazy" onError={() => setFailed(url)} style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+        ? <img src={url} alt="" loading="lazy" onError={() => setFailed(url)} style={{ width: "100%", height: "100%", objectFit: "contain", background: "#ffffff" }} />
         : initialsOf(fish)}
     </span>
   );

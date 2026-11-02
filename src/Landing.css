@@ -145,28 +145,32 @@ html, body, #root {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 20px;
+  gap: 16px;
   margin: 18px 28px 0;
-  padding: 12px 18px 12px 14px;
+}
+
+/* Each part of the top bar sits in its own oval. */
+.landing-brand,
+.landing-links button,
+.landing-login {
   border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
   background: rgba(7, 26, 43, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.1);
   backdrop-filter: blur(12px);
 }
 
 .landing-brand {
   display: flex;
   align-items: center;
-  gap: 12px;
-  border: none;
-  background: none;
+  gap: 10px;
+  padding: 6px 18px 6px 6px;
   color: #ffffff;
   cursor: pointer;
 }
 
 .landing-logo {
-  width: 42px;
-  height: 42px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -174,7 +178,7 @@ html, body, #root {
   color: #ffffff;
   font-family: "Playfair Display", Georgia, serif;
   font-weight: 800;
-  font-size: 20px;
+  font-size: 17px;
 }
 
 .landing-logo.small {
@@ -185,39 +189,32 @@ html, body, #root {
 
 .landing-brand-name {
   font-family: "Playfair Display", Georgia, serif;
-  font-size: 22px;
+  font-size: 18px;
   font-weight: 700;
 }
 
 .landing-links {
   display: flex;
-  gap: 30px;
+  gap: 10px;
 }
 
 .landing-links button {
-  position: relative;
-  border: none;
-  background: none;
-  color: rgba(255, 255, 255, 0.78);
-  font-size: 15px;
-  padding: 6px 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 13.5px;
+  padding: 9px 20px;
   cursor: pointer;
 }
 
-.landing-links button:hover,
-.landing-links button.active {
+.landing-links button:hover {
   color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.4);
+  background: rgba(255, 255, 255, 0.1);
 }
 
-.landing-links button.active::after {
-  content: "";
-  position: absolute;
-  left: 0;
-  bottom: -2px;
-  width: 22px;
-  height: 3px;
-  border-radius: 2px;
-  background: var(--coral);
+.landing-links button.active {
+  color: #ffffff;
+  border-color: rgba(255, 122, 26, 0.75);
+  background: rgba(255, 122, 26, 0.16);
 }
 
 .landing-actions {
@@ -227,21 +224,21 @@ html, body, #root {
 }
 
 .landing-login {
-  border: none;
-  background: none;
   color: #ffffff;
-  font-size: 15px;
+  font-size: 13.5px;
   font-weight: 600;
-  padding: 10px 16px;
+  padding: 9px 22px;
   cursor: pointer;
 }
 
 .landing-login:hover {
+  border-color: var(--orange);
   color: var(--orange);
 }
 
 .landing-actions .pill-btn {
-  padding: 11px 24px;
+  padding: 10px 22px;
+  font-size: 13.5px;
 }
 
 /* ---------- Cover text ---------- */
@@ -648,19 +645,22 @@ html, body, #root {
 @media (max-width: 760px) {
   .landing-nav {
     margin: 12px 12px 0;
-    padding: 8px 8px 8px 10px;
-    gap: 8px;
+    gap: 6px;
+  }
+
+  .landing-brand {
+    padding: 4px 12px 4px 4px;
   }
 
   .landing-logo {
-    width: 34px;
-    height: 34px;
-    font-size: 16px;
+    width: 30px;
+    height: 30px;
+    font-size: 14px;
   }
 
   .landing-login {
-    padding: 8px 10px;
-    font-size: 14px;
+    padding: 8px 14px;
+    font-size: 13px;
   }
 
   /* The large fish would sit behind the headline on a narrow screen. */
@@ -673,16 +673,16 @@ html, body, #root {
   }
 
   .landing-brand-name {
-    font-size: 17px;
+    font-size: 15px;
   }
 
   .landing-actions {
-    gap: 4px;
+    gap: 6px;
   }
 
   .landing-actions .pill-btn {
-    padding: 9px 16px;
-    font-size: 14px;
+    padding: 8px 14px;
+    font-size: 13px;
     box-shadow: none;
   }
 
