@@ -69,7 +69,25 @@ export function useMyProfile() {
     return data;
   };
 
-  return { profile, loading, error, reload: () => setReloadKey((k) => k + 1), save };
+  // Upload a new profile photo (a File), or remove it (null).
+  const changePhoto = async (file) => {
+    let options = { method: "DELETE", headers: authHeaders() };
+    if (file) {
+      const body = new FormData();
+      body.append("photo", file);
+      options = { method: "POST", headers: authHeaders(), body };
+    }
+    const response = await fetch(apiUrl("/auth/me/photo/"), options);
+    const data = await response.json().catch(() => null);
+    if (!response.ok) {
+      const message = data && typeof data === "object" ? Object.values(data).flat().map(String).join(" ") : "";
+      throw new Error(message || `Unable to update your photo (HTTP ${response.status}).`);
+    }
+    setProfile(data);
+    return data;
+  };
+
+  return { profile, loading, error, reload: () => setReloadKey((k) => k + 1), save, changePhoto };
 }
 
 // Load the logged-in user's own activity log entries.

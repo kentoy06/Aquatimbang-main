@@ -12,6 +12,7 @@ import { API_BASE_URL } from "./api/config.js";
 import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
 import { AnnouncementBanner, useAnnouncements } from "./components/Announcements.jsx";
 import { LANGUAGES, LanguageContext, translate, useLanguageSetting, useT } from "./i18n/vendor.js";
@@ -352,7 +353,7 @@ useEffect(() => {
 
         <div className="sidebar-bottom">
           <div className="admin-profile">
-            <div className="avatar">{identity.initials}</div>
+            <UserAvatar profile={account.profile} initials={identity.initials} />
             <div>
               <strong>{identity.name}</strong>
               <small>{t("Fish Vendor")}</small>
@@ -377,12 +378,9 @@ useEffect(() => {
                 {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
               </select>
             </label>
-            <button className="notification" onClick={() => setActivePage("Notifications")}>
-              🔔
-              {unread.length > 0 && <span className="notif-dot"></span>}
-            </button>
+            <NotificationBell count={unread.length} onClick={() => setActivePage("Notifications")} label={t("Notifications")} />
             <div className="top-profile">
-              <div className="avatar small">{identity.initials}</div>
+              <UserAvatar profile={account.profile} initials={identity.initials} small />
               <div>
                 <strong>{identity.name}</strong>
                 <span>{t("Fish Vendor")}</span>

@@ -1574,3 +1574,30 @@ class PriceImportTests(TestCase):
         old = lgu.get("/api/prices/published/?since=2022-01-01&until=2022-12-31").data
         self.assertEqual(len(old if isinstance(old, list) else old["results"]), 1)
         self.assertEqual(lgu.get("/api/prices/?since=yesterday").status_code, 400)
+
+
+class OwnProfilePhotoTests(TestCase):
+    def setUp(self):
+        import tempfile
+        media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+        role = Role.objects.create(name="Administrator")
+        self.user = User.objects.create_user("pp_admin", "pp@example.com", "TestPass123!")
+        UserProfile.objects.create(user=self.user, role=role, account_status="approved", is_active=True)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.user).key}")
+
+    def test_upload_view_and_remove_own_photo(self):
+        self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 404)
+        uploaded = self.client.post("/api/auth/me/photo/", {"photo": _png_upload("me.png")}, format="multipart")
+        self.assertEqual(uploaded.status_code, 200, uploaded.data)
+        self.assertTrue(uploaded.data["has_photo"])
+        self.assertTrue(uploaded.data["photo_version"])
+        self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 200)
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        bad = self.client.post("/api/auth/me/photo/", {"photo": SimpleUploadedFile("x.png", b"not an image", content_type="image/png")}, format="multipart")
+        self.assertEqual(bad.status_code, 400)
+        removed = self.client.delete("/api/auth/me/photo/")
+        self.assertFalse(removed.data["has_photo"])
+        self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 404)

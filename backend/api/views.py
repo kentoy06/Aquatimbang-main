@@ -1126,6 +1126,8 @@ def serialize_own_profile(user, profile):
         "date_joined": user.date_joined.isoformat(),
         "last_login": user.last_login.isoformat() if user.last_login else None,
         "has_photo": bool(profile.profile_photo),
+        # Changes whenever the profile is saved, so browsers reload a new photo.
+        "photo_version": profile.updated_at.isoformat() if profile.updated_at else "",
         "registration_reason": profile.registration_reason,
         "verification": get_account_verification(profile),
     }
@@ -1211,12 +1213,45 @@ def my_profile(request):
         user.save(update_fields=["first_name", "last_name", "email"])
         profile.save(update_fields=["contact_number", "updated_at"])
     return Response(serialize_own_profile(user, profile), status=status.HTTP_200_OK)
-@api_view(["GET"])
+@api_view(["GET", "POST", "DELETE"])
 @permission_classes([IsAuthenticated])
 def my_photo(request):
-    """The logged-in user's own profile photo."""
+    """
+    The logged-in user's own profile photo.
+    GET shows it, POST (multipart "photo") replaces it, DELETE removes it.
+    """
+    from .validators import validate_image_upload
+    from django.core.exceptions import ValidationError as DjangoValidationError
+
     profile = getattr(request.user, "aquatimbang_profile", None)
-    if profile is None or not profile.profile_photo:
+    if profile is None:
+        raise Http404("No profile.")
+
+    if request.method == "POST":
+        upload = request.FILES.get("photo")
+        if upload is None:
+            return Response({"photo": "Choose a photo to upload."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_image_upload(upload)
+        except DjangoValidationError as error:
+            return Response({"photo": " ".join(error.messages)}, status=status.HTTP_400_BAD_REQUEST)
+        old = profile.profile_photo.name if profile.profile_photo else ""
+        profile.profile_photo = upload
+        profile.save(update_fields=["profile_photo", "updated_at"])
+        if old and old != profile.profile_photo.name:
+            profile.profile_photo.storage.delete(old)
+        log_activity(request.user, "updated", "Profile photo", request.user.pk, request.user.username)
+        return Response(serialize_own_profile(request.user, profile))
+
+    if request.method == "DELETE":
+        if profile.profile_photo:
+            profile.profile_photo.delete(save=False)
+            profile.profile_photo = None
+            profile.save(update_fields=["profile_photo", "updated_at"])
+            log_activity(request.user, "deleted", "Profile photo", request.user.pk, request.user.username)
+        return Response(serialize_own_profile(request.user, profile))
+
+    if not profile.profile_photo:
         raise Http404("No profile photo.")
     try:
         profile.profile_photo.open("rb")
