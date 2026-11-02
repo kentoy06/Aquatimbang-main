@@ -3560,9 +3560,13 @@ function GeneratedReportsLog({ reloadKey }) {
   }, [reloadKey]);
 
   return (
-    <div className="panel">
-      <h3 style={{ marginTop: 0 }}>Generated Reports</h3>
-      <p className="muted-text" style={{ marginTop: -6 }}>Every CSV or PDF export by an LGU Officer or Administrator.</p>
+    <div className="panel" style={{ marginTop: 20 }}>
+      <div className="panel-header">
+        <div>
+          <h3>Generated Reports</h3>
+          <p>Every CSV or PDF export by an LGU Officer or Administrator.</p>
+        </div>
+      </div>
       <div style={{ overflowX: "auto" }}>
         <table>
           <thead>
