@@ -654,6 +654,17 @@ class ProfileAndSummaryTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertIn("species_count", response.data)
         self.assertEqual(response.data["featured_prices"], [])
+        self.assertEqual(response.data["today_prices"], [])
+
+    def test_public_summary_lists_latest_price_per_fish(self):
+        from datetime import timedelta
+        city = Municipality.objects.create(name="Lapu-Lapu City", province="Cebu")
+        fish = FishSpecies.objects.create(name="Tamban")
+        today = timezone.localdate()
+        PriceRecord.objects.create(fish_species=fish, municipality=city, price_per_kg=Decimal("90"), recorded_date=today - timedelta(days=1), status="published")
+        PriceRecord.objects.create(fish_species=fish, municipality=city, price_per_kg=Decimal("95"), recorded_date=today, status="published")
+        rows = APIClient().get("/api/public/summary/").data["today_prices"]
+        self.assertEqual([(r["fish_name"], str(r["price_per_kg"])) for r in rows], [("Tamban", "95.00")])
 
 
 class FisherfolkListTests(TestCase):

@@ -1324,9 +1324,44 @@ def public_summary(request):
                 "recorded_date": record.recorded_date,
                 "weekly_change_percent": change,
             })
+    # Latest official price per fish and municipality (last 30 days of
+    # publishing), for the public "Today's Prices" board.
+    today_prices = []
+    if latest:
+        from datetime import timedelta
+        seen = set()
+        recent = (
+            PriceRecord.objects.filter(
+                status=PriceRecord.STATUS_PUBLISHED,
+                recorded_date__gte=latest - timedelta(days=30),
+                fish_species__is_active=True,
+            )
+            .select_related("fish_species", "municipality")
+            .order_by("-recorded_date", "-id")
+        )
+        for record in recent:
+            key = (record.fish_species_id, record.municipality_id)
+            if key in seen:
+                continue
+            seen.add(key)
+            fish = record.fish_species
+            today_prices.append({
+                "fish_id": fish.id,
+                "fish_name": fish.name,
+                "scientific_name": fish.scientific_name,
+                "has_photo": bool(fish.photo),
+                "updated_at": fish.updated_at.isoformat(),
+                "municipality_name": record.municipality.name,
+                "price_per_kg": record.price_per_kg,
+                "recorded_date": record.recorded_date,
+            })
+            if len(today_prices) >= 60:
+                break
+        today_prices.sort(key=lambda row: (row["fish_name"], row["municipality_name"]))
     return Response(
         {
             "featured_prices": featured,
+            "today_prices": today_prices,
             "species_count": FishSpecies.objects.filter(is_active=True).count(),
             "municipality_count": Municipality.objects.filter(is_active=True).count(),
             "published_price_count": PriceRecord.objects.filter(

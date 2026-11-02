@@ -2,12 +2,81 @@ import React, { useEffect, useState } from "react";
 import "./App.css";
 import "./Landing.css";
 import { apiUrl } from "./api/config.js";
+import { FishThumb } from "./components/FishPhoto.jsx";
+
+const peso = (value) =>
+  `₱${Number(value).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+const formatDate = (value) =>
+  value ? new Date(`${value}T00:00:00`).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "";
+
+// Optional cover photo: put a picture at public/images/hero.jpg to use it.
+const HERO_PHOTO = `${import.meta.env.BASE_URL}images/hero.jpg`;
+
+// Drawn underwater scene shown behind the cover text (and under the photo, if any).
+function OceanScene() {
+  const fish = (x, y, scale, color, flip = false, key) => (
+    <g key={key} transform={`translate(${x} ${y}) scale(${flip ? -scale : scale} ${scale})`} className="scene-fish">
+      <path d="M0 0 C 30 -26, 92 -26, 120 0 C 92 26, 30 26, 0 0 Z" fill={color} />
+      <path d="M118 0 L 152 -22 L 146 0 L 152 22 Z" fill={color} opacity="0.85" />
+      <path d="M52 -17 C 64 -34, 82 -34, 90 -19 Z" fill={color} opacity="0.7" />
+      <circle cx="22" cy="-4" r="3.2" fill="#04101c" />
+    </g>
+  );
+  return (
+    <svg className="ocean-scene" viewBox="0 0 1440 900" preserveAspectRatio="xMidYMid slice" aria-hidden="true">
+      <defs>
+        <linearGradient id="water" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#0d3150" />
+          <stop offset="0.55" stopColor="#081d31" />
+          <stop offset="1" stopColor="#030b14" />
+        </linearGradient>
+        <radialGradient id="glow" cx="0.72" cy="0.18" r="0.55">
+          <stop offset="0" stopColor="#3fc1d9" stopOpacity="0.38" />
+          <stop offset="1" stopColor="#3fc1d9" stopOpacity="0" />
+        </radialGradient>
+        <linearGradient id="ray" x1="0" y1="0" x2="0" y2="1">
+          <stop offset="0" stopColor="#bdf2ff" stopOpacity="0.22" />
+          <stop offset="1" stopColor="#bdf2ff" stopOpacity="0" />
+        </linearGradient>
+        <linearGradient id="bigFish" x1="0" y1="0" x2="1" y2="1">
+          <stop offset="0" stopColor="#4fd1e8" />
+          <stop offset="0.6" stopColor="#1b6fa8" />
+          <stop offset="1" stopColor="#0b2a4a" />
+        </linearGradient>
+      </defs>
+      <rect width="1440" height="900" fill="url(#water)" />
+      <rect width="1440" height="900" fill="url(#glow)" />
+      {[[880, 0, 980, 0, 820, 900, 640, 900], [1040, 0, 1110, 0, 1060, 900, 900, 900], [1190, 0, 1240, 0, 1290, 900, 1150, 900]].map((p, i) => (
+        <polygon key={i} points={`${p[0]},${p[1]} ${p[2]},${p[3]} ${p[4]},${p[5]} ${p[6]},${p[7]}`} fill="url(#ray)" />
+      ))}
+      {/* School of small fish */}
+      {[[760, 520, 0.42, "#2a8fb8"], [840, 560, 0.34, "#2a8fb8"], [700, 600, 0.3, "#1f7aa3"], [930, 610, 0.28, "#1f7aa3"], [610, 470, 0.25, "#1b6a90"], [1000, 520, 0.3, "#2a8fb8"]]
+        .map(([x, y, s, c], i) => fish(x, y, s, c, true, `s${i}`))}
+      {/* Large fish with orange fins */}
+      <g className="scene-big-fish" transform="translate(1210 300) scale(-1.9 1.9)">
+        <path d="M0 0 C 34 -42, 110 -46, 150 -8 C 116 30, 40 40, 0 0 Z" fill="url(#bigFish)" />
+        <path d="M146 -8 C 176 -48, 214 -40, 222 -54 C 214 -10, 206 10, 222 40 C 206 30, 174 34, 146 -8 Z" fill="#ff7a1a" opacity="0.92" />
+        <path d="M60 -34 C 70 -66, 104 -72, 118 -40 Z" fill="#ff7a1a" opacity="0.85" />
+        <path d="M70 22 C 80 46, 100 48, 108 26 Z" fill="#ff4d5e" opacity="0.8" />
+        <circle cx="26" cy="-8" r="5" fill="#04101c" />
+        <circle cx="27.5" cy="-9.5" r="1.6" fill="#ffffff" />
+      </g>
+      {/* Bubbles */}
+      {[[1150, 180, 6], [1170, 140, 4], [1135, 110, 3], [820, 300, 5], [835, 262, 3], [480, 640, 4], [500, 600, 3]].map(([x, y, r], i) => (
+        <circle key={i} className="scene-bubble" cx={x} cy={y} r={r} fill="none" stroke="#bdf2ff" strokeOpacity="0.55" strokeWidth="1.4" />
+      ))}
+      {/* Seabed */}
+      <path d="M0 820 C 160 760, 300 800, 420 770 C 560 735, 640 800, 780 780 C 920 760, 1040 700, 1180 740 C 1300 772, 1380 740, 1440 750 L 1440 900 L 0 900 Z" fill="#04101c" />
+      <path d="M0 860 C 200 820, 360 860, 540 840 C 720 820, 900 870, 1080 846 C 1240 826, 1340 860, 1440 846 L 1440 900 L 0 900 Z" fill="#020812" />
+    </svg>
+  );
+}
 
 function Landing({ onGetStarted, onRegister }) {
-  const [section, setSection] = useState("home");
   const [summary, setSummary] = useState(null);
+  const [photoOk, setPhotoOk] = useState(true);
 
-  // Load live counts from Django for the stats row.
   useEffect(() => {
     fetch(apiUrl("/public/summary/"))
       .then((response) => (response.ok ? response.json() : null))
@@ -15,168 +84,153 @@ function Landing({ onGetStarted, onRegister }) {
       .catch(() => setSummary(null));
   }, []);
 
-  const audiences = [
-    { icon: "🐟", title: "Fisherfolk & Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price if something looks off." },
-    { icon: "✔", title: "LGU Officers", desc: "Encode, validate, and publish official prices, and review fisherfolk suggestions." },
-    { icon: "⚙", title: "Administrators", desc: "Manage users, species, markets, and system-wide settings." },
-  ];
+  const scrollTo = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" });
 
-  const chips = [
-    { icon: "📋", label: "Current & Historical Prices" },
-    { icon: "🧮", label: "Fair Price Calculator" },
-    { icon: "💬", label: "Suggested Prices" },
-    { icon: "📈", label: "Trends & Forecasts" },
-  ];
-
-  const count = (value) => (summary ? String(value ?? 0) : "—");
+  const count = (value) => (summary ? Number(value ?? 0).toLocaleString() : "—");
   const stats = [
-    { value: count(summary?.species_count), label: "Fish Species Tracked" },
-    { value: count(summary?.municipality_count), label: "Municipalities Covered" },
-    { value: count(summary?.published_price_count), label: "LGU-Validated Prices" },
+    { value: count(summary?.species_count), label: "Fish species" },
+    { value: count(summary?.municipality_count), label: "Municipalities" },
+    { value: count(summary?.published_price_count), label: "Official prices" },
+  ];
+  const prices = summary?.today_prices || [];
+
+  const audiences = [
+    { icon: "🐟", title: "Fisherfolk & Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price when the market looks different." },
+    { icon: "✔", title: "LGU Officers", desc: "Encode, validate and publish official prices, review vendor suggestions, and approve vendor accounts." },
+    { icon: "📈", title: "Administrators", desc: "Manage users, species and markets, watch price forecasts, and generate reports." },
   ];
 
   return (
     <div className="landing">
+      {/* COVER */}
+      <section className="hero" id="home">
+        <div className="hero-bg" aria-hidden="true">
+          <OceanScene />
+          {photoOk && <img className="hero-photo" src={HERO_PHOTO} alt="" onError={() => setPhotoOk(false)} />}
+          <div className="hero-shade" />
+        </div>
 
-      {/* TRANSPARENT BLACK NAV */}
-      <header className="landing-nav">
-        <div className="landing-brand">
-          <div className="landing-brand-icon">🐟</div>
-          <div>
-            <h2>AquaTimbang</h2>
-            <span>Fish Price Transparency</span>
+        <header className="landing-nav">
+          <button className="landing-brand" onClick={() => scrollTo("home")}>
+            <span className="landing-logo">A</span>
+            <span className="landing-brand-name">AquaTimbang</span>
+          </button>
+          <nav className="landing-links" aria-label="Main">
+            <button onClick={() => scrollTo("home")} className="active">Home</button>
+            <button onClick={() => scrollTo("prices")}>Prices</button>
+            <button onClick={() => scrollTo("about")}>About</button>
+            <button onClick={() => scrollTo("contact")}>Contact</button>
+          </nav>
+          <div className="landing-actions">
+            <button className="landing-login" onClick={onGetStarted}>Login</button>
+            <button className="pill-btn pill-orange" onClick={onRegister}>Register</button>
+          </div>
+        </header>
+
+        <div className="hero-content">
+          <span className="hero-tag">Fish price transparency · Cebu · Philippines</span>
+          <span className="hero-eyebrow">Official · LGU-validated · Forecasted</span>
+          <h1>Fair Fish Prices,<br />Clear as Ocean Water</h1>
+          <p>
+            See today's official price per kilo before you buy or sell. Fair price
+            calculator, price trends and forecasts for fisherfolk, vendors and LGUs.
+          </p>
+          <div className="hero-buttons">
+            <button className="pill-btn pill-orange" onClick={() => scrollTo("prices")}>See Today's Prices</button>
+            <button className="pill-btn pill-glass" onClick={onRegister}>Register as a Vendor</button>
+          </div>
+          <div className="hero-stats">
+            {stats.map((s) => (
+              <div key={s.label}><strong>{s.value}</strong><span>{s.label}</span></div>
+            ))}
           </div>
         </div>
 
-        <nav className="landing-nav-links">
-          <button className={`landing-nav-link ${section === "home" ? "landing-nav-link-active" : ""}`} onClick={() => setSection("home")}>Home</button>
-          <button className={`landing-nav-link ${section === "about" ? "landing-nav-link-active" : ""}`} onClick={() => setSection("about")}>About</button>
-          <button className={`landing-nav-link ${section === "contact" ? "landing-nav-link-active" : ""}`} onClick={() => setSection("contact")}>Contact</button>
-          <span className="landing-nav-divider"></span>
-          <button className="landing-nav-login" onClick={onGetStarted}>Login</button>
-          <button className="landing-nav-register" onClick={onRegister}>Register</button>
-        </nav>
-      </header>
-
-      {/* STATIC FULL-HEIGHT STAGE */}
-      <main className="landing-stage">
-
-        {section === "home" && (
-          <div className="landing-panel landing-home">
-            <div className="landing-home-text">
-              <span className="landing-eyebrow">PREDICTIVE ANALYTICS · FISH PRICE TRANSPARENCY</span>
-              <h1>
-                AquaTimbang provides accessible fish price information and
-                predictive insights to support informed and transparent
-                market decision-making.
-              </h1>
-              <p>
-                AquaTimbang is a fish price transparency system that helps
-                fisherfolk, vendors, and local government units access fish
-                price information, submit price suggestions, view price
-                trends, and use predictive analytics to support informed
-                market decisions.
-              </p>
-
-              <div className="landing-cta-row">
-                <button className="primary-btn landing-cta" onClick={onGetStarted}>Get Started</button>
-                <button className="landing-cta-secondary" onClick={() => setSection("about")}>Learn more →</button>
-              </div>
-
-              <div className="landing-stats">
-                {stats.map((s) => (
-                  <div className="landing-stat" key={s.label}>
-                    <strong>{s.value}</strong>
-                    <span>{s.label}</span>
-                  </div>
-                ))}
-              </div>
-
-              <div className="landing-chip-row">
-                {chips.map((c) => (
-                  <span className="landing-chip" key={c.label}>{c.icon} {c.label}</span>
-                ))}
-              </div>
+        <div className="hero-cards">
+          {(summary?.featured_prices || []).map((item) => (
+            <div className="hero-price-card" key={`${item.fish_name}-${item.municipality_name}`}>
+              <span>{item.fish_name} · {item.municipality_name}</span>
+              <strong>{peso(item.price_per_kg)}<small>/kg</small></strong>
+              {item.weekly_change_percent !== null && (
+                <em className={item.weekly_change_percent >= 0 ? "up" : "down"}>
+                  {item.weekly_change_percent >= 0 ? "▲" : "▼"} {Math.abs(item.weekly_change_percent).toFixed(1)}% vs last week
+                </em>
+              )}
             </div>
+          ))}
+        </div>
 
-            <div className="landing-home-visual">
-              {(summary?.featured_prices || []).map((item, index) => {
-                const change = item.weekly_change_percent;
-                return (
-                  <div className={`landing-price-card${index === 1 ? " landing-price-card-2" : ""}`} key={`${item.fish_name}-${item.municipality_name}`}>
-                    <span>{item.fish_name} · {item.municipality_name}</span>
-                    <strong>₱{Number(item.price_per_kg).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</strong>
-                    <small className={change === null ? "" : change >= 0 ? "up" : "down"}>
-                      {change === null ? "" : `${change >= 0 ? "▲" : "▼"} ${Math.abs(change).toFixed(1)}% vs last week · `}LGU Validated
-                    </small>
-                  </div>
-                );
-              })}
-            </div>
-          </div>
-        )}
+        <div className="hero-side-label" aria-hidden="true"><span>TRANSPARENCY</span></div>
+        <button className="hero-scroll" onClick={() => scrollTo("prices")} aria-label="Scroll to today's prices">↓</button>
+      </section>
 
-        {section === "about" && (
-          <div className="landing-panel landing-about-panel">
-            <h2 className="landing-section-title">About AquaTimbang</h2>
-            <p className="landing-about-text">
-              AquaTimbang is a predictive analytics-driven fish price
-              transparency system designed to provide accessible and
-              reliable fish price information for fisherfolk, vendors, and
-              local government units. The system allows users to view
-              current and historical fish prices, submit suggested prices,
-              calculate estimated fish values based on weight, and access
-              price trends and forecasts. Through the collection and
-              analysis of price information, AquaTimbang aims to support
-              informed market decision-making and promote a more organized
-              and transparent fish pricing process.
-            </p>
-
-            <div className="landing-audience-grid">
-              {audiences.map((a) => (
-                <div className="landing-audience-card" key={a.title}>
-                  <div className="landing-audience-icon">{a.icon}</div>
-                  <strong>{a.title}</strong>
-                  <p>{a.desc}</p>
+      {/* TODAY'S PRICES */}
+      <section className="landing-section" id="prices">
+        <span className="section-eyebrow">Today's market</span>
+        <h2>Official Fish Prices</h2>
+        <p className="section-lead">
+          The latest price per kilo published by the LGU for each fish and municipality.
+          {summary?.latest_published_date && <> Last updated {formatDate(summary.latest_published_date)}.</>}
+        </p>
+        {prices.length === 0 ? (
+          <div className="landing-empty">{summary ? "No official prices have been published yet." : "Loading prices…"}</div>
+        ) : (
+          <div className="price-board">
+            {prices.map((p) => (
+              <div className="price-tile" key={`${p.fish_id}-${p.municipality_name}`}>
+                <FishThumb fish={{ id: p.fish_id, name: p.fish_name, has_photo: p.has_photo, updated_at: p.updated_at }} size={54} />
+                <div>
+                  <strong>{p.fish_name}</strong>
+                  <span>{p.municipality_name}</span>
+                  <span className="price-date">{formatDate(p.recorded_date)}</span>
                 </div>
-              ))}
-            </div>
-
-            <button className="primary-btn landing-cta" onClick={onGetStarted}>Get Started</button>
+                <b>{peso(p.price_per_kg)}<small>/kg</small></b>
+              </div>
+            ))}
           </div>
         )}
+        <div className="section-cta">
+          <button className="pill-btn pill-orange" onClick={onGetStarted}>Log in for trends &amp; forecasts</button>
+        </div>
+      </section>
 
-        {section === "contact" && (
-          <div className="landing-panel landing-contact-panel">
-            <h2 className="landing-section-title">Contact Us</h2>
-            <p className="landing-contact-intro">
-              Have questions about AquaTimbang or need help with your account?
-              Reach out to the local LGU market office.
-            </p>
-
-            <div className="landing-contact-grid">
-              <div className="landing-contact-item">
-                <span>📍</span>
-                <div><strong>Address</strong><p>Pasil Fish Market, Cebu City, Philippines</p></div>
-              </div>
-              <div className="landing-contact-item">
-                <span>✉️</span>
-                <div><strong>Email</strong><p>support@aquatimbang.ph</p></div>
-              </div>
-              <div className="landing-contact-item">
-                <span>📞</span>
-                <div><strong>Phone</strong><p>(032) 000 0000</p></div>
-              </div>
+      {/* ABOUT */}
+      <section className="landing-section landing-about" id="about">
+        <span className="section-eyebrow">About the system</span>
+        <h2>Prices Everyone Can Trust</h2>
+        <p className="section-lead">
+          AquaTimbang is a predictive analytics-driven fish price transparency system. Fisherfolk,
+          vendors and local government units see current and past official prices, suggest prices
+          from the market floor, compute fair amounts by weight, and plan ahead with SARIMAX price forecasts.
+        </p>
+        <div className="audience-grid">
+          {audiences.map((a) => (
+            <div className="audience-card" key={a.title}>
+              <span className="audience-icon">{a.icon}</span>
+              <strong>{a.title}</strong>
+              <p>{a.desc}</p>
             </div>
-          </div>
-        )}
+          ))}
+        </div>
+      </section>
 
-        <footer className="landing-footer">
-          <span>© 2026 AquaTimbang — Fish Price Transparency System</span>
-        </footer>
-      </main>
+      {/* CONTACT */}
+      <section className="landing-section landing-contact" id="contact">
+        <span className="section-eyebrow">Get in touch</span>
+        <h2>Contact Us</h2>
+        <div className="contact-grid">
+          <div><span>📍</span><strong>Address</strong><p>Pasil Fish Market, Cebu City, Philippines</p></div>
+          <div><span>✉️</span><strong>Email</strong><p>support@aquatimbang.ph</p></div>
+          <div><span>📞</span><strong>Phone</strong><p>(032) 000 0000</p></div>
+        </div>
+      </section>
+
+      <footer className="landing-footer">
+        <span className="landing-logo small">A</span>
+        <span>© 2026 AquaTimbang — Fish Price Transparency System</span>
+      </footer>
     </div>
   );
 }
 
-export default Landing; 
+export default Landing;

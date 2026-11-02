@@ -1,0 +1,432 @@
+/* =========================================================
+   AQUATIMBANG THEME — deep ocean navy, orange actions
+   Loaded after every other stylesheet, so it restyles the
+   login/register pages and all three dashboards in one place.
+========================================================= */
+
+:root {
+  --navy-950: #030b14;
+  --navy-900: #071a2b;
+  --navy-800: #0b2740;
+  --navy-700: #0f3a5a;
+  --ocean: #17698f;
+  --aqua: #3fc1d9;
+  --orange: #ff7a1a;
+  --orange-dark: #e8650a;
+  --coral: #ff4d5e;
+  --page: #eef3f7;
+  --line: #dde6ee;
+  --ink: #0d2236;
+  --muted: #6b8196;
+  --radius: 16px;
+  --shadow: 0 8px 24px rgba(7, 26, 43, 0.07);
+}
+
+body {
+  font-family: "Poppins", "Segoe UI", Arial, sans-serif;
+  background: var(--page);
+  color: var(--ink);
+}
+
+button,
+input,
+select,
+textarea {
+  font-family: inherit;
+}
+
+/* ---------- Sidebar ---------- */
+
+.sidebar {
+  background:
+    radial-gradient(circle at 20% 0%, rgba(63, 193, 217, 0.16), transparent 40%),
+    linear-gradient(180deg, var(--navy-900), var(--navy-950));
+  border-right: none;
+  box-shadow: 4px 0 24px rgba(3, 11, 20, 0.25);
+}
+
+.sidebar::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.15);
+}
+
+.brand {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.brand-icon {
+  background: linear-gradient(135deg, var(--orange), var(--coral));
+  border-radius: 50%;
+  box-shadow: 0 6px 16px rgba(255, 122, 26, 0.35);
+}
+
+.brand h2 {
+  font-family: "Playfair Display", Georgia, serif;
+  color: #ffffff;
+  font-weight: 800;
+}
+
+.brand span {
+  color: rgba(255, 255, 255, 0.55);
+  letter-spacing: 0.08em;
+}
+
+.admin-label {
+  color: var(--aqua);
+  letter-spacing: 0.32em;
+  font-weight: 600;
+}
+
+.group-label {
+  border-top-color: rgba(255, 255, 255, 0.08);
+}
+
+.nav-item {
+  color: rgba(222, 236, 247, 0.72);
+  border-radius: 12px;
+  font-size: 14.5px;
+}
+
+.nav-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: #ffffff;
+}
+
+.nav-item.active {
+  background: linear-gradient(90deg, rgba(255, 122, 26, 0.22), rgba(255, 122, 26, 0.04));
+  color: #ffffff;
+  font-weight: 600;
+  box-shadow: inset 3px 0 0 var(--orange);
+}
+
+.nav-badge {
+  background: var(--coral);
+}
+
+.sidebar-bottom {
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+.admin-profile strong {
+  color: #ffffff;
+}
+
+.admin-profile small {
+  color: rgba(255, 255, 255, 0.55);
+}
+
+.avatar {
+  background: linear-gradient(135deg, var(--orange), var(--coral));
+}
+
+.logout-btn {
+  background: transparent;
+  color: #ffb3ba;
+  border: 1px solid rgba(255, 77, 94, 0.45);
+  border-radius: 999px;
+}
+
+.logout-btn:hover {
+  background: rgba(255, 77, 94, 0.14);
+  color: #ffffff;
+}
+
+/* ---------- Top bar ---------- */
+
+.topbar {
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(10px);
+  border-bottom: 1px solid var(--line);
+}
+
+.topbar h1 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 800;
+  color: var(--navy-900);
+}
+
+.topbar p {
+  color: var(--muted);
+}
+
+.notification {
+  border-radius: 50%;
+  border-color: var(--line);
+  background: #ffffff;
+}
+
+/* ---------- Page headings and banners ---------- */
+
+.page-title h2 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 800;
+  color: var(--navy-900);
+  font-size: 26px;
+}
+
+.page-title p {
+  color: var(--muted);
+}
+
+.welcome-card {
+  position: relative;
+  overflow: hidden;
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 85% 20%, rgba(63, 193, 217, 0.4), transparent 45%),
+    linear-gradient(115deg, var(--navy-950) 0%, var(--navy-800) 55%, var(--ocean) 100%);
+  box-shadow: 0 16px 34px rgba(7, 26, 43, 0.28);
+}
+
+.welcome-card .eyebrow {
+  color: var(--orange);
+  letter-spacing: 0.4em;
+}
+
+.welcome-card h2 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 800;
+}
+
+/* ---------- Buttons ---------- */
+
+.primary-btn {
+  background: var(--orange);
+  color: #ffffff;
+  border-radius: 999px;
+  padding: 11px 22px;
+  font-weight: 600;
+  box-shadow: 0 8px 18px rgba(255, 122, 26, 0.28);
+}
+
+.primary-btn:hover {
+  background: var(--orange-dark);
+  box-shadow: 0 10px 22px rgba(255, 122, 26, 0.38);
+}
+
+.primary-btn:disabled {
+  background: #f3b994;
+  box-shadow: none;
+  cursor: not-allowed;
+  transform: none;
+}
+
+.secondary-btn {
+  border-radius: 999px;
+  padding: 10px 20px;
+  border: 1px solid #c9d6e2;
+  color: var(--navy-800);
+  background: #ffffff;
+  font-weight: 500;
+}
+
+.secondary-btn:hover {
+  border-color: var(--navy-800);
+  color: var(--navy-900);
+  background: #f4f8fb;
+}
+
+/* The plain browser "Choose File" button, everywhere. */
+input[type="file"] {
+  font-size: 13px;
+  color: var(--muted);
+  max-width: 100%;
+}
+
+input[type="file"]::file-selector-button {
+  margin-right: 12px;
+  padding: 9px 18px;
+  border: none;
+  border-radius: 999px;
+  background: var(--navy-800);
+  color: #ffffff;
+  font-family: inherit;
+  font-weight: 600;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 0.18s ease;
+}
+
+input[type="file"]::file-selector-button:hover {
+  background: var(--orange);
+}
+
+/* ---------- Cards, panels and tables ---------- */
+
+.panel,
+.config-card,
+.stat-card,
+.mini-stat {
+  border-radius: var(--radius);
+  border-color: var(--line);
+  box-shadow: var(--shadow);
+}
+
+.panel-header h3,
+.config-header h3 {
+  color: var(--navy-900);
+}
+
+.config-icon {
+  border-radius: 12px;
+}
+
+.config-icon.blue {
+  background: #e3f2f9;
+  color: var(--ocean);
+}
+
+.config-icon.orange {
+  background: #fff0e4;
+  color: var(--orange-dark);
+}
+
+table th {
+  background: #f3f7fa;
+  color: #5b7389;
+  letter-spacing: 0.08em;
+}
+
+/* ---------- Forms ---------- */
+
+.form-group input,
+.form-group select,
+.form-group textarea,
+.date-input,
+.inline-input {
+  border-radius: 10px;
+  border: 1px solid #cfdbe6;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus,
+.date-input:focus,
+.inline-input:focus {
+  outline: none;
+  border-color: var(--ocean);
+  box-shadow: 0 0 0 3px rgba(23, 105, 143, 0.15);
+}
+
+/* ---------- Tabs, toast, modals ---------- */
+
+.active-tab {
+  color: var(--navy-900);
+}
+
+.active-tab::after {
+  background: var(--orange);
+}
+
+.toast {
+  background: var(--navy-900);
+  border-radius: 999px;
+  box-shadow: 0 12px 28px rgba(3, 11, 20, 0.35);
+}
+
+.modal {
+  border-radius: 20px;
+}
+
+/* =========================================================
+   LOGIN AND REGISTER
+========================================================= */
+
+.login-page,
+.login-page button,
+.login-page input,
+.login-page select,
+.login-page textarea {
+  font-family: "Poppins", "Segoe UI", Arial, sans-serif;
+}
+
+.login-page {
+  background:
+    radial-gradient(circle at 80% 10%, rgba(63, 193, 217, 0.25), transparent 40%),
+    linear-gradient(160deg, var(--navy-800), var(--navy-950));
+}
+
+.login-card {
+  border-radius: 24px;
+  box-shadow: 0 30px 70px rgba(0, 0, 0, 0.45);
+}
+
+.login-left {
+  background:
+    radial-gradient(circle at 85% 15%, rgba(63, 193, 217, 0.35), transparent 45%),
+    linear-gradient(160deg, var(--navy-900), var(--navy-950) 70%);
+}
+
+.login-left h1 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 800;
+}
+
+.login-brand h2 {
+  font-family: "Playfair Display", Georgia, serif;
+}
+
+.login-brand .brand-icon {
+  background: linear-gradient(135deg, var(--orange), var(--coral));
+}
+
+.login-point span {
+  background: rgba(255, 122, 26, 0.22);
+  color: #ffd2b0;
+}
+
+.login-head h3 {
+  font-family: "Playfair Display", Georgia, serif;
+  font-weight: 800;
+  color: var(--navy-900);
+}
+
+.auth-tabs {
+  border-radius: 999px;
+}
+
+.auth-tab {
+  border-radius: 999px;
+}
+
+.auth-tab:hover {
+  color: var(--orange-dark);
+}
+
+.auth-tab-active {
+  color: var(--navy-900);
+}
+
+.role-toggle-btn {
+  border-radius: 999px;
+}
+
+.role-toggle-btn:hover {
+  border-color: var(--orange);
+  color: var(--orange-dark);
+}
+
+.role-toggle-btn-active,
+.role-toggle-btn-active:hover {
+  background: var(--navy-800);
+  border-color: var(--navy-800);
+  color: #ffffff;
+}
+
+.login-right .primary-btn {
+  height: 46px;
+  font-size: 15px;
+}
+
+.login-page .file-field {
+  border-radius: 14px;
+}
+
+.login-page .file-field:hover {
+  border-color: var(--orange);
+}
+
+.login-page .species-option-on {
+  border-color: var(--orange);
+  background: #fff4ec;
+  color: var(--orange-dark);
+}

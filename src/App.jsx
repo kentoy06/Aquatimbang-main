@@ -9,6 +9,8 @@ import Register from "./Register.jsx";
 import "./Admin.css";
 import "./Vendor.css";
 import "./Lgu.css";
+// Site-wide colours, buttons and fonts; loaded last so it wins.
+import "./theme.css";
 
 // Each dashboard is downloaded only when that role logs in.
 const Admin = lazy(() => import("./Admin.jsx"));
