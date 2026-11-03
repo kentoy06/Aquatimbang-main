@@ -36,8 +36,8 @@ html, body, #root {
 .pill-btn {
   border: none;
   border-radius: 999px;
-  padding: 12px 26px;
-  font-size: 14px;
+  padding: 11px 24px;
+  font-size: 13.5px;
   font-weight: 600;
   letter-spacing: 0.2px;
   cursor: pointer;
@@ -174,8 +174,8 @@ html, body, #root {
 }
 
 .landing-logo {
-  width: 36px;
-  height: 36px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   display: grid;
   place-items: center;
@@ -194,7 +194,7 @@ html, body, #root {
 
 .landing-brand-name {
   font-family: "Playfair Display", Georgia, serif;
-  font-size: 18px;
+  font-size: 16px;
   font-weight: 700;
 }
 
@@ -205,8 +205,8 @@ html, body, #root {
 
 .landing-links button {
   color: rgba(255, 255, 255, 0.82);
-  font-size: 13.5px;
-  padding: 9px 20px;
+  font-size: 13px;
+  padding: 8px 18px;
   cursor: pointer;
 }
 
@@ -230,7 +230,7 @@ html, body, #root {
 
 .landing-login {
   color: #ffffff;
-  font-size: 13.5px;
+  font-size: 13px;
   font-weight: 600;
   padding: 9px 22px;
   cursor: pointer;
@@ -242,8 +242,8 @@ html, body, #root {
 }
 
 .landing-actions .pill-btn {
-  padding: 10px 22px;
-  font-size: 13.5px;
+  padding: 9px 20px;
+  font-size: 13px;
 }
 
 /* ---------- Cover text ---------- */
@@ -268,7 +268,7 @@ html, body, #root {
   border: 1px solid rgba(255, 255, 255, 0.35);
   background: rgba(255, 255, 255, 0.08);
   backdrop-filter: blur(6px);
-  font-size: 12.5px;
+  font-size: 12px;
   color: rgba(255, 255, 255, 0.92);
   margin-bottom: 20px;
 }
@@ -277,7 +277,7 @@ html, body, #root {
   display: flex;
   align-items: center;
   gap: 14px;
-  font-size: 11px;
+  font-size: 10.5px;
   letter-spacing: 0.42em;
   text-transform: uppercase;
   color: var(--aqua);
@@ -293,7 +293,7 @@ html, body, #root {
 
 .hero-content h1 {
   font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(36px, 5vw, 64px);
+  font-size: clamp(30px, 4vw, 52px);
   font-weight: 800;
   line-height: 1.04;
   letter-spacing: -0.5px;
@@ -303,7 +303,7 @@ html, body, #root {
 
 .hero-content p {
   max-width: 560px;
-  font-size: 15.5px;
+  font-size: 14.5px;
   line-height: 1.65;
   color: rgba(255, 255, 255, 0.86);
   margin-bottom: 34px;
@@ -333,11 +333,11 @@ html, body, #root {
 .hero-stats strong {
   display: block;
   font-family: "Playfair Display", Georgia, serif;
-  font-size: 25px;
+  font-size: 21px;
 }
 
 .hero-stats span {
-  font-size: 10.5px;
+  font-size: 10px;
   letter-spacing: 0.2em;
   text-transform: uppercase;
   color: rgba(255, 255, 255, 0.6);
@@ -375,7 +375,7 @@ html, body, #root {
 .hero-price-card strong {
   display: block;
   font-family: "Playfair Display", Georgia, serif;
-  font-size: 25px;
+  font-size: 21px;
   margin: 2px 0;
 }
 
@@ -454,14 +454,14 @@ html, body, #root {
 .landing-section h2,
 .landing-panel h2 {
   font-family: "Playfair Display", Georgia, serif;
-  font-size: clamp(28px, 3.2vw, 40px);
+  font-size: clamp(24px, 2.8vw, 34px);
   font-weight: 800;
   margin: 12px 0 14px;
 }
 
 .section-lead {
   max-width: 760px;
-  font-size: 14.5px;
+  font-size: 13.5px;
   line-height: 1.7;
   color: rgba(255, 255, 255, 0.75);
 }
@@ -728,7 +728,7 @@ html, body, #root {
   }
 
   .hero-content h1 {
-    font-size: 31px;
+    font-size: 28px;
     margin-bottom: 14px;
   }
 
@@ -781,4 +781,15 @@ html, body, #root {
   .price-board {
     grid-template-columns: 1fr;
   }
+}
+
+/* Credit for the cover photo (bottom left of the cover). */
+.hero-credit {
+  position: absolute;
+  z-index: 1;
+  left: 16px;
+  bottom: 10px;
+  font-size: 10.5px;
+  color: rgba(255, 255, 255, 0.6);
+  letter-spacing: 0.02em;
 }
