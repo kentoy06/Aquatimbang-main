@@ -1153,3 +1153,75 @@ table th {
     font-size: 20px;
   }
 }
+
+/* =========================================================
+   TRANSITIONS
+========================================================= */
+
+/* Login / Register pop up over the landing page. */
+.auth-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 2000;
+  overflow-y: auto;
+  background: rgba(3, 11, 20, 0.55);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  animation: overlay-in 0.3s ease-out both;
+}
+
+.auth-overlay .login-page {
+  min-height: 100%;
+  background: transparent;
+}
+
+.auth-overlay .login-card {
+  animation: card-pop 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+}
+
+@keyframes overlay-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes card-pop {
+  from { opacity: 0; transform: translateY(26px) scale(0.92); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Home: the cover text appears piece by piece. */
+.hero-content > * {
+  animation: rise-in 0.6s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+.hero-content > :nth-child(1) { animation-delay: 0.05s; }
+.hero-content > :nth-child(2) { animation-delay: 0.12s; }
+.hero-content > :nth-child(3) { animation-delay: 0.2s; }
+.hero-content > :nth-child(4) { animation-delay: 0.3s; }
+.hero-content > :nth-child(5) { animation-delay: 0.4s; }
+.hero-content > :nth-child(6) { animation-delay: 0.5s; }
+
+.hero-cards {
+  animation: card-pop 0.6s cubic-bezier(0.2, 0.9, 0.3, 1.15) 0.55s both;
+}
+
+.hero-side-label {
+  animation: overlay-in 0.8s ease-out 0.7s both;
+}
+
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(22px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* Respect "reduce motion" settings on phones and computers. */
+@media (prefers-reduced-motion: reduce) {
+  .auth-overlay,
+  .auth-overlay .login-card,
+  .hero-content > *,
+  .hero-cards,
+  .hero-side-label,
+  .landing-panel {
+    animation: none !important;
+  }
+}

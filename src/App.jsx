@@ -140,33 +140,36 @@ function App() {
   }
 
   // Display registration page.
-  if (page === "register") {
+  // Login and Register open as a pop-up over the landing page.
+  if (page === "register" || page === "login") {
     return (
-      <Register
-        onBack={goLanding}
-        onGoToLogin={goLogin}
-      />
+      <>
+        <Landing onGetStarted={goLogin} onRegister={goRegister} />
+        <div className="auth-overlay" key={page}>
+          {page === "register" ? (
+            <Register
+              onBack={goLanding}
+              onGoToLogin={goLogin}
+            />
+          ) : (
+            <Login
+              onLogin={(next) => { setLoginNotice(""); setPage(next); }}
+              notice={loginNotice}
+              onBack={goLanding}
+              onRegister={goRegister}
+            />
+          )}
+        </div>
+      </>
     );
   }
 
-  // Display login page.
-  if (page === "login") {
-    return (
-      <Login
-        onLogin={(next) => { setLoginNotice(""); setPage(next); }}
-        notice={loginNotice}
-        onBack={goLanding}
-        onRegister={goRegister}
-      />
-    );
-  }
-
-  // Default page.
+  // Default page. Same structure as the pop-up case above, so the
+  // landing page behind a Login/Register pop-up is not reloaded.
   return (
-    <Landing
-      onGetStarted={goLogin}
-      onRegister={goRegister}
-    />
+    <>
+      <Landing onGetStarted={goLogin} onRegister={goRegister} />
+    </>
   );
 }
 
