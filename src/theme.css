@@ -1158,25 +1158,9 @@ table th {
    TRANSITIONS
 ========================================================= */
 
-/* Login / Register pop up over the landing page. */
-.auth-overlay {
-  position: fixed;
-  inset: 0;
-  z-index: 2000;
-  overflow-y: auto;
-  background: rgba(3, 11, 20, 0.55);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  animation: overlay-in 0.3s ease-out both;
-}
-
-.auth-overlay .login-page {
-  min-height: 100%;
-  background: transparent;
-}
-
-.auth-overlay .login-card {
-  animation: card-pop 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
+/* Login / Register: the card pops in when the page opens. */
+.login-card {
+  animation: card-pop 0.45s cubic-bezier(0.2, 0.9, 0.3, 1.15) both;
 }
 
 @keyframes overlay-in {
@@ -1216,8 +1200,7 @@ table th {
 
 /* Respect "reduce motion" settings on phones and computers. */
 @media (prefers-reduced-motion: reduce) {
-  .auth-overlay,
-  .auth-overlay .login-card,
+  .login-card,
   .hero-content > *,
   .hero-cards,
   .hero-side-label,
