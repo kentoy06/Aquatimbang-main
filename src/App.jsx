@@ -1,3 +1,4 @@
+import { BrandMark } from "./components/BrandLogo.jsx";
 import React, { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import "./App.css";
 import "./Login.css";
@@ -317,8 +318,8 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
 
           <div className="login-brand login-brand-spaced">
 
-            <div className="brand-icon">
-              🐟
+            <div className="brand-icon brand-icon-logo">
+              <BrandMark />
             </div>
 
             <div>

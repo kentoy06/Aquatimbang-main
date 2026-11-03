@@ -1,3 +1,4 @@
+import { BrandMark } from "./components/BrandLogo.jsx";
 import React, { useEffect, useState } from "react";
 import "./App.css";
 import "./Login.css";
@@ -316,7 +317,7 @@ if (role === "LGU Officer") {
           <button className="login-back-btn" onClick={onBack}>← Back to Home</button>
 
           <div className="login-brand login-brand-spaced">
-            <div className="brand-icon">🐟</div>
+            <div className="brand-icon brand-icon-logo"><BrandMark /></div>
             <div>
               <h2>AquaTimbang</h2>
               <span>Fish Price Transparency</span>

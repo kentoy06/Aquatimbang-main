@@ -1622,3 +1622,25 @@ class LoadFishSpeciesCommandTests(TestCase):
         self.assertEqual(FishSpecies.objects.get(name="Tilapia").scientific_name, "Custom name")
         self.assertTrue(FishSpecies.objects.filter(name="Galunggong", scientific_name="Decapterus macrosoma").exists())
         self.assertEqual(FishSpecies.objects.count(), 23)
+
+
+class LoadFishPhotosTests(TestCase):
+    def setUp(self):
+        import tempfile
+        media = override_settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+
+    def test_photos_are_attached_once(self):
+        from io import StringIO
+        from django.core.management import call_command
+        call_command("load_fish_species", stdout=StringIO())
+        bangus = FishSpecies.objects.get(name="Bangus")
+        self.assertTrue(bangus.photo)
+        first = bangus.photo.name
+        call_command("load_fish_species", stdout=StringIO())
+        bangus.refresh_from_db()
+        self.assertEqual(bangus.photo.name, first)  # not replaced without --replace-photos
+        self.assertTrue(FishSpecies.objects.get(name="Bisugo").photo)
+        self.assertTrue(FishSpecies.objects.get(name="Alumahan").photo)
+        self.assertFalse(FishSpecies.objects.get(name="Hito").photo)

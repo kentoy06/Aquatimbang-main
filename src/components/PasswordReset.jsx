@@ -1,3 +1,4 @@
+import { BrandMark } from "./BrandLogo.jsx";
 import React, { useState } from "react";
 import { apiUrl } from "../api/config.js";
 
@@ -99,7 +100,7 @@ export function ResetPasswordPage({ uid, token, onDone }) {
     <div className="login-page">
       <div className="login-card register-confirm-card" style={{ textAlign: "left" }}>
         <div className="login-brand" style={{ marginBottom: 18 }}>
-          <div className="brand-icon">🐟</div>
+          <div className="brand-icon brand-icon-logo"><BrandMark /></div>
           <div><h2>AquaTimbang</h2><span>Fish Price Transparency</span></div>
         </div>
         {done ? (
