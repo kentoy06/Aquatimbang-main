@@ -1199,15 +1199,7 @@ table th {
 }
 
 /* Respect "reduce motion" settings on phones and computers. */
-@media (prefers-reduced-motion: reduce) {
-  .login-card,
-  .hero-content > *,
-  .hero-cards,
-  .hero-side-label,
-  .landing-panel {
-    animation: none !important;
-  }
-}
+
 
 /* =========================================================
    SLIDE-UP TRANSITIONS (bottom to top)
@@ -1234,4 +1226,22 @@ table th {
 
 .landing-panel {
   animation: slide-up 0.6s cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+/* Devices set to reduce motion (e.g. Windows "Animation effects" off)
+   still get a gentle fade-in, just without the sliding movement. */
+@keyframes fade-in-only {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .login-card,
+  .hero-content > *,
+  .hero-cards,
+  .hero-side-label,
+  .landing-panel {
+    animation-name: fade-in-only !important;
+    animation-duration: 0.5s !important;
+  }
 }
