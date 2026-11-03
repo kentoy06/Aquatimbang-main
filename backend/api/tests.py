@@ -1605,3 +1605,20 @@ class OwnProfilePhotoTests(TestCase):
         removed = self.client.delete("/api/auth/me/photo/")
         self.assertFalse(removed.data["has_photo"])
         self.assertEqual(self.client.get("/api/auth/me/photo/").status_code, 404)
+
+
+class LoadFishSpeciesCommandTests(TestCase):
+    def test_adds_missing_species_and_keeps_existing_ones(self):
+        from io import StringIO
+        from django.core.management import call_command
+        FishSpecies.objects.create(name="bangus", scientific_name="", description="Our own note")
+        FishSpecies.objects.create(name="Tilapia", scientific_name="Custom name", description="Mine")
+        call_command("load_fish_species", stdout=StringIO())
+        call_command("load_fish_species", stdout=StringIO())  # running twice adds nothing more
+        self.assertEqual(FishSpecies.objects.filter(name__iexact="bangus").count(), 1)
+        bangus = FishSpecies.objects.get(name__iexact="bangus")
+        self.assertEqual(bangus.scientific_name, "Chanos chanos")
+        self.assertEqual(bangus.description, "Our own note")
+        self.assertEqual(FishSpecies.objects.get(name="Tilapia").scientific_name, "Custom name")
+        self.assertTrue(FishSpecies.objects.filter(name="Galunggong", scientific_name="Decapterus macrosoma").exists())
+        self.assertEqual(FishSpecies.objects.count(), 23)
