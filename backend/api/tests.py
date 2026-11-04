@@ -1643,4 +1643,6 @@ class LoadFishPhotosTests(TestCase):
         self.assertEqual(bangus.photo.name, first)  # not replaced without --replace-photos
         self.assertTrue(FishSpecies.objects.get(name="Bisugo").photo)
         self.assertTrue(FishSpecies.objects.get(name="Alumahan").photo)
-        self.assertFalse(FishSpecies.objects.get(name="Hito").photo)
+        self.assertTrue(FishSpecies.objects.get(name="Dalagang Bukid").photo)  # multi-word name
+        self.assertTrue(FishSpecies.objects.get(name="Lapu-lapu").photo)  # hyphenated name
+        self.assertFalse(FishSpecies.objects.get(name="Galunggong").photo)
