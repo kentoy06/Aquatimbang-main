@@ -7,11 +7,26 @@ Fish already in AquaTimbang (same name, any capitalisation) are skipped;
 only a blank scientific name or description is filled in. Nothing is
 deleted or renamed. Check the local names with DVFM / BFAR and edit them
 in Fish Species if your markets use different ones.
+
+Photos in api/fish_photos/ (named after the fish, e.g. bangus.jpg or
+lapu-lapu.jpg) are attached to fish that have no photo yet. Add
+--replace-photos to replace photos that are already there.
 """
+from pathlib import Path
+
+from django.core.files import File
 from django.core.management.base import BaseCommand
 from django.db import transaction
 
 from api.models import FishSpecies
+
+PHOTO_DIR = Path(__file__).resolve().parents[2] / "fish_photos"
+PHOTO_TYPES = {".jpg", ".jpeg", ".png"}
+
+
+def simple(name):
+    """'Lapu-lapu', 'lapu_lapu' and 'LAPULAPU' all become 'lapulapu'."""
+    return "".join(ch for ch in name.lower() if ch.isalnum())
 
 # (name, scientific name, description)
 STARTER_SPECIES = [
@@ -42,7 +57,10 @@ STARTER_SPECIES = [
 
 
 class Command(BaseCommand):
-    help = "Add a starter list of common Philippine market fish (skips fish already added)."
+    help = "Add a starter list of common Philippine market fish and their photos (skips what is already there)."
+
+    def add_arguments(self, parser):
+        parser.add_argument("--replace-photos", action="store_true", help="Replace photos that are already set.")
 
     @transaction.atomic
     def handle(self, *args, **options):
@@ -72,4 +90,29 @@ class Command(BaseCommand):
             self.stdout.write(f"Filled in missing details for {len(filled)}: {', '.join(filled)}")
         if skipped:
             self.stdout.write(f"Already complete, left unchanged: {', '.join(skipped)}")
-        self.stdout.write("Add photos in Fish Species → Edit → Photo.")
+        self.attach_photos(options.get("replace_photos", False))
+
+    def attach_photos(self, replace):
+        if not PHOTO_DIR.is_dir():
+            return
+        species = {simple(fish.name): fish for fish in FishSpecies.objects.all()}
+        attached, kept, unknown = [], [], []
+        for path in sorted(PHOTO_DIR.iterdir()):
+            if path.suffix.lower() not in PHOTO_TYPES:
+                continue
+            fish = species.get(simple(path.stem))
+            if fish is None:
+                unknown.append(path.name)
+                continue
+            if fish.photo and not replace:
+                kept.append(fish.name)
+                continue
+            with path.open("rb") as handle:
+                fish.photo.save(f"{simple(fish.name)}{path.suffix.lower()}", File(handle), save=False)
+            fish.save(update_fields=["photo", "updated_at"])
+            attached.append(fish.name)
+        self.stdout.write(self.style.SUCCESS(f"Photos added: {', '.join(attached) or 'none'}"))
+        if kept:
+            self.stdout.write(f"Already had a photo (use --replace-photos to change): {', '.join(kept)}")
+        if unknown:
+            self.stdout.write(self.style.WARNING(f"No fish with these names: {', '.join(unknown)}"))

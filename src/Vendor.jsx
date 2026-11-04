@@ -1,3 +1,4 @@
+import { BrandMark } from "./components/BrandLogo.jsx";
 import React, { useEffect, useState, lazy, Suspense } from "react";
 import "./App.css";
 import "./Vendor.css";
@@ -323,7 +324,7 @@ useEffect(() => {
 
       <aside className={`sidebar${menuOpen ? " open" : ""}`}>
         <div className="brand">
-          <div className="brand-icon">🐟</div>
+          <div className="brand-icon brand-icon-logo"><BrandMark /></div>
           <div>
             <h2>AquaTimbang</h2>
             <span>Fish Price Transparency</span>

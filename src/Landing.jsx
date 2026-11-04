@@ -1,3 +1,4 @@
+import { BrandMark } from "./components/BrandLogo.jsx";
 import React, { useEffect, useState } from "react";
 import "./App.css";
 import "./Landing.css";
@@ -114,7 +115,7 @@ function Landing({ onGetStarted, onRegister }) {
 
         <header className="landing-nav">
           <button className="landing-brand" onClick={() => show("home")}>
-            <span className="landing-logo">A</span>
+            <span className="landing-logo landing-logo-img"><BrandMark /></span>
             <span className="landing-brand-name">AquaTimbang</span>
           </button>
           <nav className="landing-links" aria-label="Main">
