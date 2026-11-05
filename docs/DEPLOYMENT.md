@@ -210,3 +210,24 @@ After upgrading PythonAnywhere to a paid plan:
 
 3. Run `python manage.py migrate` and `python manage.py setup_aquatimbang`
    again (the MySQL database starts empty), then **Reload** the web app.
+
+## Demo data (before the DVMF price history arrives)
+
+To show the forecast and "Why is the price changing?" without real data, load
+about two years of **simulated** prices and matching weather, fuel and holiday
+records for Cebu City:
+
+```
+workon aquatimbang && cd ~/Aquatimbang-main/backend
+python manage.py load_fish_species      # if the fish list is empty
+python manage.py load_demo_data
+```
+
+- Demo prices have the source `SIMULATED DEMO DATA`, and demo external factors
+  start with `[Demo]`, so they are easy to recognise. Tell the panel the data is
+  simulated.
+- Days that already have a real price or external factor are skipped.
+- Before importing the real DVMF history, remove all demo data:
+  `python manage.py load_demo_data --clear`. Real records are never touched.
+- The first forecast for each fish takes up to a minute. Open each one once
+  before the demo; after that the saved forecast loads instantly.
