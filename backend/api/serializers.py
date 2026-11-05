@@ -1137,7 +1137,7 @@ class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
             )
         return value
 
-from .models import ExternalFactor, ForecastRun
+from .models import ClosedFishingSeason, ExternalFactor, ForecastRun
 
 
 class ExternalFactorSerializer(serializers.ModelSerializer):
@@ -1158,6 +1158,33 @@ class ExternalFactorSerializer(serializers.ModelSerializer):
         if value is not None and value <= 0:
             raise serializers.ValidationError("Fuel price must be greater than zero.")
         return value
+
+
+class ClosedFishingSeasonSerializer(serializers.ModelSerializer):
+    """A yearly BFAR closed fishing season and the fish it covers."""
+
+    species_names = serializers.SlugRelatedField(source="species", many=True, read_only=True, slug_field="name")
+
+    class Meta:
+        model = ClosedFishingSeason
+        fields = [
+            "id", "name", "area", "start_month", "start_day", "end_month", "end_day",
+            "species", "species_names", "source", "notes", "is_active", "created_at", "updated_at",
+        ]
+        read_only_fields = ["id", "species_names", "created_at", "updated_at"]
+
+    def validate(self, attrs):
+        import calendar
+        for prefix in ("start", "end"):
+            month = attrs.get(f"{prefix}_month", getattr(self.instance, f"{prefix}_month", None))
+            day = attrs.get(f"{prefix}_day", getattr(self.instance, f"{prefix}_day", None))
+            if month is None or not 1 <= month <= 12:
+                raise serializers.ValidationError({f"{prefix}_month": "Choose a month from 1 to 12."})
+            # February 29 is allowed so leap-year dates can be entered.
+            last_day = 29 if month == 2 else calendar.monthrange(2023, month)[1]
+            if day is None or not 1 <= day <= last_day:
+                raise serializers.ValidationError({f"{prefix}_day": f"Choose a day from 1 to {last_day}."})
+        return attrs
 
 
 class ForecastRunSerializer(serializers.ModelSerializer):

@@ -900,6 +900,51 @@ class ExternalFactor(models.Model):
         return f"{self.date} - {self.get_weather_display()}"
 
 
+class ClosedFishingSeason(models.Model):
+    """
+    A yearly closed fishing season set by BFAR / DA (for example the
+    Visayan Sea, Nov 15 - Feb 15). Catching the listed species is banned
+    in that area so fish can spawn, which usually lowers supply and
+    raises market prices. Used to explain price changes.
+    """
+
+    name = models.CharField(max_length=120)
+    area = models.CharField(max_length=120)
+    # Month and day, so the same season repeats every year. A season may
+    # cross the new year (start in November, end in February).
+    start_month = models.PositiveSmallIntegerField()
+    start_day = models.PositiveSmallIntegerField()
+    end_month = models.PositiveSmallIntegerField()
+    end_day = models.PositiveSmallIntegerField()
+    # Species covered by the ban. Empty means it is shown for every fish.
+    species = models.ManyToManyField("FishSpecies", blank=True, related_name="closed_seasons")
+    # Legal basis or source, e.g. "BFAR Fisheries Administrative Order 167-3".
+    source = models.CharField(max_length=200, blank=True)
+    notes = models.CharField(max_length=300, blank=True)
+    is_active = models.BooleanField(default=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["start_month", "start_day", "name"]
+
+    def __str__(self):
+        return f"{self.name} ({self.area})"
+
+    def _key(self, month, day):
+        return month * 100 + day
+
+    def covers(self, day):
+        """True when the date falls inside the season (in any year)."""
+        start = self._key(self.start_month, self.start_day)
+        end = self._key(self.end_month, self.end_day)
+        today = self._key(day.month, day.day)
+        if start <= end:
+            return start <= today <= end
+        return today >= start or today <= end
+
+
 class ForecastRun(models.Model):
     """
     One generated forecast for a fish species (and optionally a
