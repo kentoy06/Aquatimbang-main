@@ -13,6 +13,7 @@ import { API_BASE_URL } from "./api/config.js";
 import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
+import ProfitHelper from "./components/ProfitHelper.jsx";
 import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
 import { AnnouncementBanner, useAnnouncements } from "./components/Announcements.jsx";
@@ -1194,6 +1195,14 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], myFish = []
           </div>)}</div>
         </div>
       </div>
+      <ProfitHelper
+        t={t}
+        speciesId={selectedSpecies}
+        speciesName={speciesName}
+        municipalityId={latest?.municipality ? String(latest.municipality) : ""}
+        municipality={municipality}
+        lguPrice={unit}
+      />
     </>
   );
 }
