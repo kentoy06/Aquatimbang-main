@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { deleteExternalFactor, listExternalFactors, saveExternalFactor } from "../api/forecast.js";
+import ClosedSeasonsSection from "./ClosedSeasonsSection.jsx";
 
 const peso = (n) =>
   n === null || n === undefined || n === "" ? "—" : `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -85,7 +86,7 @@ function ExternalFactorsPage({ notify }) {
   return (
     <>
       <div className="page-title">
-        <div><h2>External Factors</h2><p>Log fuel prices, weather, and holidays used by the forecasting model.</p></div>
+        <div><h2>External Factors</h2><p>Log fuel prices, weather, holidays and closed fishing seasons used by the forecast and price explanations.</p></div>
       </div>
 
       <div className={loggedRecently >= 15 ? "info-box" : "warn-box"} style={{ marginBottom: 16 }}>
@@ -160,6 +161,8 @@ function ExternalFactorsPage({ notify }) {
           </div>
         </div>
       </div>
+
+      <ClosedSeasonsSection notify={notify} />
     </>
   );
 }

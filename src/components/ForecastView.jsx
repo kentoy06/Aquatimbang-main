@@ -11,6 +11,7 @@ import {
   YAxis,
 } from "recharts";
 import { describeFactorEffect, FACTOR_LABELS, getForecast } from "../api/forecast.js";
+import PriceExplanation from "./PriceExplanation.jsx";
 import "./Forecast.css";
 
 const peso = (n) =>
@@ -152,6 +153,8 @@ function ForecastView({ species = [], municipalities = [], defaultMunicipalityId
           <p>Forecasts show the most likely price and a 95% range. Real prices can fall outside it during unusual market events.</p>
         </div>
       </div>
+
+      <PriceExplanation speciesId={speciesId} municipalityId={municipalityId} />
 
       {loading ? (
         <div className="panel forecast-state">

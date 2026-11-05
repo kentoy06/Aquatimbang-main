@@ -4,7 +4,7 @@ from django.urls import include, path
 # DefaultRouter automatically generates REST API routes
 # for registered ViewSets.
 from rest_framework.routers import DefaultRouter
-from .views import ActivityLogViewSet, VendorPriceSuggestionViewSet, ExternalFactorViewSet, price_forecast, forecast_history
+from .views import ActivityLogViewSet, VendorPriceSuggestionViewSet, ExternalFactorViewSet, price_forecast, forecast_history, ClosedFishingSeasonViewSet, price_explanation
 
 # Import AquaTimbang API views.
 from .views import (
@@ -130,6 +130,12 @@ router.register(
 )
 
 router.register(
+    r"closed-seasons",
+    ClosedFishingSeasonViewSet,
+    basename="closed-season",
+)
+
+router.register(
     r"vendor-suggestions",
     VendorPriceSuggestionViewSet,
     basename="vendor-suggestion",
@@ -202,6 +208,13 @@ urlpatterns = [
         "forecasts/",
         price_forecast,
         name="price-forecast"
+    ),
+
+    # Why the price changed this week: ?species=<id>&municipality=<id>
+    path(
+        "price-explanation/",
+        price_explanation,
+        name="price-explanation"
     ),
 
     # Recently generated forecasts.

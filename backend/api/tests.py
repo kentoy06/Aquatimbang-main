@@ -1646,3 +1646,113 @@ class LoadFishPhotosTests(TestCase):
         self.assertTrue(FishSpecies.objects.get(name="Dalagang Bukid").photo)  # multi-word name
         self.assertTrue(FishSpecies.objects.get(name="Lapu-lapu").photo)  # hyphenated name
         self.assertFalse(FishSpecies.objects.get(name="Galunggong").photo)
+
+
+class PriceExplanationTests(TestCase):
+    """Closed fishing seasons and the "Why is the price changing?" explanation."""
+
+    @classmethod
+    def setUpTestData(cls):
+        from .models import ClosedFishingSeason
+        cls.municipality = Municipality.objects.create(name="Cebu City", province="Cebu")
+        cls.fish = FishSpecies.objects.create(name="Tamban")
+        cls.other = FishSpecies.objects.create(name="Tilapia")
+        roles = {name: Role.objects.get_or_create(name=name)[0] for name in ("Fish Vendor", "LGU Officer")}
+        cls.vendor = User.objects.create_user("px_vendor", "pxv@example.com", "TestPass123!")
+        UserProfile.objects.create(user=cls.vendor, role=roles["Fish Vendor"], municipality=cls.municipality, account_status="approved", is_active=True)
+        cls.officer = User.objects.create_user("px_officer", "pxo@example.com", "TestPass123!")
+        UserProfile.objects.create(user=cls.officer, role=roles["LGU Officer"], municipality=cls.municipality, account_status="approved", is_active=True)
+
+        # Price jumps from ₱150 to ₱180 in the last week, after storms and a fuel increase.
+        cls.today = datetime.date(2026, 11, 20)
+        for back in range(20, -1, -1):
+            day = cls.today - datetime.timedelta(days=back)
+            PriceRecord.objects.create(
+                fish_species=cls.fish, municipality=cls.municipality,
+                price_per_kg=Decimal("180.00") if back <= 3 else Decimal("150.00"),
+                recorded_date=day, status="published",
+            )
+            PriceRecord.objects.create(
+                fish_species=cls.other, municipality=cls.municipality,
+                price_per_kg=Decimal("120.00"), recorded_date=day, status="published",
+            )
+        ExternalFactor.objects.create(date=cls.today - datetime.timedelta(days=30), fuel_price=Decimal("60.00"), weather="sunny")
+        ExternalFactor.objects.create(date=cls.today - datetime.timedelta(days=2), fuel_price=Decimal("65.00"), weather="stormy")
+        ExternalFactor.objects.create(date=cls.today - datetime.timedelta(days=1), weather="stormy")
+        cls.season = ClosedFishingSeason.objects.get(name="Visayan Sea closed season")  # added by the migration
+        cls.season.species.add(cls.fish)
+
+    def client_for(self, user):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=user)[0].key}")
+        return client
+
+    def test_season_dates_cross_the_new_year(self):
+        # Visayan Sea: Nov 15 - Feb 15.
+        self.assertTrue(self.season.covers(datetime.date(2026, 12, 25)))
+        self.assertTrue(self.season.covers(datetime.date(2027, 2, 15)))
+        self.assertTrue(self.season.covers(datetime.date(2026, 11, 15)))
+        self.assertFalse(self.season.covers(datetime.date(2026, 11, 14)))
+        self.assertFalse(self.season.covers(datetime.date(2027, 6, 1)))
+
+    def test_rising_price_is_explained(self):
+        from .explanations import explain_price
+        result = explain_price(self.fish, self.municipality)
+        self.assertEqual(result["direction"], "up")
+        self.assertEqual(result["change_pct"], 20.0)
+        kinds = {r["kind"]: r for r in result["reasons"]}
+        self.assertTrue(kinds["season"]["matches"])
+        self.assertIn("Visayan Sea", kinds["season"]["title"])
+        self.assertIn("2 stormy days", kinds["weather"]["detail"])
+        self.assertEqual(kinds["fuel"]["effect"], "up")
+        self.assertIn("Likely reasons", result["summary"])
+
+    def test_steady_price_and_fish_outside_the_season(self):
+        from .explanations import explain_price
+        result = explain_price(self.other, self.municipality)
+        self.assertEqual(result["direction"], "steady")
+        self.assertNotIn("season", {r["kind"] for r in result["reasons"]})
+        self.assertFalse(any(r["matches"] for r in result["reasons"]))
+
+    def test_not_enough_data(self):
+        from .explanations import explain_price
+        empty = FishSpecies.objects.create(name="Lapu-lapu")
+        self.assertFalse(explain_price(empty, self.municipality)["enough_data"])
+
+    def test_explanation_api(self):
+        response = self.client_for(self.vendor).get(
+            "/api/price-explanation/", {"species": self.fish.pk, "municipality": self.municipality.pk}
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["direction"], "up")
+        bad = self.client_for(self.vendor).get("/api/price-explanation/", {"species": "x"})
+        self.assertEqual(bad.status_code, 400)
+        self.assertEqual(APIClient().get("/api/price-explanation/", {"species": self.fish.pk}).status_code, 401)
+
+    def test_only_lgu_and_admin_can_change_seasons(self):
+        payload = {
+            "name": "Test closed season", "area": "Camotes Sea", "start_month": 12, "start_day": 1,
+            "end_month": 2, "end_day": 28, "species": [self.fish.pk],
+        }
+        vendor = self.client_for(self.vendor)
+        self.assertEqual(vendor.get("/api/closed-seasons/").status_code, 200)
+        self.assertEqual(vendor.post("/api/closed-seasons/", payload, format="json").status_code, 403)
+        officer = self.client_for(self.officer)
+        created = officer.post("/api/closed-seasons/", payload, format="json")
+        self.assertEqual(created.status_code, 201)
+        self.assertEqual(created.data["species_names"], ["Tamban"])
+        bad = officer.post("/api/closed-seasons/", {**payload, "end_month": 2, "end_day": 31}, format="json")
+        self.assertEqual(bad.status_code, 400)
+
+    def test_fish_loader_links_seasons_but_does_not_restore_deleted_ones(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from .models import ClosedFishingSeason
+        ClosedFishingSeason.objects.filter(name="Davao Gulf closed season").delete()
+        import tempfile
+        with self.settings(MEDIA_ROOT=tempfile.mkdtemp()):
+            call_command("load_fish_species", stdout=StringIO())
+        galunggong = FishSpecies.objects.get(name="Galunggong")
+        palawan = ClosedFishingSeason.objects.get(name="Galunggong closed season")
+        self.assertIn(galunggong, palawan.species.all())
+        self.assertFalse(ClosedFishingSeason.objects.filter(name="Davao Gulf closed season").exists())

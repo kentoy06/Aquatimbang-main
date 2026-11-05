@@ -2039,8 +2039,9 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
 # PREDICTIVE ANALYTICS (SARIMAX) — EXTERNAL FACTORS AND FORECASTS
 # ============================================================
 from .forecasting import NotEnoughData, data_signature, daily_series, generate_forecast
-from .models import ExternalFactor, ForecastRun, Prediction
-from .serializers import ExternalFactorSerializer, ForecastRunSerializer
+from .models import ClosedFishingSeason, ExternalFactor, ForecastRun, Prediction
+from .serializers import ClosedFishingSeasonSerializer, ExternalFactorSerializer, ForecastRunSerializer
+from .explanations import explain_price
 
 # Longest forecast a user can request, in days.
 MAX_FORECAST_HORIZON = 30
@@ -2125,6 +2126,71 @@ class ExternalFactorViewSet(viewsets.ModelViewSet):
     def perform_destroy(self, instance):
         log_activity(self.request.user, "deleted", "ExternalFactor", instance.pk, str(instance.date), self._details(instance))
         instance.delete()
+
+
+class ClosedFishingSeasonViewSet(viewsets.ModelViewSet):
+    """
+    BFAR closed fishing seasons. Every approved user can read them;
+    LGU Officers and Administrators can add, edit and delete them.
+    """
+
+    serializer_class = ClosedFishingSeasonSerializer
+    authentication_classes = [ExpiringTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    queryset = ClosedFishingSeason.objects.prefetch_related("species").all()
+
+    def initial(self, request, *args, **kwargs):
+        super().initial(request, *args, **kwargs)
+        role = approved_role(request.user)
+        if role is None:
+            raise PermissionDenied("An approved account is required.")
+        if request.method not in ("GET", "HEAD", "OPTIONS") and role not in ("LGU Officer", "Administrator"):
+            raise PermissionDenied("Only LGU Officers and Administrators can change closed fishing seasons.")
+
+    def _details(self, season):
+        return {
+            "area": season.area,
+            "dates": f"{season.start_month}/{season.start_day} - {season.end_month}/{season.end_day}",
+            "species": [fish.name for fish in season.species.all()],
+            "is_active": season.is_active,
+        }
+
+    @transaction.atomic
+    def perform_create(self, serializer):
+        season = serializer.save()
+        log_activity(self.request.user, "created", "ClosedFishingSeason", season.pk, season.name, self._details(season))
+
+    @transaction.atomic
+    def perform_update(self, serializer):
+        season = serializer.save()
+        log_activity(self.request.user, "updated", "ClosedFishingSeason", season.pk, season.name, self._details(season))
+
+    @transaction.atomic
+    def perform_destroy(self, instance):
+        log_activity(self.request.user, "deleted", "ClosedFishingSeason", instance.pk, instance.name, self._details(instance))
+        instance.delete()
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def price_explanation(request):
+    """
+    Explain this week's price change for ?species=<id>[&municipality=<id>]
+    using weather, fuel, holidays, closed seasons and monthly patterns.
+    """
+    if approved_role(request.user) is None:
+        return Response({"message": "An approved account is required."}, status=status.HTTP_403_FORBIDDEN)
+    try:
+        species = FishSpecies.objects.get(pk=int(request.query_params.get("species", "")))
+    except (ValueError, FishSpecies.DoesNotExist):
+        return Response({"message": "Choose a valid fish species."}, status=status.HTTP_400_BAD_REQUEST)
+    municipality = None
+    if request.query_params.get("municipality"):
+        try:
+            municipality = Municipality.objects.get(pk=int(request.query_params["municipality"]))
+        except (ValueError, Municipality.DoesNotExist):
+            return Response({"message": "Choose a valid municipality."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(explain_price(species, municipality))
 
 
 def forecast_response(run, species_id, municipality_id, cached):

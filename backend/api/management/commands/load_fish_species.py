@@ -92,6 +92,11 @@ class Command(BaseCommand):
             self.stdout.write(f"Already complete, left unchanged: {', '.join(skipped)}")
         self.attach_photos(options.get("replace_photos", False))
 
+        # Link newly added fish to the default BFAR closed seasons.
+        from api.closed_seasons import seed_closed_seasons
+        from api.models import ClosedFishingSeason
+        seed_closed_seasons(ClosedFishingSeason, FishSpecies, create=False)
+
     def attach_photos(self, replace):
         if not PHOTO_DIR.is_dir():
             return

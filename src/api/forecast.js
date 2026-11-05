@@ -60,3 +60,39 @@ export function describeFactorEffect(name, value) {
   if (name === "fuel_price") return `Each ₱1/liter rise in fuel ${direction} the price by about ${amount}.`;
   return `${FACTOR_LABELS[name] || name} ${direction} the price by about ${amount}.`;
 }
+
+// GET /price-explanation/?species=&municipality= — why this week's price changed.
+export async function getPriceExplanation({ speciesId, municipalityId }) {
+  const params = new URLSearchParams({ species: speciesId });
+  if (municipalityId) params.set("municipality", municipalityId);
+  return readJson(await fetch(apiUrl(`/price-explanation/?${params}`), { headers: authHeaders() }));
+}
+
+// BFAR closed fishing seasons.
+export const listClosedSeasons = () => fetchAll("/closed-seasons/");
+export const listFishSpecies = () => fetchAll("/fish-species/");
+
+export async function saveClosedSeason(season) {
+  const url = season.id ? apiUrl(`/closed-seasons/${season.id}/`) : apiUrl("/closed-seasons/");
+  return readJson(await fetch(url, {
+    method: season.id ? "PATCH" : "POST",
+    headers: authHeaders({ "Content-Type": "application/json" }),
+    body: JSON.stringify({
+      name: season.name,
+      area: season.area,
+      start_month: Number(season.start_month),
+      start_day: Number(season.start_day),
+      end_month: Number(season.end_month),
+      end_day: Number(season.end_day),
+      species: season.species.map(Number),
+      source: season.source || "",
+      notes: season.notes || "",
+      is_active: season.is_active,
+    }),
+  }));
+}
+
+export async function deleteClosedSeason(id) {
+  const response = await fetch(apiUrl(`/closed-seasons/${id}/`), { method: "DELETE", headers: authHeaders() });
+  if (!response.ok) await readJson(response);
+}
