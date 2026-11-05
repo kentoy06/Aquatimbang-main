@@ -1756,3 +1756,42 @@ class PriceExplanationTests(TestCase):
         palawan = ClosedFishingSeason.objects.get(name="Galunggong closed season")
         self.assertIn(galunggong, palawan.species.all())
         self.assertFalse(ClosedFishingSeason.objects.filter(name="Davao Gulf closed season").exists())
+
+
+class LoadDemoDataTests(TestCase):
+    """load_demo_data adds clearly labelled simulated data and removes only that."""
+
+    def test_load_and_clear_keep_real_data(self):
+        from io import StringIO
+        from django.core.management import call_command
+        cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        bangus = FishSpecies.objects.create(name="Bangus")
+        FishSpecies.objects.create(name="Tamban")
+        today = timezone.localdate()
+        real_day = today - datetime.timedelta(days=5)
+        real = PriceRecord.objects.create(
+            fish_species=bangus, municipality=cebu, price_per_kg=Decimal("199.00"),
+            recorded_date=real_day, status="published", source="LGU",
+        )
+        ExternalFactor.objects.create(date=real_day, weather="sunny", notes="Logged by LGU")
+
+        call_command("load_demo_data", "--days", "90", stdout=StringIO())
+        demo = PriceRecord.objects.filter(source="SIMULATED DEMO DATA")
+        self.assertEqual(demo.count(), 90 * 2 - 1)  # the real Bangus day is skipped
+        self.assertTrue(all(p.status == "published" and p.price_per_kg > 0 for p in demo))
+        self.assertEqual(ExternalFactor.objects.filter(notes__startswith="[Demo]").count(), 89)
+        real.refresh_from_db()
+        self.assertEqual(real.price_per_kg, Decimal("199.00"))
+
+        call_command("load_demo_data", "--clear", stdout=StringIO())
+        self.assertFalse(PriceRecord.objects.filter(source="SIMULATED DEMO DATA").exists())
+        self.assertFalse(ExternalFactor.objects.filter(notes__startswith="[Demo]").exists())
+        self.assertTrue(PriceRecord.objects.filter(pk=real.pk).exists())
+        self.assertTrue(ExternalFactor.objects.filter(notes="Logged by LGU").exists())
+
+    def test_needs_an_existing_municipality(self):
+        from io import StringIO
+        from django.core.management import call_command
+        from django.core.management.base import CommandError
+        with self.assertRaises(CommandError):
+            call_command("load_demo_data", "--municipality", "Atlantis", stdout=StringIO())

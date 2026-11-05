@@ -140,9 +140,12 @@ def holiday_reasons(ref, coefficients):
     ).order_by("date")
     if not days:
         return []
-    names = ", ".join(
-        f"{_long(d.date)}{f' ({d.notes})' if d.notes else ''}" for d in days[:3]
-    )
+    def label(day):
+        # Demo records start with "[Demo]"; only the holiday name is shown.
+        note = day.notes.removeprefix("[Demo]").strip()
+        return f"{_long(day.date)}{f' ({note})' if note else ''}"
+
+    names = ", ".join(label(d) for d in days[:3])
     return [_reason(
         "holiday", "🎉", "up", "Holiday or fiesta",
         f"Holiday{'s' if len(days) > 1 else ''} on {names}. More families buy fish for celebrations, "
