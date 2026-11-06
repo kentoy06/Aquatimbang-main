@@ -1302,3 +1302,41 @@ class MarketSerializer(serializers.ModelSerializer):
         if duplicate.exists():
             raise serializers.ValidationError({"name": "This market is already listed for that municipality."})
         return attrs
+
+
+from .models import FishScanPhoto
+
+
+class FishScanPhotoSerializer(serializers.ModelSerializer):
+    """A labelled fish photo for training the fish scanner."""
+
+    fish_name = serializers.CharField(source="fish_species.name", read_only=True)
+    uploaded_by_name = serializers.SerializerMethodField()
+    municipality_name = serializers.CharField(source="municipality.name", read_only=True, allow_null=True)
+    reviewed_by_name = serializers.CharField(source="reviewed_by.username", read_only=True, allow_null=True)
+    image_url = serializers.SerializerMethodField()
+
+    class Meta:
+        model = FishScanPhoto
+        fields = [
+            "id", "fish_species", "fish_name", "status", "uploaded_by_name", "municipality_name",
+            "review_note", "reviewed_by_name", "reviewed_at", "created_at", "image_url",
+        ]
+        read_only_fields = [
+            "id", "fish_name", "status", "uploaded_by_name", "municipality_name",
+            "review_note", "reviewed_by_name", "reviewed_at", "created_at", "image_url",
+        ]
+
+    def get_uploaded_by_name(self, scan):
+        user = scan.uploaded_by
+        if user is None:
+            return "Deleted account"
+        return user.get_full_name() or user.username
+
+    def get_image_url(self, scan):
+        return f"/fish-scans/{scan.pk}/image/"
+
+    def validate_fish_species(self, fish):
+        if not fish.is_active:
+            raise serializers.ValidationError("This fish species is no longer active.")
+        return fish

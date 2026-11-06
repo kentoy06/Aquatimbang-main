@@ -1795,3 +1795,122 @@ class LoadDemoDataTests(TestCase):
         from django.core.management.base import CommandError
         with self.assertRaises(CommandError):
             call_command("load_demo_data", "--municipality", "Atlantis", stdout=StringIO())
+
+
+class FishScanPhotoTests(TestCase):
+    """Fish scanner phase 1: collecting and reviewing labelled fish photos."""
+
+    @classmethod
+    def setUpTestData(cls):
+        cls.municipality = Municipality.objects.create(name="Cebu City", province="Cebu")
+        cls.galunggong = FishSpecies.objects.create(name="Galunggong")
+        cls.bangus = FishSpecies.objects.create(name="Bangus")
+        roles = {name: Role.objects.get_or_create(name=name)[0] for name in ("Fish Vendor", "LGU Officer")}
+
+        def make(username, role):
+            user = User.objects.create_user(username, f"{username}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=user, role=roles[role], municipality=cls.municipality, account_status="approved", is_active=True)
+            return user
+
+        cls.vendor = make("scan_vendor", "Fish Vendor")
+        cls.other_vendor = make("scan_vendor2", "Fish Vendor")
+        cls.officer = make("scan_officer", "LGU Officer")
+
+    def setUp(self):
+        import tempfile
+        media = self.settings(MEDIA_ROOT=tempfile.mkdtemp())
+        media.enable()
+        self.addCleanup(media.disable)
+
+    def client_for(self, user):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=user)[0].key}")
+        return client
+
+    def photo(self, size=(1600, 1200)):
+        from io import BytesIO
+        from PIL import Image
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        buffer = BytesIO()
+        exif = Image.Exif()
+        exif[0x010F] = "PhoneMaker"  # any EXIF tag; real phones also add GPS here
+        Image.new("RGB", size, (40, 90, 160)).save(buffer, "JPEG", exif=exif)
+        return SimpleUploadedFile("fish.jpg", buffer.getvalue(), content_type="image/jpeg")
+
+    def upload(self, user, fish=None):
+        return self.client_for(user).post(
+            "/api/fish-scans/", {"image": self.photo(), "fish_species": (fish or self.galunggong).pk}, format="multipart"
+        )
+
+    def test_upload_is_shrunk_and_has_no_exif(self):
+        from PIL import Image
+        from .models import FishScanPhoto
+        response = self.upload(self.vendor)
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["status"], "pending")
+        scan = FishScanPhoto.objects.get(pk=response.data["id"])
+        self.assertEqual(scan.municipality, self.municipality)
+        with Image.open(scan.image.path) as image:
+            self.assertLessEqual(max(image.size), 640)
+            self.assertEqual(len(image.getexif()), 0)
+
+    def test_rejects_non_images(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        bad = SimpleUploadedFile("fish.jpg", b"not an image", content_type="image/jpeg")
+        response = self.client_for(self.vendor).post(
+            "/api/fish-scans/", {"image": bad, "fish_species": self.galunggong.pk}, format="multipart"
+        )
+        self.assertEqual(response.status_code, 400)
+
+    def test_vendors_only_see_their_own_photos(self):
+        mine = self.upload(self.vendor).data["id"]
+        theirs = self.upload(self.other_vendor).data["id"]
+        listed = self.client_for(self.vendor).get("/api/fish-scans/").data
+        rows = listed["results"] if isinstance(listed, dict) else listed
+        self.assertEqual([r["id"] for r in rows], [mine])
+        self.assertEqual(self.client_for(self.vendor).get(f"/api/fish-scans/{theirs}/image/").status_code, 404)
+        self.assertEqual(self.client_for(self.vendor).get(f"/api/fish-scans/{mine}/image/").status_code, 200)
+        officer_rows = self.client_for(self.officer).get("/api/fish-scans/").data
+        officer_rows = officer_rows["results"] if isinstance(officer_rows, dict) else officer_rows
+        self.assertEqual(len(officer_rows), 2)
+
+    def test_lgu_reviews_and_fixes_the_fish_name(self):
+        scan_id = self.upload(self.vendor).data["id"]
+        self.assertEqual(
+            self.client_for(self.vendor).post(f"/api/fish-scans/{scan_id}/review/", {"status": "approved"}).status_code, 403
+        )
+        response = self.client_for(self.officer).post(
+            f"/api/fish-scans/{scan_id}/review/", {"status": "approved", "fish_species": self.bangus.pk}, format="json"
+        )
+        self.assertEqual(response.status_code, 200)
+        self.assertEqual(response.data["fish_name"], "Bangus")
+        self.assertEqual(response.data["status"], "approved")
+        # Once reviewed, the vendor can no longer delete it; the LGU can.
+        self.assertEqual(self.client_for(self.vendor).delete(f"/api/fish-scans/{scan_id}/").status_code, 403)
+        self.assertEqual(self.client_for(self.officer).delete(f"/api/fish-scans/{scan_id}/").status_code, 204)
+
+    def test_summary_and_export(self):
+        import zipfile
+        from io import BytesIO
+        first = self.upload(self.vendor).data["id"]
+        self.upload(self.vendor, self.bangus)
+        self.client_for(self.officer).post(f"/api/fish-scans/{first}/review/", {"status": "approved"}, format="json")
+        summary = self.client_for(self.vendor).get("/api/fish-scans/summary/").data
+        counts = {row["name"]: (row["approved"], row["pending"]) for row in summary["species"]}
+        self.assertEqual(counts["Galunggong"], (1, 0))
+        self.assertEqual(counts["Bangus"], (0, 1))
+        self.assertEqual(summary["my_photos"], 2)
+        self.assertEqual(summary["target"], 30)
+
+        self.assertEqual(self.client_for(self.vendor).get("/api/fish-scans/export/").status_code, 403)
+        response = self.client_for(self.officer).get("/api/fish-scans/export/")
+        self.assertEqual(response.status_code, 200)
+        archive = zipfile.ZipFile(BytesIO(b"".join(response.streaming_content)))
+        self.assertEqual(archive.namelist(), [f"Galunggong/photo_{first}.jpg"])
+
+    def test_daily_limit(self):
+        from unittest import mock
+        with mock.patch("api.views.SCAN_DAILY_LIMIT", 2):
+            self.assertEqual(self.upload(self.vendor).status_code, 201)
+            self.assertEqual(self.upload(self.vendor).status_code, 201)
+            self.assertEqual(self.upload(self.vendor).status_code, 429)
