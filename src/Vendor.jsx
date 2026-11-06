@@ -14,6 +14,7 @@ import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile from "./components/AccountProfile.jsx";
 import ProfitHelper from "./components/ProfitHelper.jsx";
+import { ScanFishButton } from "./components/ScanFish.jsx";
 import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
 import { AnnouncementBanner, useAnnouncements } from "./components/Announcements.jsx";
@@ -1161,6 +1162,10 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], myFish = []
               myFish={myFish}
               labels={{ empty: t("No fish species registered"), noPhoto: t("No photo yet"), yours: t("Your fish"), group: t("Fish Species") }}
             />
+            <div className="scan-row">
+              <ScanFishButton t={t} species={speciesOptions} selectedId={selectedSpecies} onPicked={setSpeciesId} />
+              <small>{t("Take a photo of your fish to help build the AquaTimbang fish scanner.")}</small>
+            </div>
           </div>
           <div className="form-group"><label htmlFor="calc-weight">{t("Weight in Kilograms")}</label>
             <div className="input-with-unit"><input id="calc-weight" type="number" value={weight} min="0.01" step="0.01" placeholder="0.00" onChange={(e) => setWeight(e.target.value)} /><span>kg</span></div>

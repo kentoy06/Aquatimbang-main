@@ -1256,3 +1256,43 @@ class Market(models.Model):
 
     def __str__(self):
         return f"{self.name} ({self.municipality.name})"
+
+
+class FishScanPhoto(models.Model):
+    """
+    A photo of a fish taken by a user, labelled with its species.
+    Phase 1 of the fish scanner: these photos are collected and checked
+    by the LGU, then used to train the image recognition model.
+    """
+
+    STATUS_PENDING = "pending"
+    STATUS_APPROVED = "approved"
+    STATUS_REJECTED = "rejected"
+    STATUS_CHOICES = [
+        (STATUS_PENDING, "Waiting for review"),
+        (STATUS_APPROVED, "Approved for training"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    fish_species = models.ForeignKey("FishSpecies", on_delete=models.PROTECT, related_name="scan_photos")
+    # Stored shrunk to 640 px, re-saved as JPEG without location data.
+    image = models.ImageField(upload_to="fish_scans/%Y/%m/")
+    uploaded_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="fish_scan_photos"
+    )
+    municipality = models.ForeignKey("Municipality", on_delete=models.SET_NULL, null=True, blank=True)
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_PENDING)
+    reviewed_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="reviewed_fish_scans"
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    review_note = models.CharField(max_length=200, blank=True)
+
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.fish_species} photo #{self.pk} ({self.status})"

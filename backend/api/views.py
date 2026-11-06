@@ -3220,3 +3220,191 @@ def confirm_password_reset(request):
         LoginLockout.objects.filter(username=user.username.lower()).delete()
         log_activity(user, "password reset", "Authentication", user.pk, user.username)
     return Response({"message": "Your password has been changed. You can now log in."})
+
+
+# ============================================================
+# FISH SCANNER - PHASE 1: COLLECT LABELLED FISH PHOTOS
+# ============================================================
+import io
+import tempfile
+import zipfile
+from datetime import timedelta
+
+from django.core.files.base import ContentFile
+from PIL import Image, ImageOps
+
+from .models import FishScanPhoto
+from .serializers import FishScanPhotoSerializer
+
+# Approved photos per fish needed before the scanner can learn it.
+SCAN_TARGET_PER_FISH = 30
+# Photos one user may upload per day.
+SCAN_DAILY_LIMIT = 40
+# Longest side of a stored photo (enough for review and training).
+SCAN_MAX_SIDE = 640
+
+
+def shrink_scan_photo(upload):
+    """Re-save an uploaded photo as a small JPEG without EXIF (no GPS location)."""
+    with Image.open(upload) as image:
+        image = ImageOps.exif_transpose(image).convert("RGB")
+        image.thumbnail((SCAN_MAX_SIDE, SCAN_MAX_SIDE))
+        buffer = io.BytesIO()
+        image.save(buffer, "JPEG", quality=82, optimize=True)
+    return ContentFile(buffer.getvalue(), name="scan.jpg")
+
+
+class FishScanPhotoViewSet(viewsets.ModelViewSet):
+    """
+    Labelled fish photos for the fish scanner.
+    Fish Vendors upload and see their own photos; LGU Officers and
+    Administrators see all photos, approve or reject them (and fix the
+    fish name), and download the approved photos for training.
+    """
+
+    serializer_class = FishScanPhotoSerializer
+    authentication_classes = [ExpiringTokenAuthentication]
+    permission_classes = [IsAuthenticated]
+    http_method_names = ["get", "post", "delete", "head", "options"]
+
+    def role(self):
+        role = approved_role(self.request.user)
+        if role is None:
+            raise PermissionDenied("An approved account is required.")
+        return role
+
+    def reviewer(self):
+        if self.role() not in ("LGU Officer", "Administrator"):
+            raise PermissionDenied("Only LGU Officers and Administrators can review fish photos.")
+
+    def get_queryset(self):
+        role = self.role()
+        queryset = FishScanPhoto.objects.select_related("fish_species", "uploaded_by", "municipality", "reviewed_by")
+        if role == "Fish Vendor":
+            queryset = queryset.filter(uploaded_by=self.request.user)
+        status_filter = self.request.query_params.get("status")
+        if status_filter:
+            queryset = queryset.filter(status=status_filter)
+        species = self.request.query_params.get("species")
+        if species:
+            queryset = queryset.filter(fish_species_id=species)
+        return queryset
+
+    def create(self, request, *args, **kwargs):
+        from .validators import validate_image_upload
+        from django.core.exceptions import ValidationError as DjangoValidationError
+
+        self.role()
+        upload = request.FILES.get("image")
+        if upload is None:
+            return Response({"image": "Take or choose a photo of the fish."}, status=status.HTTP_400_BAD_REQUEST)
+        try:
+            validate_image_upload(upload)
+        except DjangoValidationError as error:
+            return Response({"image": " ".join(error.messages)}, status=status.HTTP_400_BAD_REQUEST)
+
+        since = timezone.now() - timedelta(days=1)
+        if FishScanPhoto.objects.filter(uploaded_by=request.user, created_at__gte=since).count() >= SCAN_DAILY_LIMIT:
+            return Response(
+                {"message": f"You can add up to {SCAN_DAILY_LIMIT} fish photos a day. Thank you, please continue tomorrow."},
+                status=status.HTTP_429_TOO_MANY_REQUESTS,
+            )
+
+        serializer = self.get_serializer(data={"fish_species": request.data.get("fish_species")})
+        serializer.is_valid(raise_exception=True)
+        profile = getattr(request.user, "aquatimbang_profile", None)
+        scan = serializer.save(
+            image=shrink_scan_photo(upload),
+            uploaded_by=request.user,
+            municipality=profile.municipality if profile else None,
+        )
+        log_activity(request.user, "uploaded", "FishScanPhoto", scan.pk, scan.fish_species.name)
+        return Response(self.get_serializer(scan).data, status=status.HTTP_201_CREATED)
+
+    def perform_destroy(self, scan):
+        role = self.role()
+        if role == "Fish Vendor" and scan.status != FishScanPhoto.STATUS_PENDING:
+            raise PermissionDenied("Reviewed photos can only be removed by the LGU.")
+        log_activity(self.request.user, "deleted", "FishScanPhoto", scan.pk, scan.fish_species.name)
+        scan.image.delete(save=False)
+        scan.delete()
+
+    @action(detail=True, methods=["post"], url_path="review")
+    def review(self, request, pk=None):
+        """Body: {"status": "approved"|"rejected", "fish_species": <id, optional>, "note": ""}"""
+        self.reviewer()
+        scan = self.get_object()
+        decision = request.data.get("status")
+        if decision not in (FishScanPhoto.STATUS_APPROVED, FishScanPhoto.STATUS_REJECTED):
+            return Response({"status": "Choose approved or rejected."}, status=status.HTTP_400_BAD_REQUEST)
+        changes = {"status": {"from": scan.status, "to": decision}}
+        new_fish = request.data.get("fish_species")
+        if new_fish not in (None, "") and str(new_fish) != str(scan.fish_species_id):
+            try:
+                fish = FishSpecies.objects.get(pk=int(new_fish), is_active=True)
+            except (ValueError, FishSpecies.DoesNotExist):
+                return Response({"fish_species": "Choose a valid fish species."}, status=status.HTTP_400_BAD_REQUEST)
+            changes["fish_species"] = {"from": scan.fish_species.name, "to": fish.name}
+            scan.fish_species = fish
+        scan.status = decision
+        scan.review_note = str(request.data.get("note") or "").strip()[:200]
+        scan.reviewed_by = request.user
+        scan.reviewed_at = timezone.now()
+        scan.save()
+        log_activity(request.user, decision, "FishScanPhoto", scan.pk, scan.fish_species.name, {"changes": changes})
+        return Response(self.get_serializer(scan).data)
+
+    @action(detail=True, methods=["get"], url_path="image")
+    def image(self, request, pk=None):
+        scan = self.get_object()
+        try:
+            scan.image.open("rb")
+        except (FileNotFoundError, OSError):
+            raise Http404("Photo not found.")
+        return FileResponse(scan.image, content_type="image/jpeg")
+
+    @action(detail=False, methods=["get"], url_path="summary")
+    def summary(self, request):
+        """Photos per fish (for everyone): approved, waiting, and the target."""
+        self.role()
+        from django.db.models import Count, Q
+        rows = (
+            FishSpecies.objects.filter(is_active=True)
+            .annotate(
+                approved=Count("scan_photos", filter=Q(scan_photos__status=FishScanPhoto.STATUS_APPROVED)),
+                pending=Count("scan_photos", filter=Q(scan_photos__status=FishScanPhoto.STATUS_PENDING)),
+            )
+            .order_by("name")
+        )
+        mine = FishScanPhoto.objects.filter(uploaded_by=request.user).count()
+        return Response({
+            "target": SCAN_TARGET_PER_FISH,
+            "my_photos": mine,
+            "species": [
+                {"id": f.pk, "name": f.name, "approved": f.approved, "pending": f.pending,
+                 "ready": f.approved >= SCAN_TARGET_PER_FISH}
+                for f in rows
+            ],
+        })
+
+    @action(detail=False, methods=["get"], url_path="export")
+    def export(self, request):
+        """ZIP of approved photos, one folder per fish, ready for Teachable Machine."""
+        self.reviewer()
+        scans = FishScanPhoto.objects.filter(status=FishScanPhoto.STATUS_APPROVED).select_related("fish_species")
+        if not scans.exists():
+            return Response({"message": "No approved photos yet."}, status=status.HTTP_404_NOT_FOUND)
+        archive = tempfile.SpooledTemporaryFile(max_size=20 * 1024 * 1024)
+        count = 0
+        with zipfile.ZipFile(archive, "w", zipfile.ZIP_STORED) as zf:
+            for scan in scans:
+                try:
+                    with scan.image.open("rb") as photo:
+                        zf.writestr(f"{scan.fish_species.name}/photo_{scan.pk}.jpg", photo.read())
+                    count += 1
+                except (FileNotFoundError, OSError):
+                    continue
+        archive.seek(0)
+        log_activity(request.user, "exported", "FishScanPhoto", 0, f"{count} approved fish photos")
+        stamp = timezone.localdate().isoformat()
+        return FileResponse(archive, as_attachment=True, filename=f"aquatimbang_fish_photos_{stamp}.zip", content_type="application/zip")

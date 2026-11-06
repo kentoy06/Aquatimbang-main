@@ -25,6 +25,7 @@ import PriceImport from "./components/PriceImport.jsx";
 // Loaded only when a chart is shown (the chart library is large).
 const TrendChart = lazy(() => import("./components/TrendChart.jsx"));
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
+import FishScanReview from "./components/FishScanReview.jsx";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
 import { listExternalFactors } from "./api/forecast.js";
 import { FishPhotoInput, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
@@ -395,6 +396,7 @@ useEffect(() => {
         { name: "Vendor Registrations", icon: "✅" },
         { name: "Fisherfolk Management", icon: "👥" },
         { name: "Price Suggestions", icon: "📥" },
+        { name: "Fish Scanner Photos", icon: "📷" },
       ],
     },
     {
@@ -458,6 +460,8 @@ useEffect(() => {
         return <VendorRegistrations notify={notify} />;
       case "Fisherfolk Management":
         return <FisherfolkManagement fisherfolk={fisherfolk} suggestions={suggestions} loading={fisherfolkLoading} error={fisherfolkError} />;
+      case "Fish Scanner Photos":
+        return <FishScanReview notify={notify} />;
       case "Price Suggestions":
         return <PriceSuggestions notify={notify} />;
       case "Official Reference Prices":

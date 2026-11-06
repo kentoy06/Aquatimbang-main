@@ -1325,3 +1325,65 @@ table th {
 @media (max-width: 420px) {
   .season-dates { grid-template-columns: 1fr; }
 }
+
+/* ---------- Fish scanner, phase 1 ---------- */
+
+.scan-row { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; margin-top: 10px; }
+.scan-row small { color: #64748b; font-size: 12px; flex: 1 1 200px; min-width: 0; }
+.scan-btn { white-space: nowrap; }
+
+.scan-modal { width: min(560px, calc(100vw - 24px)); max-height: calc(100vh - 32px); overflow-y: auto; display: grid; gap: 12px; }
+.scan-muted { color: #64748b; font-size: 13px; margin: 0; }
+.scan-preview { aspect-ratio: 4 / 3; }
+.scan-empty {
+  aspect-ratio: 4 / 3; border: 2px dashed #cfdbe6; border-radius: 16px; display: grid; place-content: center;
+  text-align: center; gap: 6px; color: #64748b; padding: 16px;
+}
+.scan-empty span { font-size: 40px; }
+.scan-empty p { margin: 0; font-size: 13px; }
+.scan-done { display: grid; gap: 10px; text-align: center; justify-items: center; padding: 8px 0; }
+.scan-done h4 { margin: 0; font-size: 18px; color: var(--navy-900); }
+.scan-done p { margin: 0; max-width: 42ch; }
+.scan-done .button-row { width: 100%; }
+.scan-done-icon {
+  width: 56px; height: 56px; border-radius: 50%; display: grid; place-items: center;
+  background: #e7f7ef; color: #15803d; font-size: 28px; font-weight: 700;
+}
+.scan-meter { width: 100%; display: grid; gap: 6px; }
+.scan-meter small { color: #475569; }
+.scan-meter-bar { display: flex; height: 10px; border-radius: 999px; background: #e8eef4; overflow: hidden; }
+.scan-meter-bar > span { display: block; height: 100%; background: linear-gradient(90deg, #0e7c86, #3fc1d9); }
+.scan-meter-bar > span.pending { background: #bfe6ee; }
+
+.scan-progress { display: grid; gap: 4px; }
+.scan-progress-row {
+  display: grid; grid-template-columns: minmax(90px, 160px) minmax(0, 1fr) auto; gap: 12px; align-items: center;
+  border: 1px solid transparent; background: none; border-radius: 10px; padding: 6px 8px; cursor: pointer;
+  font: inherit; text-align: left; color: inherit;
+}
+.scan-progress-row:hover { background: #f3f7fa; }
+.scan-progress-row.on { border-color: var(--aqua); background: #ecf8fb; }
+.scan-progress-name { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.scan-progress-num { font-size: 12px; color: #64748b; white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+.scan-toolbar { display: flex; flex-wrap: wrap; gap: 10px 16px; justify-content: space-between; align-items: center; margin-bottom: 14px; }
+.scan-toolbar .tabs { margin: 0; }
+.scan-toolbar select { padding: 9px 36px 9px 12px; border-radius: 10px; border: 1px solid #cfdbe6; background: #fff; }
+
+.scan-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 14px; }
+.scan-card { background: #fff; border: 1px solid var(--line); border-radius: 16px; overflow: hidden; display: grid; grid-template-rows: auto 1fr; box-shadow: var(--shadow); }
+.scan-card-img { position: relative; aspect-ratio: 4 / 3; overflow: hidden; background: #071a2b; display: grid; place-items: center; color: #9db2c4; font-size: 13px; }
+.scan-card-img img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; }
+.scan-card-body { padding: 12px 14px 14px; display: grid; gap: 4px; align-content: start; }
+.scan-card-top { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.scan-card-body small { color: #64748b; font-size: 12px; }
+.scan-relabel { display: grid; gap: 4px; margin-top: 8px; font-size: 12px; color: #5b7389; font-weight: 600; }
+.scan-relabel select { padding: 8px 34px 8px 10px; border-radius: 10px; border: 1px solid #cfdbe6; background: #fff; font-weight: 400; }
+.scan-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.scan-actions button { flex: 1 1 auto; }
+.scan-actions button.secondary-btn { flex: 0 0 auto; padding-inline: 14px; }
+
+@media (max-width: 520px) {
+  .scan-progress-row { grid-template-columns: 1fr auto; }
+  .scan-progress-row .scan-meter-bar { grid-column: 1 / -1; grid-row: 2; }
+}

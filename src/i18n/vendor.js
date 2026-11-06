@@ -128,6 +128,39 @@ const PHRASES = {
   "REFERENCE AMOUNT": ["HALAGA", "KANTIDAD"],
   "Select a published price and enter a valid weight": ["Pumili ng isda at maglagay ng tamang timbang", "Pagpili og isda ug pagbutang og saktong timbang"],
   "Clear": ["Burahin", "Papasa"],
+  // Fish scanner (phase 1)
+  "Scan fish": ["I-scan ang isda", "I-scan ang isda"],
+  "Scan Fish": ["I-scan ang Isda", "I-scan ang Isda"],
+  "Take a photo of your fish to help build the AquaTimbang fish scanner.": [
+    "Kunan ng litrato ang iyong isda para makatulong sa paggawa ng AquaTimbang fish scanner.",
+    "Kuhai og litrato ang imong isda aron makatabang sa paghimo sa AquaTimbang fish scanner.",
+  ],
+  "Take a clear photo of the fish only, with no people in it. Then choose which fish it is. Your photos help build a scanner that will recognize fish automatically.": [
+    "Kumuha ng malinaw na litrato ng isda lamang, walang tao. Piliin kung anong isda ito. Makatutulong ang iyong mga litrato sa paggawa ng scanner na kusang makakakilala ng isda.",
+    "Pagkuha og klaro nga litrato sa isda lang, walay tawo. Pilia kung unsang isdaa kini. Makatabang ang imong mga litrato sa paghimo og scanner nga makaila sa isda.",
+  ],
+  "Lay the fish flat, fill the photo with it, and use good light.": [
+    "Ilatag nang patag ang isda, punuin ang litrato nito, at gumamit ng magandang ilaw.",
+    "Ipahigda ang isda, pun-a ang litrato niini, ug gamita ang maayong suga.",
+  ],
+  "Take Photo": ["Kumuha ng Litrato", "Pagkuha og Litrato"],
+  "Retake Photo": ["Kunan Muli", "Kuhai Pag-usab"],
+  "Choose from Album": ["Pumili sa Album", "Pagpili sa Album"],
+  "Your fish photo": ["Litrato ng iyong isda", "Litrato sa imong isda"],
+  "Which fish is this?": ["Anong isda ito?", "Unsang isdaa kini?"],
+  "Save Photo": ["I-save ang Litrato", "I-save ang Litrato"],
+  "Photo saved. Thank you!": ["Na-save ang litrato. Salamat!", "Na-save ang litrato. Salamat!"],
+  "Your {fish} photo will be checked by the LGU and used to teach the AquaTimbang fish scanner.": [
+    "Susuriin ng LGU ang iyong litrato ng {fish} at gagamitin para turuan ang AquaTimbang fish scanner.",
+    "Susihon sa LGU ang imong litrato sa {fish} ug gamiton aron tudloan ang AquaTimbang fish scanner.",
+  ],
+  "{fish}: {count} of {target} photos": ["{fish}: {count} sa {target} litrato", "{fish}: {count} sa {target} ka litrato"],
+  "Fish photos you have shared: {n}": [
+    "Mga litrato ng isda na naibahagi mo: {n}",
+    "Mga litrato sa isda nga imong naambit: {n}",
+  ],
+  "Scan another fish": ["Mag-scan ng iba pang isda", "Pag-scan og laing isda"],
+  "Done": ["Tapos na", "Human na"],
   // Profit Helper
   "Profit Helper": ["Tulong sa Kita", "Tabang sa Ganansya"],
   "Enter what you paid at the fish port to see your profit and a fair selling price.": [
