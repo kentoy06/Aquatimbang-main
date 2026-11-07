@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
 import "./App.css";
 import "./Admin.css";
@@ -94,7 +95,7 @@ function auditValue(value) {
 function auditDetailLines(details) {
   if (!details) return [];
   if (typeof details === "string") return [{ key: "Details", value: details }];
-  return Object.entries(details).flatMap(([key, value]) => {
+  return Object.entries(details).filter(([key]) => !RECORD_DETAIL_KEYS.includes(key)).flatMap(([key, value]) => {
     if (key === "changes" && value && typeof value === "object" && !Array.isArray(value)) {
       return Object.entries(value).map(([field, change]) => ({
         key: auditLabel(field),
@@ -140,6 +141,7 @@ function AuditDetailsDialog({ log, onClose }) {
   }, [log, onClose]);
   if (!log) return null;
   const items = auditDetailLines(log.details);
+  const parts = logRecordParts(log);
   return <div role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,.6)", display: "flex", justifyContent: "center", alignItems: "center", padding: 16 }}>
     <section role="dialog" aria-modal="true" aria-labelledby="audit-detail-heading" style={{ background: "#fff", color: "#172033", borderRadius: 16, width: "min(100%, 560px)", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 65px rgba(0,0,0,.24)", padding: 24 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
@@ -147,7 +149,7 @@ function AuditDetailsDialog({ log, onClose }) {
         <button type="button" onClick={onClose} aria-label="Close activity details" style={{ border: "1px solid #d5dce5", borderRadius: 8, background: "#fff", padding: "6px 12px", cursor: "pointer", color: "#172033" }}>✕</button>
       </div>
       <dl style={{ display: "grid", gridTemplateColumns: "minmax(100px, 140px) minmax(0, 1fr)", gap: "12px 16px", marginTop: 24, overflowWrap: "anywhere" }}>
-        {[["Date & Time", formatAuditTimestamp(log.created_at)], ["User", log.actor_username || "—"], ["Role", log.actor_role || "—"], ["Module", auditModule(log)], ["Record Type", log.target_type || "—"], ["Affected Record", log.target_name || "—"], ...items.map(item => [item.key, item.value])].map(([key, value], index) => <React.Fragment key={`${key}-${index}`}><dt style={{ color: "#64748b", fontWeight: 600 }}>{key}</dt><dd style={{ margin: 0, whiteSpace: "pre-wrap" }}>{value}</dd></React.Fragment>)}
+        {[["Date & Time", formatAuditTimestamp(log.created_at)], ["User", log.actor_username || "—"], ["Role", log.actor_role || "—"], ["Module", auditModule(log)], ["Record Type", log.target_type || "—"], ...(parts.fish ? [["Fish", parts.fish], ["Municipality", parts.municipality || "—"], ["Price per kg", parts.price !== null && parts.price !== "" ? `₱${Number(parts.price).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"], ...(parts.date ? [["Price Date", parts.date]] : [])] : [["Affected Record", log.target_name || "—"]]), ...items.map(item => [item.key, item.value])].map(([key, value], index) => <React.Fragment key={`${key}-${index}`}><dt style={{ color: "#64748b", fontWeight: 600 }}>{key}</dt><dd style={{ margin: 0, whiteSpace: "pre-wrap" }}>{value}</dd></React.Fragment>)}
       </dl>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}><button type="button" className="secondary-btn" onClick={onClose}>Close</button></div>
     </section>
@@ -1110,12 +1112,21 @@ function UserFormModal({ account, municipalities, onClose, onSaved, notify }) {
   }));
   const [errors, setErrors] = useState({});
   const [saving, setSaving] = useState(false);
+  // A role change must be checked and explained before it is saved.
+  const [roleReason, setRoleReason] = useState("");
+  const [roleVerified, setRoleVerified] = useState(false);
+  const roleChanging = editing && form.role !== account.role;
   const update = (key, value) => setForm((prev) => ({ ...prev, [key]: value }));
 
   const save = async () => {
-    if (editing && form.role !== account.role && !window.confirm(
-      `Change ${account.name}'s role from ${account.role} to ${form.role}? They will be logged out and get ${form.role} access at their next login.`
-    )) return;
+    if (roleChanging && (!roleVerified || roleReason.trim().length < 10)) {
+      setErrors({
+        role_change_reason: !roleVerified
+          ? "Confirm that you verified this role change first."
+          : "Write why the role is changing (at least 10 characters).",
+      });
+      return;
+    }
 
     const body = {
       first_name: form.first_name,
@@ -1127,6 +1138,7 @@ function UserFormModal({ account, municipalities, onClose, onSaved, notify }) {
       municipality: form.role === "Administrator" && !form.municipality ? null : form.municipality || null,
     };
     if (!editing) body.password = form.password;
+    if (roleChanging) body.role_change_reason = roleReason.trim();
 
     setSaving(true);
     setErrors({});
@@ -1188,8 +1200,37 @@ function UserFormModal({ account, municipalities, onClose, onSaved, notify }) {
           </div>
         </div>
 
+        {roleChanging && (
+          <div className="role-change-box">
+            <strong>⚠ Changing role: {account.role} → {form.role}</strong>
+            <p>
+              A role decides what this person can do. As {form.role}, {account.name} will{" "}
+              {form.role === "Administrator" ? "manage every account and the system settings"
+                : form.role === "LGU Officer" ? "enter, approve and publish official prices and approve vendors"
+                : "only view prices and send suggestions"}.
+              They are logged out now, get the new access at their next login, and receive an email about the change.
+            </p>
+            <div className="form-group">
+              <label htmlFor="role-change-reason">Why is the role changing?</label>
+              <textarea
+                id="role-change-reason"
+                rows={2}
+                maxLength={300}
+                value={roleReason}
+                placeholder="e.g. Transferred to the City Agriculture Office as price encoder (memo dated Nov 5, 2026)."
+                onChange={(e) => setRoleReason(e.target.value)}
+              />
+            </div>
+            <label className="role-change-check">
+              <input type="checkbox" checked={roleVerified} onChange={(e) => setRoleVerified(e.target.checked)} />
+              <span>I verified this change with the person's office or documents.</span>
+            </label>
+            {errors.role_change_reason && <small className="field-error">{errors.role_change_reason}</small>}
+          </div>
+        )}
+
         {!editing && field("password", "Initial Password", { type: "password", autoComplete: "new-password", placeholder: "At least 8 characters" })}
-        {!editing && <p className="muted-text" style={{ marginTop: -6, marginBottom: 12 }}>The account is active right away. Ask the user to change this password from My Profile.</p>}
+        {!editing && <p className="muted-text" style={{ marginTop: -6, marginBottom: 12 }}>The account is active right away. Tell the user this password privately; they must choose their own when they first log in.</p>}
 
         <div className="button-row">
           <button className="secondary-btn" onClick={onClose}>Cancel</button>
@@ -1201,6 +1242,41 @@ function UserFormModal({ account, municipalities, onClose, onSaved, notify }) {
 }
 
 // Shows a temporary password once, after an Administrator resets it.
+// Two ways to help a user who forgot their password.
+function ResetPasswordChoice({ user, onEmail, onTemporary, onClose }) {
+  const [busy, setBusy] = useState("");
+  const run = async (kind, action) => { setBusy(kind); await action(user); setBusy(""); };
+  return (
+    <div className="modal-backdrop" onClick={onClose}>
+      <div className="modal reset-choice" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="reset-choice-title">
+        <div className="modal-head">
+          <h3 id="reset-choice-title">Reset password for {user.name}</h3>
+          <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
+        </div>
+        <p className="muted-text">
+          Use this when {user.name} forgot their password. Either way, they are logged out everywhere and choose
+          their own new password. The Administrator never needs to know it.
+        </p>
+        <button type="button" className="reset-option" disabled={!user.email || busy !== ""} onClick={() => run("email", onEmail)}>
+          <span className="reset-option-icon" aria-hidden="true">📧</span>
+          <span>
+            <strong>{busy === "email" ? "Sending…" : "Email a reset link"} <em>Recommended</em></strong>
+            <small>{user.email ? `Sends a link to ${user.email}. They open it and choose a new password. The link works for 1 hour.` : "This account has no email address, so use a temporary password."}</small>
+          </span>
+        </button>
+        <button type="button" className="reset-option" disabled={busy !== ""} onClick={() => run("temp", onTemporary)}>
+          <span className="reset-option-icon" aria-hidden="true">🔑</span>
+          <span>
+            <strong>{busy === "temp" ? "Creating…" : "Give a temporary password"}</strong>
+            <small>For users without email. You get an easy password like "Bangus-Lambat-4821" to tell them in person or by text. When they log in with it, they must choose their own password.</small>
+          </span>
+        </button>
+        <div className="button-row"><button className="secondary-btn" onClick={onClose}>Cancel</button></div>
+      </div>
+    </div>
+  );
+}
+
 function TemporaryPasswordModal({ result, onClose }) {
   const [copied, setCopied] = useState(false);
   const copy = async () => {
@@ -1218,7 +1294,7 @@ function TemporaryPasswordModal({ result, onClose }) {
           <h3 id="temp-password-title">Temporary Password for {result.name}</h3>
           <button className="modal-close" onClick={onClose} aria-label="Close">✕</button>
         </div>
-        <p className="muted-text">Give this password to {result.name} privately. It is shown only once. They have been logged out and should change it from My Profile after logging in.</p>
+        <p className="muted-text">Tell this password to {result.name} in person or send it by private message. It is shown only once. When they log in with it, AquaTimbang asks them to choose their own new password right away.</p>
         <div className="temp-password">
           <code>{result.password}</code>
           <button className="secondary-btn" onClick={copy}>{copied ? "Copied" : "Copy"}</button>
@@ -1270,6 +1346,7 @@ function UserManagement({
   const reviewConfirmed = Boolean(reviewingUser) && reviewChecks.length === criteriaFor(reviewingUser.role).length;
   const [formAccount, setFormAccount] = useState(undefined); // undefined: closed, null: add, object: edit
   const [tempPassword, setTempPassword] = useState(null);
+  const [resetFor, setResetFor] = useState(null);
   const openVerificationDocument = async (userId, documentType) => {
   const token = localStorage.getItem("authToken");
 
@@ -1542,10 +1619,22 @@ const submitReview = async () => {
     }
   };
 
-  const resetPassword = async (u) => {
-    if (!window.confirm(`Reset ${u.name}'s password? They will be logged out and need the new temporary password to log in.`)) return;
+  const resetPassword = (u) => setResetFor(u);
+
+  const emailResetLink = async (u) => {
+    try {
+      const data = await sendJson(`/auth/users/${u.id}/send-reset-link/`, "POST");
+      setResetFor(null);
+      notify(data.message);
+    } catch (error) {
+      notify(error.message);
+    }
+  };
+
+  const giveTemporaryPassword = async (u) => {
     try {
       const data = await sendJson(`/auth/users/${u.id}/reset-password/`, "POST");
+      setResetFor(null);
       setTempPassword({ name: u.name, password: data.temporary_password });
     } catch (error) {
       notify(error.message);
@@ -1584,6 +1673,7 @@ const submitReview = async () => {
         />
       )}
 
+      {resetFor && <ResetPasswordChoice user={resetFor} onEmail={emailResetLink} onTemporary={giveTemporaryPassword} onClose={() => setResetFor(null)} />}
       {tempPassword && <TemporaryPasswordModal result={tempPassword} onClose={() => setTempPassword(null)} />}
 
       {loading && <div className="info-box">Loading accounts…</div>}
@@ -1977,7 +2067,7 @@ const submitReview = async () => {
                         </div>
                       </div>
                     ) : (
-                      <div className="action-icons">
+                      <div className="action-icons user-actions">
                         <button title="View Profile" aria-label={`View ${u.name}`} onClick={() => setViewing(u)}>👁</button>
                         {u.id === currentUserId ? (
                           <small className="muted-text">You</small>
@@ -3042,6 +3132,7 @@ function SystemConfiguration({ notify }) {
    ================================================================ */
 
 function ActivityLogs({ notify }) {
+  const fishLookup = useFishLookup();
   const [selectedLog, setSelectedLog] = useState(null);
   const { records, loading, error, refresh } = useDjangoActivityLogs();
   const [search, setSearch] = useState("");
@@ -3107,20 +3198,26 @@ function ActivityLogs({ notify }) {
             <tbody>
               {visible.length === 0
                 ? <tr><td colSpan="7" className="empty-row">No recorded activity matches your filters.</td></tr>
-                : visible.map(l => <tr key={l.id}>
+                : visible.map(l => { const parts = logRecordParts(l); return <tr key={l.id}>
                     <td>{formatAuditTimestamp(l.created_at)}</td>
                     <td><strong>{l.actor_username || "—"}</strong></td>
                     <td>{l.actor_role || "—"}</td>
                     <td>{auditModule(l)}</td>
                     <td><AuditActionBadge action={l.action} /></td>
-                    <td>{l.target_name || "—"}</td>
+                    <td>{parts.fish ? (
+                      <div className="audit-record">
+                        <FishCell parts={parts} lookup={fishLookup} />
+                        {parts.municipality && <small>📍 {parts.municipality}</small>}
+                        {parts.price !== null && parts.price !== "" && <PriceCell parts={parts} />}
+                      </div>
+                    ) : (l.target_name || "—")}</td>
                     <td style={{ maxWidth: 360, overflowWrap: "anywhere" }}>
                       <div style={{ display: "flex", flexDirection: "column", alignItems: "flex-start", gap: 6 }}>
                         <span>{auditSummary(l)}</span>
                         <button type="button" className="secondary-btn" onClick={() => setSelectedLog(l)} style={{ padding: "5px 10px", fontSize: 12 }}>View Details</button>
                       </div>
                     </td>
-                  </tr>)}
+                  </tr>; })}
             </tbody>
           </table>
         </div>}

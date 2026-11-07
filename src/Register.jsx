@@ -1,10 +1,11 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import PasswordInput from "./components/PasswordInput.jsx";
 import React, { useEffect, useState } from "react";
 import "./App.css";
 import "./Login.css";
 import { API_BASE_URL } from "./api/config.js";
 import { MAX_DOCUMENT_MB, checkUpload, compressImage } from "./api/images.js";
-import { FishThumb } from "./components/FishPhoto.jsx";
+import FishMultiSelect from "./components/FishMultiSelect.jsx";
 import { TakePhotoButton } from "./components/CameraCapture.jsx";
 
 const OTHER_MARKET = "__other__";
@@ -179,7 +180,7 @@ function Register({ onBack, onGoToLogin }) {
     return;
   }
 
-  if (form.registration_reason.trim().length < 15) {
+  if (role === "Fish Vendor" && form.registration_reason.trim().length < 15) {
     setError("Please tell us why you are registering (at least 15 characters).");
     return;
   }
@@ -296,8 +297,8 @@ if (role === "LGU Officer") {
           <h3>Registration submitted</h3>
           <p>
             Thanks, {form.first_name.trim()}! Your {role} account is pending
-            approval from an Administrator. You'll be able to log in once
-            it's reviewed and approved.
+            approval from {role === "Fish Vendor" ? "an LGU Officer of your municipality" : "an Administrator"}.
+            You'll be able to log in once it's reviewed and approved.
           </p>
           <div className="button-row" style={{ marginTop: 22 }}>
             <button className="secondary-btn" onClick={onBack}>← Back to Home</button>
@@ -431,11 +432,11 @@ if (role === "LGU Officer") {
               <div className="form-row">
                 <div className="form-group">
                   <label htmlFor="reg-password">Password</label>
-                  <input id="reg-password" type="password" value={form.password} placeholder="At least 8 characters" autoComplete="new-password" onChange={(e) => update("password", e.target.value)} />
+                  <PasswordInput id="reg-password" value={form.password} placeholder="At least 8 characters" autoComplete="new-password" onChange={(e) => update("password", e.target.value)} />
                 </div>
                 <div className="form-group">
                   <label htmlFor="reg-confirm">Confirm Password</label>
-                  <input id="reg-confirm" type="password" value={form.confirmPassword} placeholder="Re-enter your password" autoComplete="new-password" onChange={(e) => update("confirmPassword", e.target.value)} />
+                  <PasswordInput id="reg-confirm" value={form.confirmPassword} placeholder="Re-enter your password" autoComplete="new-password" onChange={(e) => update("confirmPassword", e.target.value)} />
                 </div>
               </div>
             </section>
@@ -499,20 +500,18 @@ if (role === "LGU Officer") {
                 cameraTitle="Take a photo of your face"
               />
 
-              <div className="form-group">
+              {role === "Fish Vendor" && <div className="form-group">
                 <label htmlFor="reg-reason">Why are you registering?</label>
                 <textarea
                   id="reg-reason"
                   rows={3}
                   maxLength={500}
                   value={form.registration_reason}
-                  placeholder={role === "Fish Vendor"
-                    ? "e.g. I sell bangus and tilapia at Carbon Market and want to check the official prices before selling."
-                    : "e.g. I encode and validate the daily fish prices for the City Agriculture Office."}
+                  placeholder="e.g. I sell bangus and tilapia at Carbon Market and want to check the official prices before selling."
                   onChange={(e) => update("registration_reason", e.target.value)}
                 />
-                <small className="field-help">{form.registration_reason.trim().length}/500 · The reviewer reads this before approving your account.</small>
-              </div>
+                <small className="field-help">{form.registration_reason.trim().length}/500 · The LGU officer reads this before approving your account.</small>
+              </div>}
             </section>
 
             {/* FISH YOU SELL (vendors only) */}
@@ -520,25 +519,13 @@ if (role === "LGU Officer") {
               <section className="register-section">
                 <h4 className="register-section-title">Fish You Sell</h4>
                 <p className="register-section-desc">
-                  Tap every fish you usually sell. Their prices will appear first on your dashboard.
+                  Choose every fish you usually sell. Their prices will appear first on your dashboard.
                 </p>
                 {fishSpecies.length === 0 ? (
                   <small className="field-help">{loadingOptions ? "Loading fish species…" : "No fish species are registered yet."}</small>
                 ) : (
-                  <div className="species-picker" role="group" aria-label="Fish you sell">
-                    {fishSpecies.map((fish) => {
-                      const on = form.species_sold.includes(fish.id);
-                      return (
-                        <label key={fish.id} className={`species-option ${on ? "species-option-on" : ""}`}>
-                          <input type="checkbox" checked={on} onChange={() => toggleSpecies(fish.id)} />
-                          <FishThumb fish={fish} size={52} />
-                          <span>{fish.name}</span>
-                        </label>
-                      );
-                    })}
-                  </div>
+                  <FishMultiSelect fish={fishSpecies} selected={form.species_sold} onToggle={toggleSpecies} />
                 )}
-                <small className="field-help">{form.species_sold.length} selected</small>
               </section>
             )}
 

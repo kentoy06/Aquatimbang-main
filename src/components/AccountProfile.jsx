@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import PasswordInput from "./PasswordInput.jsx";
 import { apiUrl, authHeaders } from "../api/config.js";
 import {
   describeActivity,
@@ -49,7 +50,7 @@ function ChangePasswordCard({ notify }) {
   const field = (key, label, autoComplete) => (
     <div className="form-group">
       <label htmlFor={`pw-${key}`}>{label}</label>
-      <input id={`pw-${key}`} type="password" autoComplete={autoComplete} value={form[key]} onChange={(e) => update(key, e.target.value)} />
+      <PasswordInput id={`pw-${key}`} autoComplete={autoComplete} value={form[key]} onChange={(e) => update(key, e.target.value)} />
       {(errors[key] || (key === "new_password" && errors.message)) && (
         <small style={{ display: "block", marginTop: 4, color: "#b42318", fontSize: 12 }}>{errors[key] || errors.message}</small>
       )}
