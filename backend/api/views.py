@@ -116,7 +116,12 @@ def login_user(request):
     # Reject accounts that are not approved and active (UC-1 3b, 3c, E2).
     if not user.is_active or not profile.is_active:
         if profile.account_status == UserProfile.STATUS_PENDING:
-            message = "Your account is pending approval. Please wait for LGU confirmation."
+            reviewer = (
+                "an LGU Officer of your municipality"
+                if profile.role and profile.role.name == "Fish Vendor"
+                else "an Administrator"
+            )
+            message = f"Your account is pending approval. Please wait for {reviewer} to review it."
         elif profile.account_status == UserProfile.STATUS_REJECTED:
             message = rejected_message(profile)
         else:
@@ -153,6 +158,7 @@ def login_user(request):
                     else None
                 ),
             },
+            "must_change_password": profile.must_change_password,
         },
         status=status.HTTP_200_OK,
     )
@@ -425,7 +431,16 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             target_type="PriceRecord",
             target_id=record.pk,
             target_name=f"{record.fish_species.name} - {record.municipality.name}",
-            details=details or {},
+            # The record's fish, municipality and price are kept separately
+            # so logs can show them in their own columns.
+            details={
+                "fish": record.fish_species.name,
+                "fish_id": record.fish_species_id,
+                "municipality": record.municipality.name,
+                "price_per_kg": str(record.price_per_kg),
+                "recorded_date": str(record.recorded_date),
+                **(details or {}),
+            },
         )
 
     # --------------------------------------------------------
@@ -2525,6 +2540,8 @@ def list_users(request):
             is_active=True,
             reviewed_by=request.user,
             reviewed_at=timezone.now(),
+            # The Administrator chose this first password, so the user replaces it at first login.
+            must_change_password=True,
         )
         log_activity(request.user, "created", "UserAccount", user.id, user.username, {
             "role": profile.role.name,
@@ -2570,11 +2587,18 @@ def manage_user(request, user_id):
         return Response(errors, status=status.HTTP_400_BAD_REQUEST)
 
     new_role = values.get("role")
+    role_reason = str(request.data.get("role_change_reason") or "").strip()[:300]
     if new_role is not None and new_role.pk != profile.role_id:
         if is_self:
             return Response({"role": "You cannot change your own role."}, status=status.HTTP_400_BAD_REQUEST)
         if is_active_admin and active_admin_count(exclude_user_id=user.pk) == 0:
             return Response({"role": "Keep at least one active Administrator."}, status=status.HTTP_400_BAD_REQUEST)
+        # A role change is verified and explained first, so the log says why.
+        if len(role_reason) < 10:
+            return Response(
+                {"role_change_reason": "Write why the role is changing (at least 10 characters)."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
 
     changes = {}
     with transaction.atomic():
@@ -2600,11 +2624,23 @@ def manage_user(request, user_id):
             # A new role takes effect at the next login.
             end_sessions(user)
         if changes:
+            details = {"changes": changes}
+            if "role" in changes:
+                details["reason"] = role_reason
             log_activity(
                 request.user,
                 "role changed" if "role" in changes else "updated",
-                "UserAccount", user.pk, user.username, {"changes": changes},
+                "UserAccount", user.pk, user.username, details,
             )
+    if "role" in changes:
+        send_account_email(
+            user,
+            "AquaTimbang: your role was changed",
+            f"Hello {user.get_full_name() or user.username},\n\n"
+            f"An Administrator changed your AquaTimbang role from {changes['role']['from']} to {changes['role']['to']}.\n"
+            f"Reason: {role_reason}\n\n"
+            f"Log in again to use your new access. If you did not expect this, contact your Administrator.\n\n— AquaTimbang",
+        )
 
     profile.refresh_from_db()
     return Response(user_row(profile), status=status.HTTP_200_OK)
@@ -2668,20 +2704,64 @@ def reset_user_password(request, user_id):
     if user.pk == request.user.pk:
         return Response({"message": "Use My Profile to change your own password."}, status=status.HTTP_400_BAD_REQUEST)
 
-    # e.g. "AT-k3Jd9-Qm2Xp" — easy to read aloud, hard to guess.
-    temporary = f"AT-{secrets.token_urlsafe(4)}-{secrets.token_urlsafe(4)}"
+    temporary = make_temporary_password()
     with transaction.atomic():
         user.set_password(temporary)
         user.save(update_fields=["password"])
+        UserProfile.objects.filter(user=user).update(must_change_password=True)
         end_sessions(user)
-        log_activity(request.user, "password reset", "UserAccount", user.pk, user.username)
+        log_activity(request.user, "password reset", "UserAccount", user.pk, user.username, {"method": "temporary password"})
     return Response(
         {
-            "message": f"Password reset for {user.username}. Give them this temporary password and ask them to change it from My Profile.",
+            "message": f"Password reset for {user.username}. Give them this temporary password; they must choose a new one when they log in.",
             "temporary_password": temporary,
         },
         status=status.HTTP_200_OK,
     )
+
+
+# Simple words for temporary passwords: easy to read aloud and type.
+TEMPORARY_PASSWORD_WORDS = [
+    "Bangus", "Tilapia", "Tamban", "Tulingan", "Alumahan", "Galunggong", "Danggit", "Dilis",
+    "Espada", "Hito", "Dalag", "Sapsap", "Bisugo", "Pampano", "Tanigue", "Matambaka",
+    "Banca", "Pantalan", "Lambat", "Timbang", "Merkado", "Dagat", "Isla", "Baybay",
+]
+
+
+def make_temporary_password():
+    """e.g. "Bangus-Lambat-4821": two words and four digits, no look-alike letters."""
+    first, second = secrets.SystemRandom().sample(TEMPORARY_PASSWORD_WORDS, 2)
+    return f"{first}-{second}-{secrets.randbelow(9000) + 1000}"
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def send_user_reset_link(request, user_id):
+    """
+    Administrator: email the user a link to choose a new password
+    themselves, so nobody has to pass a password around.
+    """
+    refused = require_admin(request)
+    if refused:
+        return refused
+    user = User.objects.filter(pk=user_id).select_related("aquatimbang_profile").first()
+    if user is None:
+        return Response({"message": "Account not found."}, status=status.HTTP_404_NOT_FOUND)
+    if user.pk == request.user.pk:
+        return Response({"message": "Use My Profile to change your own password."}, status=status.HTTP_400_BAD_REQUEST)
+    if not user.email:
+        return Response(
+            {"message": f"{user.username} has no email address. Add one, or give a temporary password instead."},
+            status=status.HTTP_400_BAD_REQUEST,
+        )
+    sent = send_password_reset_email(user)
+    if not sent:
+        return Response(
+            {"message": "The email could not be sent. Check the email settings, or give a temporary password instead."},
+            status=status.HTTP_502_BAD_GATEWAY,
+        )
+    log_activity(request.user, "password reset", "UserAccount", user.pk, user.username, {"method": "email link", "email": user.email})
+    return Response({"message": f"A reset link was emailed to {user.email}. It works for 1 hour."})
 
 
 @api_view(["POST"])
@@ -2707,6 +2787,7 @@ def change_my_password(request):
     with transaction.atomic():
         request.user.set_password(new)
         request.user.save(update_fields=["password"])
+        UserProfile.objects.filter(user=request.user).update(must_change_password=False)
         # Log out other sessions; this browser gets a fresh token.
         end_sessions(request.user)
         token = Token.objects.create(user=request.user)
@@ -3146,6 +3227,24 @@ def send_lockout_notice(user, locked_until):
     )
 
 
+def send_password_reset_email(user):
+    """Email a one-hour link for choosing a new password. Returns True when sent."""
+    query = urlencode({
+        "reset_uid": urlsafe_base64_encode(force_bytes(user.pk)),
+        "reset_token": default_token_generator.make_token(user),
+    })
+    link = f"{settings.FRONTEND_URL}?{query}"
+    return send_account_email(
+        user,
+        "AquaTimbang: reset your password",
+        f"Hello {user.get_full_name() or user.username},\n\n"
+        f"Open this link to choose a new password for your AquaTimbang account ({user.username}):\n\n"
+        f"{link}\n\n"
+        f"The link works once and expires in 1 hour. If you did not ask for this, ignore this email; "
+        f"your password stays the same.\n\n— AquaTimbang",
+    )
+
+
 class PasswordResetThrottle(AnonRateThrottle):
     scope = "password_reset"
     rate = "5/hour"
@@ -3167,20 +3266,7 @@ def request_password_reset(request):
         profile = getattr(user, "aquatimbang_profile", None)
         if profile is None or profile.account_status != UserProfile.STATUS_APPROVED or not profile.is_active:
             continue
-        query = urlencode({
-            "reset_uid": urlsafe_base64_encode(force_bytes(user.pk)),
-            "reset_token": default_token_generator.make_token(user),
-        })
-        link = f"{settings.FRONTEND_URL}?{query}"
-        send_account_email(
-            user,
-            "AquaTimbang: reset your password",
-            f"Hello {user.get_full_name() or user.username},\n\n"
-            f"Open this link to choose a new password for your AquaTimbang account ({user.username}):\n\n"
-            f"{link}\n\n"
-            f"The link works once and expires in 1 hour. If you did not ask for this, ignore this email; "
-            f"your password stays the same.\n\n— AquaTimbang",
-        )
+        send_password_reset_email(user)
         log_activity(user, "password reset requested", "Authentication", user.pk, user.username)
     return Response({
         "message": "If that email belongs to an approved account, a reset link has been sent. "
@@ -3216,6 +3302,7 @@ def confirm_password_reset(request):
     with transaction.atomic():
         user.set_password(password)  # also makes the link unusable
         user.save(update_fields=["password"])
+        UserProfile.objects.filter(user=user).update(must_change_password=False)
         Token.objects.filter(user=user).delete()  # log out other devices
         LoginLockout.objects.filter(username=user.username.lower()).delete()
         log_activity(user, "password reset", "Authentication", user.pk, user.username)

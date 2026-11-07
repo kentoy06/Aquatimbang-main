@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
 import "./App.css";
@@ -108,7 +109,7 @@ function auditValue(value) {
 function auditDetailLines(details) {
   if (!details) return [];
   if (typeof details === "string") return [{ key: "Details", value: details }];
-  return Object.entries(details).flatMap(([key, value]) => {
+  return Object.entries(details).filter(([key]) => !RECORD_DETAIL_KEYS.includes(key)).flatMap(([key, value]) => {
     if (key === "changes" && value && typeof value === "object" && !Array.isArray(value)) {
       return Object.entries(value).map(([field, change]) => ({
         key: auditLabel(field),
@@ -141,6 +142,7 @@ function AuditDetailsDialog({ log, onClose }) {
   }, [log, onClose]);
   if (!log) return null;
   const items = auditDetailLines(log.details);
+  const parts = logRecordParts(log);
   return <div role="presentation" onMouseDown={event => { if (event.target === event.currentTarget) onClose(); }} style={{ position: "fixed", inset: 0, zIndex: 99999, background: "rgba(15,23,42,.6)", display: "flex", justifyContent: "center", alignItems: "center", padding: 16 }}>
     <section role="dialog" aria-modal="true" aria-labelledby="audit-detail-heading" style={{ background: "#fff", color: "#172033", borderRadius: 16, width: "min(100%, 560px)", maxHeight: "85vh", overflowY: "auto", boxShadow: "0 20px 65px rgba(0,0,0,.24)", padding: 24 }}>
       <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: 16 }}>
@@ -148,7 +150,7 @@ function AuditDetailsDialog({ log, onClose }) {
         <button type="button" onClick={onClose} aria-label="Close activity details" style={{ border: "1px solid #d5dce5", borderRadius: 8, background: "#fff", padding: "6px 12px", cursor: "pointer", color: "#172033" }}>✕</button>
       </div>
       <dl style={{ display: "grid", gridTemplateColumns: "minmax(100px, 140px) minmax(0, 1fr)", gap: "12px 16px", marginTop: 24, overflowWrap: "anywhere" }}>
-        {[["Date & Time", formatAuditTimestamp(log.created_at)], ["User", log.actor_username || "—"], ["Role", log.actor_role || "—"], ["Record Type", log.target_type || "—"], ["Fish Species", log.target_name || "—"], ...items.map(item => [item.key, item.value])].map(([key, value], index) => <React.Fragment key={`${key}-${index}`}><dt style={{ color: "#64748b", fontWeight: 600 }}>{key}</dt><dd style={{ margin: 0, whiteSpace: "pre-wrap" }}>{value}</dd></React.Fragment>)}
+        {[["Date & Time", formatAuditTimestamp(log.created_at)], ["User", log.actor_username || "—"], ["Role", log.actor_role || "—"], ["Record Type", log.target_type || "—"], ...(parts.fish ? [["Fish", parts.fish], ["Municipality", parts.municipality || "—"], ["Price per kg", parts.price !== null && parts.price !== "" ? `₱${Number(parts.price).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : "—"], ...(parts.date ? [["Price Date", parts.date]] : [])] : [["Fish Species", log.target_name || "—"]]), ...items.map(item => [item.key, item.value])].map(([key, value], index) => <React.Fragment key={`${key}-${index}`}><dt style={{ color: "#64748b", fontWeight: 600 }}>{key}</dt><dd style={{ margin: 0, whiteSpace: "pre-wrap" }}>{value}</dd></React.Fragment>)}
       </dl>
       <div style={{ display: "flex", justifyContent: "flex-end", marginTop: 24 }}><button type="button" className="secondary-btn" onClick={onClose}>Close</button></div>
     </section>
@@ -3534,11 +3536,20 @@ function Reports({ priceRecords: recentRecords, notify }) {
       .sort((a, b) => (a.recorded_date < b.recorded_date ? 1 : a.recorded_date > b.recorded_date ? -1 : b.id - a.id));
     columns = ["Date", "Species", "Price per kg", "Municipality", "Status", "Recorded by"];
     rows = visible.map((r) => [r.recorded_date, r.fish_name, peso(r.price_per_kg), r.municipality_name, STATUS_LABELS[r.status] || r.status, r.recorded_by_name || "—"]);
-    const average = visible.length ? visible.reduce((s, r) => s + Number(r.price_per_kg), 0) / visible.length : 0;
+    // Average, lowest and highest use official (published) prices of ONE fish only:
+    // mixing fish, or counting rejected and unreviewed entries, gives a meaningless number.
+    const official = visible.filter(isPublished).map((r) => Number(r.price_per_kg)).filter(Number.isFinite);
+    const priceStats = speciesFilter && official.length
+      ? {
+          average: peso(official.reduce((a, b) => a + b, 0) / official.length),
+          range: `${peso(Math.min(...official))} – ${peso(Math.max(...official))}`,
+        }
+      : null;
     summary = [
       ["Total Entries", visible.length],
-      ["Published", visible.filter(isPublished).length],
-      ["Average Price", peso(average)],
+      ["Published", official.length],
+      ["Average Published Price", priceStats ? priceStats.average : speciesFilter ? "No published prices" : "Choose one fish"],
+      ["Lowest – Highest", priceStats ? priceStats.range : "—"],
       ["Flagged Entries", visible.filter((r) => r.status === "flagged").length],
     ];
   } else if (type === "Validation Log Report") {
@@ -3598,6 +3609,24 @@ function Reports({ priceRecords: recentRecords, notify }) {
         </div>
       </div>
 
+      <div className="tabs report-tabs" role="tablist" aria-label="Report type">
+        {[
+          ["Price History Report", "Price History"],
+          ["Validation Log Report", "Validation Log"],
+          ["External Factor Summary", "External Factor Summary"],
+        ].map(([value, label]) => (
+          <button key={value} role="tab" aria-selected={type === value} className={type === value ? "tab active-tab" : "tab"} onClick={() => setType(value)}>
+            {label}
+          </button>
+        ))}
+      </div>
+      {type === "External Factor Summary" && (
+        <p className="report-help">Fuel prices, weather and holidays logged under External Factors for the chosen dates, with the average diesel price and the number of rainy, stormy and holiday days.</p>
+      )}
+      {type === "Price History Report" && !speciesFilter && (
+        <p className="report-help">Choose one fish below to see its average, lowest and highest published price.</p>
+      )}
+
       {older.loading && <div className="info-box">Loading older published prices for this date range…</div>}
       {older.error && <div className="warn-box" role="alert">Could not load older prices: {older.error}</div>}
       <div className="log-summary">
@@ -3608,11 +3637,6 @@ function Reports({ priceRecords: recentRecords, notify }) {
 
       <div className="panel">
         <div className="table-tools" style={{ display: "flex", gap: 10, flexWrap: "wrap", alignItems: "center" }}>
-          <select aria-label="Report type" value={type} onChange={(e) => setType(e.target.value)}>
-            <option>Price History Report</option>
-            <option>Validation Log Report</option>
-            <option>External Factor Summary</option>
-          </select>
           {type !== "External Factor Summary" && (
             <select aria-label="Species" value={speciesFilter} onChange={(e) => setSpeciesFilter(e.target.value)}>
               <option value="">All Species</option>
@@ -3658,6 +3682,7 @@ const DECISION_ACTIONS = ["approved", "published", "flagged", "rejected", "revie
 
 function ValidationHistory({ notify }) {
   const { records, loading, error, refresh } = useDjangoActivityLogs();
+  const fishLookup = useFishLookup();
   const [search, setSearch] = useState("");
 
   const decisions = records.filter((l) => DECISION_ACTIONS.includes(String(l.action).toLowerCase()));
@@ -3687,24 +3712,29 @@ function ValidationHistory({ notify }) {
         </div>
 
         <table>
-          <thead><tr><th>DATE</th><th>USER</th><th>DECISION</th><th>RECORD</th><th>DETAILS</th></tr></thead>
+          <thead><tr><th>DATE</th><th>USER</th><th>DECISION</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE / KG</th><th>DETAILS</th></tr></thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="5" className="empty-row">Loading decisions…</td></tr>
+              <tr><td colSpan="7" className="empty-row">Loading decisions…</td></tr>
             ) : error ? (
-              <tr><td colSpan="5" className="empty-row">{error}</td></tr>
+              <tr><td colSpan="7" className="empty-row">{error}</td></tr>
             ) : visible.length === 0 ? (
-              <tr><td colSpan="5" className="empty-row">No decisions recorded yet.</td></tr>
+              <tr><td colSpan="7" className="empty-row">No decisions recorded yet.</td></tr>
             ) : (
-              visible.map((l) => (
-                <tr key={l.id}>
-                  <td>{formatAuditTimestamp(l.created_at)}</td>
-                  <td>{l.actor_username}</td>
-                  <td><AuditActionBadge action={l.action} /></td>
-                  <td>{l.target_name || "—"}</td>
-                  <td>{auditSummary(l)}</td>
-                </tr>
-              ))
+              visible.map((l) => {
+                const parts = logRecordParts(l);
+                return (
+                  <tr key={l.id}>
+                    <td>{formatAuditTimestamp(l.created_at)}</td>
+                    <td>{l.actor_username}</td>
+                    <td><AuditActionBadge action={l.action} /></td>
+                    <td><FishCell parts={parts} lookup={fishLookup} /></td>
+                    <td>{parts.municipality || "—"}</td>
+                    <td><PriceCell parts={parts} /></td>
+                    <td>{auditSummary(l)}</td>
+                  </tr>
+                );
+              })
             )}
           </tbody>
         </table>
@@ -3719,6 +3749,7 @@ function ValidationHistory({ notify }) {
 
 function AuditLog({ notify }) {
   const [selectedLog, setSelectedLog] = useState(null);
+  const fishLookup = useFishLookup();
   const { records, loading, error, refresh } = useDjangoActivityLogs();
   const [search, setSearch] = useState("");
   const [action, setAction] = useState("All Actions");
@@ -3732,7 +3763,7 @@ function AuditLog({ notify }) {
       && [l.actor_username, l.action, l.target_name, formatAuditDetails(l.details)].join(" ").toLowerCase().includes(search.toLowerCase());
   });
   return <>
-    <div className="page-title"><div><h2>My Audit Log</h2><p>Your permanent Fish Species activity recorded in Django.</p></div>
+    <div className="page-title"><div><h2>My Audit Log</h2><p>Everything you did with prices and fish species, with the fish, municipality and price of each record.</p></div>
       <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="secondary-btn" onClick={refresh}>↻ Refresh</button><button className="secondary-btn" disabled={!visible.length} onClick={()=>{exportAuditCsv(visible,"my_aquatimbang_audit_log.csv");notify("Audit log exported.");}}>↓ Export CSV</button></div>
     </div>
     <div className="panel"><div className="table-tools" style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
@@ -3743,8 +3774,8 @@ function AuditLog({ notify }) {
     </div>
     {loading && <p style={{padding:20}}>Loading your audit history...</p>}
     {error && <p role="alert" style={{padding:20,color:"#b91c1c"}}>{error}</p>}
-    {!loading && !error && <div style={{overflowX:"auto"}}><table><thead><tr><th>DATE &amp; TIME</th><th>ACTION</th><th>FISH SPECIES</th><th>DETAILS</th></tr></thead><tbody>
-      {visible.length===0 ? <tr><td colSpan="4" className="empty-row">No recorded activities found.</td></tr> : visible.map(l=><tr key={l.id}><td>{formatAuditTimestamp(l.created_at)}</td><td><AuditActionBadge action={l.action}/></td><td>{l.target_name||"—"}</td><td style={{maxWidth:420,overflowWrap:"anywhere"}}><div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6}}><span>{auditSummary(l)}</span><button type="button" className="secondary-btn" onClick={()=>setSelectedLog(l)} style={{padding:"5px 10px",fontSize:12}}>View Details</button></div></td></tr>)}
+    {!loading && !error && <div style={{overflowX:"auto"}}><table><thead><tr><th>DATE &amp; TIME</th><th>ACTION</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE / KG</th><th>DETAILS</th></tr></thead><tbody>
+      {visible.length===0 ? <tr><td colSpan="6" className="empty-row">No recorded activities found.</td></tr> : visible.map(l=>{ const parts = logRecordParts(l); return <tr key={l.id}><td>{formatAuditTimestamp(l.created_at)}</td><td><AuditActionBadge action={l.action}/></td><td><FishCell parts={parts} lookup={fishLookup}/></td><td>{parts.municipality||"—"}</td><td><PriceCell parts={parts}/></td><td style={{maxWidth:420,overflowWrap:"anywhere"}}><div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6}}><span>{auditSummary(l)}</span><button type="button" className="secondary-btn" onClick={()=>setSelectedLog(l)} style={{padding:"5px 10px",fontSize:12}}>View Details</button></div></td></tr>; })}
     </tbody></table></div>}
     </div>
     <AuditDetailsDialog log={selectedLog} onClose={() => setSelectedLog(null)}/>

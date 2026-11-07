@@ -2,6 +2,7 @@ import { BrandMark } from "./components/BrandLogo.jsx";
 import React, { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import "./App.css";
 import "./Login.css";
+import ChooseNewPassword from "./components/ChooseNewPassword.jsx";
 
 import Landing from "./Landing.jsx";
 import Register from "./Register.jsx";
@@ -184,6 +185,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
 
   // Error message displayed underneath the form.
   const [error, setError] = useState("");
+  const [forceChange, setForceChange] = useState(null);
 
   // Forgot-password states.
   const [forgotMode, setForgotMode] = useState(false);
@@ -264,14 +266,17 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
 
       // Read the REAL role returned by Django.
       const role = data.user.role;
+      const dashboard = { "Fish Vendor": "Vendor", "LGU Officer": "LGU", "Administrator": "Admin" }[role];
+
+      // A temporary password from the Administrator must be replaced first.
+      if (dashboard && data.must_change_password) {
+        setForceChange({ dashboard, temporaryPassword: password });
+        return;
+      }
 
       // Open the correct dashboard.
-      if (role === "Fish Vendor") {
-        onLogin("Vendor");
-      } else if (role === "LGU Officer") {
-        onLogin("LGU");
-      } else if (role === "Administrator") {
-        onLogin("Admin");
+      if (dashboard) {
+        onLogin(dashboard);
       } else {
         // Unknown roles should not be allowed into a dashboard.
         localStorage.removeItem("authToken");
@@ -298,6 +303,21 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
     setError("");
   };
 
+
+  if (forceChange) {
+    return (
+      <ChooseNewPassword
+        temporaryPassword={forceChange.temporaryPassword}
+        onDone={() => onLogin(forceChange.dashboard)}
+        onCancel={() => {
+          localStorage.removeItem("authToken");
+          localStorage.removeItem("user");
+          setForceChange(null);
+          setPassword("");
+        }}
+      />
+    );
+  }
 
   return (
     <div className="login-page">

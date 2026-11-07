@@ -148,15 +148,13 @@ class RegisterSerializer(serializers.Serializer):
         error_messages={"required": "A profile photo is required.", "invalid": "Upload a valid JPG or PNG photo."},
     )
 
-    # Why the applicant is registering; read by the reviewer.
+    # Why the applicant is registering; read by the reviewer. Required for
+    # Fish Vendors only: LGU Officers are verified by their office details.
     registration_reason = serializers.CharField(
-        min_length=15,
         max_length=500,
-        error_messages={
-            "required": "Tell us why you are registering.",
-            "blank": "Tell us why you are registering.",
-            "min_length": "Please write at least 15 characters about why you are registering.",
-        },
+        required=False,
+        allow_blank=True,
+        default="",
     )
 
     # Fish species a vendor sells (required for Fish Vendors).
@@ -263,6 +261,11 @@ class RegisterSerializer(serializers.Serializer):
         """
 
         role = attrs.get("role")
+
+        if role and role.name == "Fish Vendor" and len(attrs.get("registration_reason", "").strip()) < 15:
+            raise serializers.ValidationError({
+                "registration_reason": "Please write at least 15 characters about why you are registering."
+            })
 
         if role and role.name == "Fish Vendor":
 
@@ -432,7 +435,7 @@ class RegisterSerializer(serializers.Serializer):
 
         sex = validated_data.pop("sex", "")
         profile_photo = validated_data.pop("profile_photo")
-        registration_reason = validated_data.pop("registration_reason").strip()
+        registration_reason = validated_data.pop("registration_reason", "").strip()
         species_sold = validated_data.pop("species_sold", [])
 
         # Extract Fish Vendor verification information.

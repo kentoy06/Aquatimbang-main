@@ -203,6 +203,10 @@ class UserProfile(models.Model):
 
     )
 
+    # True after an Administrator gives a temporary password: the user must
+    # choose their own password before using the system.
+    must_change_password = models.BooleanField(default=False)
+
     # Automatically records when the profile was created.
 
     created_at = models.DateTimeField(auto_now_add=True)
