@@ -1300,6 +1300,9 @@ def serialize_own_profile(user, profile):
         # Changes whenever the profile is saved, so browsers reload a new photo.
         "photo_version": profile.updated_at.isoformat() if profile.updated_at else "",
         "registration_reason": profile.registration_reason,
+        "date_of_birth": profile.date_of_birth.isoformat() if profile.date_of_birth else None,
+        "sex": profile.sex,
+        "reviewed_at": profile.reviewed_at.isoformat() if profile.reviewed_at else None,
         "verification": get_account_verification(profile),
     }
 

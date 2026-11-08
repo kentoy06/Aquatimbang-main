@@ -260,8 +260,6 @@ function AccountProfile({ account, notify, description = "Manage your account de
             <div className="profile-field"><span>Username</span><strong>{profile.username}</strong></div>
             <div className="profile-field"><span>Role</span><strong>{profile.role}</strong></div>
             <div className="profile-field"><span>Municipality</span><strong>{profile.municipality || "—"}</strong></div>
-            {details.market_name && <div className="profile-field"><span>Market</span><strong>{details.market_name}{details.stall_number ? ` · Stall ${details.stall_number}` : ""}</strong></div>}
-            {details.department && <div className="profile-field"><span>Office</span><strong>{details.department}{details.position ? ` · ${details.position}` : ""}</strong></div>}
             <div className="profile-field"><span>Registered</span><strong>{formatDate(profile.date_joined)}</strong></div>
             <div className="profile-field"><span>Last Login</span><strong>{formatDateTime(profile.last_login)}</strong></div>
           </div>
@@ -270,10 +268,76 @@ function AccountProfile({ account, notify, description = "Manage your account de
           </p>
         </div>
 
+        <RegistrationDetails profile={profile} />
+
           {children}
         </div>
       </div>
     </>
+  );
+}
+
+// Everything the person answered when registering, read-only.
+function RegistrationDetails({ profile }) {
+  const verification = profile.verification || {};
+  const details = verification.details || {};
+  const documents = verification.documents || {};
+  const isVendor = profile.role === "Fish Vendor";
+  const isOfficer = profile.role === "LGU Officer";
+  const doc = (label, sent) => (
+    <div className="profile-field">
+      <span>{label}</span>
+      <strong className={sent ? "reg-doc-ok" : "reg-doc-missing"}>{sent ? "✓ Submitted" : "Not submitted"}</strong>
+    </div>
+  );
+  const field = (label, value) => (
+    <div className="profile-field"><span>{label}</span><strong>{value || "—"}</strong></div>
+  );
+  return (
+    <div className="config-card">
+      <div className="config-header">
+        <div className="config-icon green">✓</div>
+        <div>
+          <h3>Registration Details</h3>
+          <p>What you gave when you registered{profile.reviewed_at ? `, approved ${formatDate(profile.reviewed_at)}` : ""}</p>
+        </div>
+      </div>
+      <div className="profile-grid">
+        {field("Registered as", profile.role)}
+        {field("Account status", profile.account_status ? profile.account_status.charAt(0).toUpperCase() + profile.account_status.slice(1) : "")}
+        {field("Date of birth", profile.date_of_birth ? formatDate(profile.date_of_birth) : "")}
+        {field("Sex", profile.sex ? profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1) : "")}
+        {field("Municipality", profile.municipality)}
+        {isVendor && (
+          <>
+            {field("Public market", details.market_name)}
+            {field("Stall number", details.stall_number)}
+            {field("Vendor permit number", details.permit_number)}
+            {doc("Permit or certification", documents.permit)}
+            {doc("Stall photo", documents.stall_photo)}
+          </>
+        )}
+        {isOfficer && (
+          <>
+            {field("Department / Office", details.department)}
+            {field("Official position", details.position)}
+            {field("Employee ID", details.employee_id)}
+            {field("Work email", details.official_email)}
+            {doc("Authorization letter", documents.authorization)}
+          </>
+        )}
+        {doc("Face photo", documents.profile_photo)}
+      </div>
+      {isVendor && (
+        <div className="reg-reason">
+          <span>Why you registered</span>
+          <p>{profile.registration_reason || verification.registration_reason || "—"}</p>
+        </div>
+      )}
+      <p style={{ marginTop: 12, color: "#64748b", fontSize: 13 }}>
+        These were checked when your account was approved. To correct one, contact {isVendor ? "your LGU Officer" : "an Administrator"}.
+      </p>
+    </div>
   );
 }
 

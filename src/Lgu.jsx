@@ -1182,12 +1182,21 @@ function LGUFishSpeciesManagement({ notify }) {
   );
 }
 
+// Source / Market choice that shows a box to type a market not in the list.
+const OTHER_SOURCE = "__other__";
+
 function PriceEntry({
   notify,
   refreshPrices,
   setPriceRecords,
 }) {
   // Stores fish species retrieved from Django.
+  // Markets for the Source / Market dropdown (kept by the Administrator).
+  const [markets, setMarkets] = useState([]);
+  const [sourceChoice, setSourceChoice] = useState("");
+  useEffect(() => {
+    fetchAll("/markets/").then(setMarkets).catch(() => setMarkets([]));
+  }, []);
   const [fishSpecies, setFishSpecies] = useState([]);
 
   // Stores municipalities retrieved from Django.
@@ -1211,12 +1220,20 @@ function PriceEntry({
     source: "",
   });
 
+  // Markets of the chosen municipality.
+  const marketsHere = markets.filter(
+    (market) => String(market.municipality) === String(form.municipality) && market.is_active !== false
+  );
+
   // Update one form field.
   const update = (key, value) => {
     setForm((previous) => ({
       ...previous,
       [key]: value,
+      // Markets belong to a municipality, so choose the market again.
+      ...(key === "municipality" ? { source: "" } : {}),
     }));
+    if (key === "municipality") setSourceChoice("");
   };
 
   // Get the authentication token saved during login.
@@ -1539,11 +1556,10 @@ function PriceEntry({
         `${data.fish_name} price saved successfully.`
       );
 
-      // Clear only the price and source fields.
+      // Clear only the price; keep the market for the next fish from it.
       setForm((previous) => ({
         ...previous,
         price: "",
-        source: "",
       }));
     } catch (error) {
       console.error("Saving price error:", error);
@@ -1842,21 +1858,40 @@ function PriceEntry({
             </div>
           </div>
 
-          {/* SOURCE */}
+          {/* SOURCE: a market from Municipality & Market, or typed in */}
           <div className="form-group">
-            <label>Source / Market</label>
-
-            <input
-              type="text"
-              value={form.source}
-              placeholder="e.g. Pasil Fish Market"
-              onChange={(event) =>
-                update(
-                  "source",
-                  event.target.value
-                )
-              }
-            />
+            <label htmlFor="entry-source">Source / Market</label>
+            <select
+              id="entry-source"
+              value={sourceChoice}
+              onChange={(event) => {
+                const value = event.target.value;
+                setSourceChoice(value);
+                update("source", value === OTHER_SOURCE ? "" : value);
+              }}
+            >
+              <option value="">Choose the market…</option>
+              {marketsHere.map((market) => (
+                <option key={market.id} value={market.name}>{market.name}</option>
+              ))}
+              <option value={OTHER_SOURCE}>Other (type it)</option>
+            </select>
+            {sourceChoice === OTHER_SOURCE && (
+              <input
+                type="text"
+                maxLength={150}
+                value={form.source}
+                placeholder="e.g. Carbon Market, bagsakan survey"
+                aria-label="Type the market or source"
+                style={{ marginTop: 8 }}
+                onChange={(event) => update("source", event.target.value)}
+              />
+            )}
+            {marketsHere.length === 0 && (
+              <small style={{ display: "block", marginTop: 6, color: "#64748b" }}>
+                No markets listed for this municipality yet. Choose Other, or ask the Administrator to add them under Municipality &amp; Market.
+              </small>
+            )}
           </div>
 
           <button
