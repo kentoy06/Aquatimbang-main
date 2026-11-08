@@ -540,6 +540,10 @@ A pending record may also be flagged or rejected.
 
     STATUS_REJECTED = "rejected"
 
+    # A published price removed on the day it was encoded (a mistake).
+    # It is kept, with the reason, but no longer shown as an official price.
+    STATUS_WITHDRAWN = "withdrawn"
+
     # Available workflow statuses for a price record.
 
     STATUS_CHOICES = [
@@ -555,6 +559,8 @@ A pending record may also be flagged or rejected.
         (STATUS_FLAGGED, "Flagged"),
 
         (STATUS_REJECTED, "Rejected"),
+
+        (STATUS_WITHDRAWN, "Withdrawn"),
 
     ]
 
@@ -765,9 +771,9 @@ A pending record may also be flagged or rejected.
 
         ]
 
-        # Prevent duplicate records for the same fish,
-
-        # municipality, and date.
+        # Prevent duplicate records for the same fish, municipality and
+        # date. Rejected and withdrawn records don't count, so the right
+        # price can be entered after a mistake was removed.
 
         constraints = [
 
@@ -782,6 +788,8 @@ A pending record may also be flagged or rejected.
                     "recorded_date",
 
                 ],
+
+                condition=~models.Q(status__in=["rejected", "withdrawn"]),
 
                 name="unique_daily_fish_price",
 

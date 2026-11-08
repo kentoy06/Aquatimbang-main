@@ -396,10 +396,10 @@ useEffect(() => {
       ],
     },
     {
-      label: "FISHERFOLK",
+      label: "FISH VENDORS",
       items: [
         { name: "Vendor Registrations", icon: "☑" },
-        { name: "Fisherfolk Management", icon: "👥" },
+        { name: "Vendor Management", icon: "👥" },
         { name: "Price Suggestions", icon: "📥" },
         { name: "Fish Scanner Photos", icon: "◉" },
       ],
@@ -463,7 +463,7 @@ useEffect(() => {
         return <ExternalFactorsPage notify={notify} />;
       case "Vendor Registrations":
         return <VendorRegistrations notify={notify} />;
-      case "Fisherfolk Management":
+      case "Vendor Management":
         return <FisherfolkManagement fisherfolk={fisherfolk} suggestions={suggestions} loading={fisherfolkLoading} error={fisherfolkError} />;
       case "Fish Scanner Photos":
         return <FishScanReview notify={notify} />;
@@ -835,10 +835,10 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
           </div>
         </div>
 
-        <div className="stat-card clickable" onClick={() => goTo("Fisherfolk Management")}>
+        <div className="stat-card clickable" onClick={() => goTo("Vendor Management")}>
           <div className="stat-icon purple">👥</div>
           <div>
-            <span>Participating Fisherfolk</span>
+            <span>Participating Vendors</span>
             <h2>{participatingFisherfolk}</h2>
             <small>{pendingSuggestions} suggestions pending</small>
           </div>
@@ -1570,6 +1570,36 @@ function PriceEntry({
   // ------------------------------------------------------------
   // DELETE PRICE
   // ------------------------------------------------------------
+  // A price published by mistake today can be removed (withdrawn) with a reason.
+  const encodedToday = (record) =>
+    record.created_at && new Date(record.created_at).toLocaleDateString("en-CA") === new Date().toLocaleDateString("en-CA");
+  const withdrawEntry = async (record) => {
+    const reason = await askText(
+      `Remove the published ${record.fish_name} price (${peso(record.price_per_kg)}/kg)?\n\nIt will no longer show as an official price. The record and your reason stay in the Audit Log.`,
+      "",
+      { title: "Remove today's price", confirmLabel: "Remove price", numeric: false },
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 5) {
+      notify("Write why this price is being removed.");
+      return;
+    }
+    try {
+      const response = await fetch(`${API_BASE_URL}/prices/${record.id}/withdraw/`, {
+        method: "POST",
+        headers: { Authorization: `Token ${getToken()}`, "Content-Type": "application/json" },
+        body: JSON.stringify({ reason: reason.trim() }),
+      });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || data?.reason || "Could not remove the price.");
+      notify(data.message);
+      await loadPriceEntries();
+      if (refreshPrices) await refreshPrices();
+    } catch (error) {
+      notify(error.message);
+    }
+  };
+
   const removeEntry = async (record) => {
     // Confirm before permanently deleting the record.
     const confirmed = await askConfirm(
@@ -1913,24 +1943,32 @@ function PriceEntry({
                           </button>
                         )}
                       <div className="action-icons">
-                        {/* Edit this Django price record. */}
-                        <button
-                          title={record.status === "published" ? "Correct record (fish or price)" : "Edit record"}
-                          onClick={() =>
-                            editPrice(record)
-                          }
-                        >
-                          ✎
-                        </button>
+                        {/* Edit this Django price record (not once it was withdrawn). */}
+                        {record.status !== "withdrawn" && (
+                          <button
+                            title={record.status === "published" ? "Correct record (fish or price)" : "Edit record"}
+                            onClick={() =>
+                              editPrice(record)
+                            }
+                          >
+                            ✎
+                          </button>
+                        )}
 
-                        {/* Published prices are corrected, never deleted. */}
-                        {record.status !== "published" && (
+                        {/* Unpublished entries are deleted; a price published today by
+                            mistake is withdrawn with a reason; older ones are only corrected. */}
+                        {record.status !== "published" && record.status !== "withdrawn" && (
                           <button
                             title="Delete"
                             onClick={() =>
                               removeEntry(record)
                             }
                           >
+                            ✕
+                          </button>
+                        )}
+                        {record.status === "published" && encodedToday(record) && (
+                          <button title="Remove (encoded today by mistake)" onClick={() => withdrawEntry(record)}>
                             ✕
                           </button>
                         )}
@@ -2535,7 +2573,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
     <>
       <div className="page-title">
         <div>
-          <h2>Fisherfolk Management</h2>
+          <h2>Vendor Management</h2>
           <p>Monitor the fish vendor accounts registered under your municipality.</p>
         </div>
       </div>
@@ -2544,7 +2582,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
         <div className="modal-backdrop" onClick={() => setViewing(null)}>
           <div className="modal profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>Fisherfolk Profile</h3>
+              <h3>Vendor Profile</h3>
               <button className="modal-close" onClick={() => setViewing(null)}>✕</button>
             </div>
 
@@ -2591,7 +2629,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
         <div className="table-tools">
           <div className="search-box">
             🔍
-            <input type="text" placeholder="Search fisherfolk..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="text" placeholder="Search vendors..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
 
@@ -2609,11 +2647,11 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" className="empty-row">Loading fisherfolk…</td></tr>
+              <tr><td colSpan="7" className="empty-row">Loading vendors…</td></tr>
             ) : error ? (
               <tr><td colSpan="7" className="empty-row">{error}</td></tr>
             ) : visible.length === 0 ? (
-              <tr><td colSpan="7" className="empty-row">No fisherfolk found.</td></tr>
+              <tr><td colSpan="7" className="empty-row">No vendors found.</td></tr>
             ) : (
               visible.map((f) => (
                 <tr key={f.id}>
@@ -3403,7 +3441,7 @@ function PriceAnomalies({ priceRecords, suggestions }) {
 
       <div className="panel" style={{ marginTop: 18 }}>
         <div className="panel-header">
-          <div><h3>Unusual Fisherfolk Suggestions</h3><p>More than 30% away from that species' community average</p></div>
+          <div><h3>Unusual Vendor Suggestions</h3><p>More than 30% away from that species' community average</p></div>
         </div>
         <table>
           <thead><tr><th>SPECIES</th><th>SUGGESTED PRICE</th><th>COMMUNITY AVERAGE</th><th>SUBMITTED BY</th><th>DEVIATION</th></tr></thead>
@@ -3730,7 +3768,7 @@ function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goT
   return (
     <>
       <div className="page-title">
-        <div><h2>Notifications</h2><p>Alerts about fisherfolk suggestions, flagged entries, and pending work.</p></div>
+        <div><h2>Notifications</h2><p>Alerts about vendor price suggestions, flagged entries, and pending work.</p></div>
         {dismissedNotifs.length > 0 && <button className="secondary-btn" onClick={() => setDismissedNotifs([])}>Restore Dismissed</button>}
       </div>
 

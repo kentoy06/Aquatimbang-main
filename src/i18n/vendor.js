@@ -351,7 +351,7 @@ const PHRASES = {
     "Makita sa Akong mga Gisugyot nga Presyo ang kahimtang sa imong gipasa ug ang tubag sa LGU officer.",
   ],
   "Compare with other vendors": ["Ihambing sa ibang tindero", "Itandi sa ubang tindero"],
-  "Community Average shows what other fisherfolk are suggesting, so you can see if your numbers line up.": [
+  "Community Average shows what other vendors are suggesting, so you can see if your numbers line up.": [
     "Ipinapakita ng Karaniwang Presyo ng Komunidad ang mungkahi ng ibang tindero.",
     "Gipakita sa Kasagaran nga Presyo sa Komunidad ang mga sugyot sa ubang tindero.",
   ],

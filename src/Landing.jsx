@@ -98,7 +98,7 @@ function Landing({ onGetStarted, onRegister }) {
   const prices = summary?.today_prices || [];
 
   const audiences = [
-    { icon: "🐟", title: "Fisherfolk & Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price when the market looks different." },
+    { icon: "🐟", title: "Fish Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price when the market looks different." },
     { icon: "✔", title: "LGU Officers", desc: "Encode, validate and publish official prices, review vendor suggestions, and approve vendor accounts." },
     { icon: "📈", title: "Administrators", desc: "Manage users, species and markets, watch price forecasts, and generate reports." },
   ];
@@ -139,7 +139,7 @@ function Landing({ onGetStarted, onRegister }) {
           <h1>Fair Fish Prices,<br />Clear as Ocean Water</h1>
           <p>
             See today's official price per kilo before you buy or sell. Fair price
-            calculator, price trends and forecasts for fisherfolk, vendors and LGUs.
+            calculator, price trends and forecasts for fish vendors and LGUs.
           </p>
           <div className="hero-buttons">
             <button className="pill-btn pill-orange" onClick={() => show("prices")}>See Today's Prices</button>
@@ -209,7 +209,7 @@ function Landing({ onGetStarted, onRegister }) {
         <span className="section-eyebrow">About the system</span>
         <h2>Prices Everyone Can Trust</h2>
         <p className="section-lead">
-          AquaTimbang is a predictive analytics-driven fish price transparency system. Fisherfolk,
+          AquaTimbang is a predictive analytics-driven fish price transparency system. Fish
           vendors and local government units see current and past official prices, suggest prices
           from the market floor, compute fair amounts by weight, and plan ahead with SARIMAX price forecasts.
         </p>

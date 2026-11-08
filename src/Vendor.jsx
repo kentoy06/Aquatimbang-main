@@ -1385,7 +1385,7 @@ function HelpPage() {
     { title: "Compute a fair price", text: "Use the Fair Price Calculator — enter the weight you're selling and it multiplies it by the official rate automatically." },
     { title: "Suggest a correction", text: "If a price looks off, go to Submit Suggested Price. Add a comment explaining why so the LGU officer has context." },
     { title: "Track your suggestions", text: "My Suggested Prices shows the status of everything you've submitted, plus any feedback from the LGU officer." },
-    { title: "Compare with other vendors", text: "Community Average shows what other fisherfolk are suggesting, so you can see if your numbers line up." },
+    { title: "Compare with other vendors", text: "Community Average shows what other vendors are suggesting, so you can see if your numbers line up." },
     { title: "Watch the forecast", text: "Price Forecast gives you a short-term projection so you can plan ahead for buying or selling." },
   ];
 

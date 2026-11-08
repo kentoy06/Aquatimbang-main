@@ -124,12 +124,12 @@ function AuditActionBadge({ action }) {
 function auditModule(log) {
   const type = String(log.target_type || "").toLowerCase().replaceAll("_", " ");
   if (type.includes("authentication")) return "Authentication";
-  if (type.includes("suggestion")) return "Fisherfolk Suggestions";
+  if (type.includes("suggestion")) return "Vendor Suggestions";
   if (type.includes("price")) return "Price Records";
   if (type.includes("species") || type.includes("fishspecies")) return "Fish Species";
   if (type.includes("user") || type.includes("profile") || type.includes("account")) return "User Management";
   if (type.includes("municipality") || type.includes("market")) return "Municipality & Market";
-  if (type.includes("suggestion")) return "Fisherfolk Suggestions";
+  if (type.includes("suggestion")) return "Vendor Suggestions";
   if (type.includes("announcement")) return "System Announcements";
   return log.target_type ? auditLabel(log.target_type) : "Other";
 }
@@ -206,6 +206,7 @@ const PRICE_STATUS_LABELS = {
   published: "Published",
   flagged: "Flagged",
   rejected: "Rejected",
+  withdrawn: "Withdrawn",
 };
 
 // Django PriceRecord → row shape used by the dashboard tables.
@@ -222,6 +223,7 @@ const toPriceRow = (r) => ({
   status: PRICE_STATUS_LABELS[r.status] || r.status,
   isCorrection: Boolean(r.is_correction),
   corrections: r.corrections || [],
+  createdAt: r.created_at,
 });
 
 // Django user (from /auth/users/) → row shape used by the dashboard tables.
@@ -348,7 +350,7 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
   const pendingSuggestions = suggestions.filter((s) => s.status === "Pending Review");
   if (pendingSuggestions.length > 0) {
     notifs.push({
-      id: nid++, type: "info", page: "Fisherfolk Suggestions",
+      id: nid++, type: "info", page: "Vendor Suggestions",
       title: `${pendingSuggestions.length} vendor suggestion${pendingSuggestions.length > 1 ? "s" : ""} awaiting review`,
       detail: pendingSuggestions.slice(0, 3).map((s) => s.species).join(", "),
     });
@@ -602,7 +604,7 @@ useEffect(() => {
     {
       label: "MONITORING",
       items: [
-        { name: "Fisherfolk Suggestions", icon: "💬" },
+        { name: "Vendor Suggestions", icon: "💬" },
         { name: "Predictive Analytics", icon: "∿" },
         { name: "External Factors", icon: "☁" },
         { name: "Data Monitoring", icon: "◫" },
@@ -673,7 +675,7 @@ useEffect(() => {
         );
       case "System Configuration":
         return <SystemConfiguration notify={notify} />;
-      case "Fisherfolk Suggestions":
+      case "Vendor Suggestions":
         return (
           <FisherfolkSuggestions
             suggestions={suggestions} error={suggestionsError}
@@ -2852,6 +2854,26 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
   const [correcting, setCorrecting] = useState(null);
   const correctRecord = (r) => setCorrecting(r);
 
+  // A price published by mistake today can be removed (withdrawn) with a reason.
+  const encodedToday = (r) =>
+    r.createdAt && new Date(r.createdAt).toLocaleDateString("en-CA") === new Date().toLocaleDateString("en-CA");
+  const withdrawRecord = async (r) => {
+    const reason = await askText(
+      `Remove the published ${r.species} price (${peso(r.price)}/kg, ${fmtDate(r.date)})?\n\nIt will no longer show as an official price. The record and your reason stay in the Activity Logs.`,
+      "",
+      { title: "Remove today's price", confirmLabel: "Remove price", numeric: false },
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 5) { notify("Write why this price is being removed."); return; }
+    try {
+      const data = await sendJson(`/prices/${r.id}/withdraw/`, "POST", { reason: reason.trim() });
+      notify(data.message);
+      onChanged();
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
   const exportCSV = () => {
     const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const rows = [
@@ -2987,8 +3009,9 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
                   </td>
                   <td>
                     <div className="action-icons">
-                      <button title={r.status === "Published" ? "Correct record (fish or price)" : "Edit record"} onClick={() => correctRecord(r)}>✎</button>
-                      {r.status !== "Published" && <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>}
+                      {r.status !== "Withdrawn" && <button title={r.status === "Published" ? "Correct record (fish or price)" : "Edit record"} onClick={() => correctRecord(r)}>✎</button>}
+                      {r.status !== "Published" && r.status !== "Withdrawn" && <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>}
+                      {r.status === "Published" && encodedToday(r) && <button title="Remove (encoded today by mistake)" onClick={() => withdrawRecord(r)}>✕</button>}
                     </div>
                   </td>
                 </tr>
@@ -3267,7 +3290,7 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
     <>
       <div className="page-title">
         <div>
-          <h2>Fisherfolk Suggested Price Monitoring</h2>
+          <h2>Vendor Suggested Price Monitoring</h2>
           <p>Review prices suggested by fish vendors and compare them against official rates.</p>
         </div>
       </div>
@@ -3311,7 +3334,7 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
           <div>
             <span>Maximum Suggested</span>
             <h2>{stats.max !== null ? peso(stats.max) : "—"}</h2>
-            <small>{stats.participants} participating fisherfolk</small>
+            <small>{stats.participants} participating vendors</small>
           </div>
         </div>
       </div>

@@ -271,6 +271,41 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         return queryset
 
     # --------------------------------------------------------
+    # REMOVE A PRICE PUBLISHED BY MISTAKE TODAY
+    # --------------------------------------------------------
+    @action(detail=True, methods=["post"], url_path="withdraw")
+    @transaction.atomic
+    def withdraw_price(self, request, pk=None):
+        """
+        Remove a price that was encoded and published today by mistake.
+        It is marked Withdrawn (not deleted), so the audit trail keeps it;
+        older published prices can only be corrected.
+        """
+        if approved_role(request.user) not in ("LGU Officer", "Administrator"):
+            raise PermissionDenied("Only LGU Officers and Administrators can remove prices.")
+        record = self.get_object()
+        if record.status != PriceRecord.STATUS_PUBLISHED:
+            return Response(
+                {"message": "Only published prices are withdrawn. Delete unpublished entries instead."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        if timezone.localtime(record.created_at).date() != timezone.localdate():
+            return Response(
+                {"message": "Only prices encoded today can be removed. Older official prices can only be corrected, so their history stays."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = str(request.data.get("reason") or "").strip()
+        if len(reason) < 5:
+            return Response({"reason": "Write why this price is being removed."}, status=status.HTTP_400_BAD_REQUEST)
+        record.status = PriceRecord.STATUS_WITHDRAWN
+        record.rejection_reason = reason[:500]
+        record.reviewed_by = request.user
+        record.reviewed_at = timezone.now()
+        record.save(update_fields=["status", "rejection_reason", "reviewed_by", "reviewed_at", "updated_at"])
+        self._log_price("withdrawn", record, {"reason": reason[:500], "status": PriceRecord.STATUS_WITHDRAWN})
+        return Response({"message": f"{record.fish_species.name} price removed. It no longer shows as an official price; the record and reason stay in the Audit Log."})
+
+    # --------------------------------------------------------
     # PAST IMPORTS AND UNDO
     # --------------------------------------------------------
     def _import_batches(self, request):
@@ -423,6 +458,8 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                     municipality_id__in={c[2].id for c in candidates},
                     recorded_date__gte=min(days),
                     recorded_date__lte=max(days),
+                ).exclude(
+                    status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN]
                 ).values_list("fish_species_id", "municipality_id", "recorded_date")
             )
         new_rows = [c for c in candidates if (c[1].id, c[2].id, c[3]) not in existing]
@@ -576,7 +613,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                 fish_species=new_species,
                 municipality_id=record.municipality_id,
                 recorded_date=record.recorded_date,
-            ).exclude(status=PriceRecord.STATUS_REJECTED).exclude(pk=record.pk).exists():
+            ).exclude(status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN]).exclude(pk=record.pk).exists():
                 return Response(
                     {"fish_species": f"{new_species.name} already has a price in {record.municipality.name} for "
                                      f"{record.recorded_date:%b %d, %Y}. Correct that record instead."},

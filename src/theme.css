@@ -1582,3 +1582,6 @@ table th {
 .correct-fish { display: flex; align-items: center; gap: 10px; }
 .correct-fish select { flex: 1; min-width: 0; }
 .correct-note { display: block; margin-top: 6px; color: #64748b; font-size: 12px; }
+
+/* A published price removed on the day it was encoded. */
+.badge.withdrawn { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
