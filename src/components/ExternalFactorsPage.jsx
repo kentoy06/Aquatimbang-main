@@ -89,6 +89,25 @@ function ExternalFactorsPage({ notify }) {
         <div><h2>External Factors</h2><p>Log fuel prices, weather, holidays and closed fishing seasons used by the forecast and price explanations.</p></div>
       </div>
 
+      <details className="factor-guide" open={factors.length < 7}>
+        <summary>What are external factors, and why log them?</summary>
+        <p className="factor-guide-lead">
+          Fish prices don't only depend on the vendors. Conditions outside the market change how much fish is caught and
+          how many people buy it. Logging them every day lets AquaTimbang learn their effect on prices.
+        </p>
+        <div className="factor-guide-grid">
+          <div><span aria-hidden="true">⛽</span><strong>Fuel price</strong><p>Today's diesel price per liter. Fuel is a big cost of every fishing trip, so higher diesel usually means higher fish prices.</p></div>
+          <div><span aria-hidden="true">⛈</span><strong>Weather</strong><p>Sunny, cloudy, rainy or stormy. In rain and storms fewer boats go out, so less fish reaches the market.</p></div>
+          <div><span aria-hidden="true">🎉</span><strong>Holiday or fiesta</strong><p>Days like Sinulog, Holy Week or Christmas. More families buy fish, so demand goes up. Upcoming holidays can be logged in advance.</p></div>
+          <div><span aria-hidden="true">🚫</span><strong>Closed fishing season</strong><p>BFAR bans on catching some fish for a few months (below). Less catch means less supply. Set up once; they repeat every year.</p></div>
+        </div>
+        <p className="factor-guide-use">
+          <strong>Where they are used:</strong> the SARIMAX <b>Price Forecast</b> (its External Factors card shows each factor's effect,
+          e.g. "stormy weather raises the price by about ₱4/kg"), the <b>"Why is the price changing?"</b> panel, and the
+          <b> External Factor Summary</b> tab in Reports.
+        </p>
+      </details>
+
       <div className={loggedRecently >= 15 ? "info-box" : "warn-box"} style={{ marginBottom: 16 }}>
         Logged on <strong>{loggedRecently} of the last 30 days</strong>. The forecast uses these factors once they are
         logged on at least half of the days — log them every day for the best results. Upcoming holidays can be

@@ -1387,3 +1387,94 @@ table th {
   .scan-progress-row { grid-template-columns: 1fr auto; }
   .scan-progress-row .scan-meter-bar { grid-column: 1 / -1; grid-row: 2; }
 }
+
+/* ---------- Registration: fish you sell dropdown ---------- */
+
+.fish-multi { position: relative; display: grid; gap: 8px; }
+.fish-multi-button {
+  width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+  padding: 12px 14px; border: 1px solid #cfdbe6; border-radius: 10px; background: #fff;
+  font: inherit; font-size: 14px; color: var(--ink); text-align: left; cursor: pointer;
+}
+.fish-multi-button span:first-child { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.fish-multi-button.placeholder { color: #8296a8; }
+.fish-multi-button:focus-visible { outline: 3px solid rgba(63, 193, 217, 0.45); outline-offset: 1px; }
+.fish-multi-caret { color: #64748b; }
+.fish-multi-panel {
+  position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 50; background: #fff;
+  border: 1px solid #cfdbe6; border-radius: 12px; box-shadow: 0 16px 36px rgba(7, 26, 43, 0.18);
+  padding: 10px; display: grid; gap: 8px;
+}
+.fish-multi-search { width: 100%; padding: 9px 12px; border: 1px solid #cfdbe6; border-radius: 8px; font: inherit; font-size: 14px; }
+.fish-multi-panel ul { list-style: none; margin: 0; padding: 0; max-height: 260px; overflow-y: auto; }
+.fish-multi-panel li label { display: flex; align-items: center; gap: 10px; padding: 7px 8px; border-radius: 8px; cursor: pointer; font-size: 14px; }
+.fish-multi-panel li label:hover { background: #f3f7fa; }
+.fish-multi-panel li label.on { background: #ecf8fb; font-weight: 600; }
+.fish-multi-panel li input { width: 16px; height: 16px; accent-color: var(--ocean); margin: 0; }
+.fish-multi-empty { padding: 8px; color: #64748b; font-size: 13px; }
+.fish-multi-foot { display: flex; justify-content: space-between; align-items: center; border-top: 1px solid #e2eaf1; padding-top: 8px; }
+.fish-multi-foot small { color: #64748b; }
+.fish-multi-foot .primary-btn { padding: 7px 16px; }
+.fish-multi-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.fish-multi-chip {
+  display: inline-flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-radius: 999px;
+  background: var(--navy-800); color: #fff; font-size: 13px;
+}
+.fish-multi-chip button {
+  border: 0; background: rgba(255, 255, 255, 0.18); color: #fff; width: 20px; height: 20px; border-radius: 50%;
+  cursor: pointer; font-size: 11px; line-height: 1; display: grid; place-items: center; padding: 0;
+}
+
+/* ---------- Audit logs: fish, municipality, price ---------- */
+
+.audit-fish { display: inline-flex; align-items: center; gap: 8px; font-weight: 600; }
+.audit-price { display: inline-grid; gap: 1px; }
+.audit-price small { color: #64748b; font-size: 11px; font-weight: 400; }
+.audit-record { display: grid; gap: 4px; justify-items: start; }
+.audit-record small { color: #475569; }
+.audit-muted { color: #94a3b8; }
+
+/* Password boxes with a show/hide eye button. */
+.password-field input { width: 100%; padding-right: 42px !important; }
+
+/* ---------- Admin: reset password choice ---------- */
+
+.reset-choice { width: min(520px, calc(100vw - 24px)); display: grid; gap: 12px; }
+.reset-option {
+  display: flex; gap: 14px; align-items: flex-start; text-align: left; width: 100%;
+  border: 1px solid #cfdbe6; border-radius: 14px; background: #fff; padding: 14px 16px; cursor: pointer; font: inherit;
+}
+.reset-option:hover:not(:disabled) { border-color: var(--aqua); background: #f4fbfd; }
+.reset-option:disabled { opacity: .55; cursor: not-allowed; }
+.reset-option-icon { font-size: 24px; line-height: 1; }
+.reset-option strong { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; color: var(--navy-900); }
+.reset-option em { font-style: normal; font-size: 11px; font-weight: 700; background: #e7f7ef; color: #15803d; padding: 2px 8px; border-radius: 999px; }
+.reset-option small { display: block; margin-top: 4px; color: #5b7389; font-size: 13px; line-height: 1.45; }
+.temp-password code { font-size: 20px; letter-spacing: .02em; }
+
+/* User Management: five action buttons wrap into two rows instead of overflowing. */
+.content .action-icons.user-actions { flex-wrap: wrap; max-width: 128px; row-gap: 6px; }
+
+.role-change-box { border: 1px solid #ffc49a; background: #fff6ee; border-radius: 14px; padding: 14px 16px; margin-bottom: 14px; display: grid; gap: 8px; }
+.role-change-box strong { color: #c2410c; }
+.role-change-box p { margin: 0; font-size: 13px; color: #475569; line-height: 1.5; }
+.role-change-box .form-group { margin: 0; }
+.role-change-check { display: flex; gap: 10px; align-items: flex-start; font-size: 13px; color: #334155; cursor: pointer; }
+.role-change-check input { width: 18px; height: 18px; margin-top: 1px; accent-color: var(--ocean); }
+
+/* Reports: report type tabs and short help line. */
+.report-tabs { margin-bottom: 10px; flex-wrap: wrap; }
+.report-help { margin: 0 0 12px; font-size: 13px; color: #5b7389; }
+.log-summary { grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)) !important; }
+
+/* ---------- External Factors guide ---------- */
+
+.factor-guide { background: #fff; border: 1px solid var(--line); border-radius: 16px; padding: 4px 18px; margin-bottom: 16px; box-shadow: var(--shadow); }
+.factor-guide summary { cursor: pointer; padding: 12px 0; font-weight: 700; color: var(--navy-900); }
+.factor-guide-lead { margin: 0 0 12px; color: #475569; font-size: 14px; max-width: 75ch; }
+.factor-guide-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; }
+.factor-guide-grid > div { background: #f3f7fa; border: 1px solid #e2eaf1; border-radius: 12px; padding: 12px 14px; display: grid; gap: 4px; align-content: start; }
+.factor-guide-grid span { font-size: 22px; }
+.factor-guide-grid strong { color: var(--navy-900); }
+.factor-guide-grid p { margin: 0; font-size: 13px; color: #475569; line-height: 1.5; }
+.factor-guide-use { margin: 12px 0 14px; font-size: 13px; color: #475569; }

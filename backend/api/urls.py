@@ -28,6 +28,7 @@ from .views import (
     manage_user,
     set_user_status,
     reset_user_password,
+    send_user_reset_link,
     change_my_password,
     logout_user,
     system_settings,
@@ -249,6 +250,13 @@ urlpatterns = [
         "auth/users/<int:user_id>/reset-password/",
         reset_user_password,
         name="reset-user-password"
+    ),
+
+    # Administrator: email the user a link to choose a new password.
+    path(
+        "auth/users/<int:user_id>/send-reset-link/",
+        send_user_reset_link,
+        name="send-user-reset-link"
     ),
 
     # System Configuration: GET for everyone, PATCH for the Administrator.

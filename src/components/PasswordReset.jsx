@@ -1,4 +1,5 @@
 import { BrandMark } from "./BrandLogo.jsx";
+import PasswordInput from "./PasswordInput.jsx";
 import React, { useState } from "react";
 import { apiUrl } from "../api/config.js";
 
@@ -115,11 +116,11 @@ export function ResetPasswordPage({ uid, token, onDone }) {
             <p style={{ color: "#667085" }}>Use at least 8 characters that are hard to guess.</p>
             <div className="form-group">
               <label htmlFor="reset-password">New Password</label>
-              <input id="reset-password" type="password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
+              <PasswordInput id="reset-password" autoComplete="new-password" value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
             <div className="form-group">
               <label htmlFor="reset-confirm">Confirm New Password</label>
-              <input id="reset-confirm" type="password" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+              <PasswordInput id="reset-confirm" autoComplete="new-password" value={confirm} onChange={(e) => setConfirm(e.target.value)} />
             </div>
             {error && <div className="login-error" role="alert">⚠ {error}</div>}
             <button type="submit" className="primary-btn full-btn" disabled={saving}>{saving ? "Saving…" : "Change Password"}</button>

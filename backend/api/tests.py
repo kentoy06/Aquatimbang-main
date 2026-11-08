@@ -588,6 +588,11 @@ class PriceRecordActivityLogTests(TestCase):
             response = self.client.post(f"/api/prices/{pk}/{route}/", {}, format="json")
             self.assertEqual(response.status_code, 200, getattr(response, "data", None))
             self.assertTrue(self.ActivityLog.objects.filter(target_type="PriceRecord", target_id=pk, action=action).exists())
+        # The published log keeps the fish, municipality and price separately.
+        log = self.ActivityLog.objects.get(target_type="PriceRecord", target_id=pk, action="published")
+        for key in ("fish", "fish_id", "municipality", "price_per_kg", "recorded_date"):
+            self.assertIn(key, log.details)
+        self.assertEqual(log.details["status"], "published")
 
     def test_failed_review_does_not_log(self):
         response = self.create_price()
@@ -903,6 +908,7 @@ class AccountManagementTests(TestCase):
         Token.objects.create(user=self.vendor)
         response = self.client_for(self.admin).patch(f"/api/auth/users/{self.vendor.pk}/", {
             "first_name": "Renamed", "role": "LGU Officer", "municipality": self.mandaue.pk,
+            "role_change_reason": "Transferred to the Mandaue price office",
         }, format="json")
         self.assertEqual(response.status_code, 200, response.data)
         self.assertEqual(response.data["role"], "LGU Officer")
@@ -969,6 +975,56 @@ class AccountManagementTests(TestCase):
         self.assertEqual(response.status_code, 200)
         self.assertTrue(response.data["token"])
         self.assertEqual(self.login("um_vendor", "An0ther-Pass-2026").status_code, 200)
+
+    def test_temporary_password_is_readable_and_must_be_changed(self):
+        temporary = self.client_for(self.admin).post(f"/api/auth/users/{self.vendor.pk}/reset-password/").data["temporary_password"]
+        self.assertRegex(temporary, r"^[A-Z][a-z]+-[A-Z][a-z]+-\d{4}$")
+        login = self.login("um_vendor", temporary)
+        self.assertTrue(login.data["must_change_password"])
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {login.data['token']}")
+        changed = client.post("/api/auth/change-password/", {"current_password": temporary, "new_password": "My-Own-Pass-2026"}, format="json")
+        self.assertEqual(changed.status_code, 200)
+        self.assertFalse(self.login("um_vendor", "My-Own-Pass-2026").data["must_change_password"])
+
+    def test_admin_emails_a_reset_link(self):
+        from django.core import mail
+        response = self.client_for(self.admin).post(f"/api/auth/users/{self.vendor.pk}/send-reset-link/")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("reset_uid=", mail.outbox[0].body)
+        self.assertEqual(mail.outbox[0].to, ["um_vendor@example.com"])
+        log = ActivityLog.objects.filter(action="password reset", target_name="um_vendor").latest("created_at")
+        self.assertEqual(log.details["method"], "email link")
+        # Only Administrators can do this.
+        self.assertEqual(self.client_for(self.officer).post(f"/api/auth/users/{self.vendor.pk}/send-reset-link/").status_code, 403)
+
+    def test_role_change_needs_a_reason_and_tells_the_user(self):
+        from django.core import mail
+        url = f"/api/auth/users/{self.vendor.pk}/"
+        refused = self.client_for(self.admin).patch(url, {"role": "LGU Officer"}, format="json")
+        self.assertEqual(refused.status_code, 400)
+        self.assertIn("role_change_reason", refused.data)
+        self.assertEqual(UserProfile.objects.get(user=self.vendor).role.name, "Fish Vendor")
+        done = self.client_for(self.admin).patch(url, {"role": "LGU Officer", "role_change_reason": "Hired as price encoder, memo Nov 5"}, format="json")
+        self.assertEqual(done.status_code, 200, done.data)
+        log = ActivityLog.objects.filter(action="role changed", target_name="um_vendor").latest("created_at")
+        self.assertEqual(log.details["reason"], "Hired as price encoder, memo Nov 5")
+        self.assertEqual(len(mail.outbox), 1)
+        self.assertIn("LGU Officer", mail.outbox[0].body)
+
+    def test_admin_created_account_must_choose_own_password(self):
+        self.client_for(self.admin).post("/api/auth/users/", {
+            "username": "first_login", "email": "first@lgu.gov.ph", "first_name": "First", "last_name": "Login",
+            "password": "Str0ng-Pass-2026", "role": "LGU Officer", "municipality": self.cebu.pk,
+        }, format="json")
+        self.assertTrue(self.login("first_login", "Str0ng-Pass-2026").data["must_change_password"])
+
+    def test_pending_message_names_the_right_reviewer(self):
+        self.make_user("wait_vendor", "Fish Vendor", self.cebu, status="pending")
+        self.make_user("wait_officer", "LGU Officer", self.cebu, status="pending")
+        self.assertIn("LGU Officer", self.login("wait_vendor").data["message"])
+        self.assertIn("Administrator", self.login("wait_officer").data["message"])
 
     # ---- reviewing registrations ----
 
