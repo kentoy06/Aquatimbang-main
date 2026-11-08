@@ -793,3 +793,76 @@ html, body, #root {
   color: rgba(255, 255, 255, 0.6);
   letter-spacing: 0.02em;
 }
+
+/* Price tiles open the fish profile. */
+button.price-tile {
+  width: 100%;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: transform 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+button.price-tile:hover { transform: translateY(-2px); }
+button.price-tile:focus-visible { outline: 3px solid rgba(255, 122, 26, 0.7); outline-offset: 2px; }
+
+/* ---------- Fish profile pop-up ---------- */
+
+.fp-backdrop {
+  position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center;
+  padding: 16px; background: rgba(3, 11, 20, 0.72); backdrop-filter: blur(4px);
+}
+.fp-modal {
+  position: relative; width: min(880px, 100%); max-height: calc(100vh - 32px); overflow-y: auto;
+  display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  background: #ffffff; color: #0d2236; border-radius: 22px; box-shadow: 0 30px 80px rgba(0, 0, 0, 0.45);
+}
+.fp-close {
+  position: absolute; top: 12px; right: 12px; z-index: 2; width: 36px; height: 36px; border-radius: 50%;
+  border: 0; background: rgba(7, 26, 43, 0.75); color: #fff; font-size: 15px; cursor: pointer;
+}
+.fp-photo {
+  background: #071a2b; display: grid; place-items: center; min-height: 280px;
+  border-radius: 22px 0 0 22px; overflow: hidden;
+}
+.fp-photo img { width: 100%; height: 100%; max-height: 520px; object-fit: contain; }
+.fp-photo span { font-size: 48px; font-weight: 700; color: #3fc1d9; }
+.fp-body { padding: 26px 26px 22px; display: grid; gap: 14px; align-content: start; }
+.fp-eyebrow { font-size: 11px; font-weight: 700; letter-spacing: 0.12em; text-transform: uppercase; color: #e8650a; }
+.fp-body h3 { margin: 4px 0 0; font-family: "Playfair Display", Georgia, serif; font-size: 30px; color: #071a2b; }
+.fp-sci { color: #667085; font-size: 14px; }
+.fp-price-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 8px 14px; }
+.fp-price strong { font-family: "Playfair Display", Georgia, serif; font-size: 40px; color: #0e7c86; }
+.fp-price small { color: #667085; font-size: 15px; margin-left: 2px; }
+.fp-change { font-size: 13px; font-weight: 700; padding: 4px 10px; border-radius: 999px; background: #f1f5f9; color: #475569; }
+.fp-change.up { background: #fff0e4; color: #c2410c; }
+.fp-change.down { background: #e7f7ef; color: #15803d; }
+.fp-facts { margin: 0; display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.fp-facts > div { background: #f3f7fa; border-radius: 12px; padding: 9px 12px; }
+.fp-facts dt { font-size: 11px; color: #5b7389; text-transform: uppercase; letter-spacing: 0.06em; }
+.fp-facts dd { margin: 2px 0 0; font-weight: 600; font-size: 14px; }
+.fp-season { background: #fff4ec; border: 1px solid #ffd7b8; border-radius: 12px; padding: 10px 12px; font-size: 13px; }
+.fp-season strong { color: #c2410c; }
+.fp-season p { margin: 4px 0 0; color: #475569; }
+.fp-section h4 { margin: 0 0 6px; font-size: 13px; color: #5b7389; text-transform: uppercase; letter-spacing: 0.08em; }
+.fp-section p { margin: 0; color: #344054; line-height: 1.55; font-size: 14px; }
+.fp-chart { width: 100%; height: auto; display: block; }
+.fp-stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-top: 8px; }
+.fp-stats > div { text-align: center; border: 1px solid #e2eaf1; border-radius: 10px; padding: 6px; }
+.fp-stats span { display: block; font-size: 11px; color: #667085; }
+.fp-stats b { font-size: 14px; color: #071a2b; }
+.fp-muted { margin: 0; color: #667085; font-size: 13px; }
+.fp-credit { margin: 0; color: #98a2b3; font-size: 11px; }
+.fp-error { background: #fff1f2; color: #be123c; border-radius: 10px; padding: 10px 12px; font-size: 14px; }
+.fp-actions { display: flex; flex-wrap: wrap; gap: 10px; }
+.fp-actions .pill-btn:not(.pill-orange) { color: #071a2b; border: 1px solid #cfdbe6; background: #fff; }
+
+@media (max-width: 720px) {
+  .fp-modal { grid-template-columns: 1fr; }
+  .fp-photo { min-height: 200px; height: 240px; border-radius: 22px 22px 0 0; }
+  .fp-photo img { width: auto; height: auto; max-width: 100%; max-height: 240px; }
+  .fp-body { padding: 20px 18px; }
+  .fp-body h3 { font-size: 26px; }
+  .fp-price strong { font-size: 34px; }
+}
+@media (prefers-reduced-motion: reduce) { button.price-tile { transition: none; } button.price-tile:hover { transform: none; } }

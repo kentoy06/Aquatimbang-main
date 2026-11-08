@@ -2076,3 +2076,42 @@ class FishScanPhotoTests(TestCase):
             self.assertEqual(self.upload(self.vendor).status_code, 201)
             self.assertEqual(self.upload(self.vendor).status_code, 201)
             self.assertEqual(self.upload(self.vendor).status_code, 429)
+
+
+class PublicFishProfileTests(TestCase):
+    """Fish profile shown when a price is clicked on the landing page."""
+
+    def setUp(self):
+        cache.clear()
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.mandaue = Municipality.objects.create(name="Mandaue City", province="Cebu")
+        self.fish = FishSpecies.objects.create(name="Galunggong", scientific_name="Decapterus spp.", description="Round scad.")
+        today = timezone.localdate()
+        for back in range(0, 10):
+            PriceRecord.objects.create(
+                fish_species=self.fish, municipality=self.cebu, price_per_kg=Decimal(200 - back),
+                recorded_date=today - datetime.timedelta(days=back), status="published",
+            )
+        PriceRecord.objects.create(fish_species=self.fish, municipality=self.mandaue, price_per_kg=Decimal("190"),
+                                   recorded_date=today, status="published")
+        # Not official: must never appear publicly.
+        PriceRecord.objects.create(fish_species=self.fish, municipality=self.cebu, price_per_kg=Decimal("999"),
+                                   recorded_date=today + datetime.timedelta(days=1), status="pending")
+
+    def test_profile_shows_only_published_prices(self):
+        response = APIClient().get(f"/api/public/fish/{self.fish.pk}/", {"municipality": self.cebu.pk})
+        self.assertEqual(response.status_code, 200)
+        data = response.data
+        self.assertEqual(data["fish"]["scientific_name"], "Decapterus spp.")
+        self.assertEqual(data["latest"]["price_per_kg"], 200.0)
+        self.assertEqual(data["week_ago"]["price_per_kg"], 193.0)
+        self.assertEqual(data["weekly_change_percent"], 3.6)
+        self.assertEqual(len(data["history"]), 10)
+        self.assertEqual(data["stats_30_days"]["high"], 200.0)
+        self.assertNotIn(999.0, [h["price"] for h in data["history"]])
+        self.assertEqual(data["also_priced_in"], ["Mandaue City"])
+
+    def test_unknown_or_unpriced_fish(self):
+        self.assertEqual(APIClient().get("/api/public/fish/9999/").status_code, 404)
+        lonely = FishSpecies.objects.create(name="Lapu-lapu")
+        self.assertEqual(APIClient().get(f"/api/public/fish/{lonely.pk}/").status_code, 404)

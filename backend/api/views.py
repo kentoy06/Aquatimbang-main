@@ -1557,6 +1557,7 @@ def public_summary(request):
                 "scientific_name": fish.scientific_name,
                 "has_photo": bool(fish.photo),
                 "updated_at": fish.updated_at.isoformat(),
+                "municipality_id": record.municipality_id,
                 "municipality_name": record.municipality.name,
                 "price_per_kg": record.price_per_kg,
                 "recorded_date": record.recorded_date,
@@ -1577,6 +1578,97 @@ def public_summary(request):
         },
         status=status.HTTP_200_OK,
     )
+@api_view(["GET"])
+@permission_classes([AllowAny])
+def public_fish_profile(request, fish_id):
+    """
+    Public "fish profile" for the landing page: the fish, its latest
+    official price in one municipality, the change from a week earlier,
+    the last 30 days of published prices, and any closed season now.
+    Only published prices are shown.
+    """
+    from datetime import timedelta
+    from .models import ClosedFishingSeason
+
+    fish = FishSpecies.objects.filter(pk=fish_id, is_active=True).first()
+    if fish is None:
+        return Response({"message": "Fish not found."}, status=status.HTTP_404_NOT_FOUND)
+    published = PriceRecord.objects.filter(status=PriceRecord.STATUS_PUBLISHED, fish_species=fish)
+    municipality = None
+    if request.query_params.get("municipality"):
+        try:
+            municipality = Municipality.objects.get(pk=int(request.query_params["municipality"]))
+        except (ValueError, Municipality.DoesNotExist):
+            return Response({"message": "Municipality not found."}, status=status.HTTP_404_NOT_FOUND)
+        published = published.filter(municipality=municipality)
+
+    latest = published.select_related("municipality").order_by("-recorded_date", "-id").first()
+    if latest is None:
+        return Response({"message": f"No official price for {fish.name} yet."}, status=status.HTTP_404_NOT_FOUND)
+    municipality = municipality or latest.municipality
+    published = published.filter(municipality=municipality)
+
+    week_ago = published.filter(recorded_date__lte=latest.recorded_date - timedelta(days=7)).order_by("-recorded_date", "-id").first()
+    change = None
+    if week_ago and week_ago.price_per_kg:
+        change = round(float((latest.price_per_kg - week_ago.price_per_kg) / week_ago.price_per_kg * 100), 1)
+
+    start = latest.recorded_date - timedelta(days=29)
+    history = list(
+        published.filter(recorded_date__gte=start)
+        .order_by("recorded_date", "id")
+        .values_list("recorded_date", "price_per_kg")
+    )
+    by_day = {}
+    for day, price in history:
+        by_day[day] = float(price)  # one price per day (latest wins)
+    prices = list(by_day.values())
+
+    today = timezone.localdate()
+    seasons = [
+        {"name": s.name, "area": s.area, "dates": f"{s.start_month}/{s.start_day} - {s.end_month}/{s.end_day}", "notes": s.notes}
+        for s in ClosedFishingSeason.objects.filter(is_active=True, species=fish)
+        if s.covers(today)
+    ]
+    other_places = list(
+        PriceRecord.objects.filter(status=PriceRecord.STATUS_PUBLISHED, fish_species=fish)
+        .exclude(municipality=municipality)
+        .order_by("municipality__name")
+        .values_list("municipality__name", flat=True)
+        .distinct()[:10]
+    )
+
+    return Response({
+        "fish": {
+            "id": fish.id,
+            "name": fish.name,
+            "scientific_name": fish.scientific_name,
+            "description": fish.description,
+            "has_photo": bool(fish.photo),
+            "photo_credit": fish.photo_credit,
+            "updated_at": fish.updated_at.isoformat(),
+        },
+        "municipality": {"id": municipality.id, "name": municipality.name, "province": municipality.province},
+        "latest": {
+            "price_per_kg": float(latest.price_per_kg),
+            "recorded_date": latest.recorded_date,
+            "published_at": latest.published_at,
+            "is_correction": latest.is_correction,
+        },
+        "week_ago": (
+            {"price_per_kg": float(week_ago.price_per_kg), "recorded_date": week_ago.recorded_date} if week_ago else None
+        ),
+        "weekly_change_percent": change,
+        "history": [{"date": day, "price": price} for day, price in by_day.items()],
+        "stats_30_days": (
+            {"low": min(prices), "high": max(prices), "average": round(sum(prices) / len(prices), 2), "days": len(prices)}
+            if prices else None
+        ),
+        "closed_seasons_now": seasons,
+        "also_priced_in": other_places,
+    })
+
+
 # ============================================================
 # ADMINISTRATOR - APPROVE USER ACCOUNT
 # ============================================================
