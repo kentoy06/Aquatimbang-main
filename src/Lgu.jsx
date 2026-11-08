@@ -1,5 +1,6 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
+import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
@@ -1556,103 +1557,14 @@ function PriceEntry({
   // ------------------------------------------------------------
   // EDIT PRICE
   // ------------------------------------------------------------
-  const editPrice = async (record) => {
-    // Ask the LGU officer for the new price.
-    const input = await askText(
-      `Enter the new price per kg for ${record.fish_name}:`,
-      record.price_per_kg
-    );
-
-    // Stop when the user cancels.
-    if (input === null) {
-      return;
-    }
-
-    const newPrice = Number(input);
-
-    // Validate the new price.
-    if (
-      Number.isNaN(newPrice) ||
-      newPrice <= 0
-    ) {
-      notify("Enter a valid price.");
-      return;
-    }
-
-    // Published prices are corrected with a reason; the original is kept.
-    const isPublished = record.status === "published";
-    let reason = "";
-    if (isPublished) {
-      reason = await askText("This price is already published. Reason for the correction (kept in the audit trail):", "");
-      if (reason === null) return;
-      if (!reason.trim()) {
-        notify("A reason is required to correct a published price.");
-        return;
-      }
-    }
-
-    try {
-      const token = getToken();
-
-      const response = await fetch(
-        isPublished
-          ? `${API_BASE_URL}/prices/${record.id}/correct/`
-          : `${API_BASE_URL}/prices/${record.id}/`,
-        {
-          method: isPublished ? "POST" : "PATCH",
-
-          headers: {
-            Authorization: `Token ${token}`,
-            "Content-Type": "application/json",
-          },
-
-          body: JSON.stringify(
-            isPublished
-              ? { price_per_kg: newPrice.toFixed(2), reason: reason.trim() }
-              : { price_per_kg: newPrice }
-          ),
-        }
-      );
-
-      const data = await response.json();
-
-      // Handle update errors (including prices outside the allowed range).
-      if (!response.ok) {
-        notify(
-          data.message ||
-            data.detail ||
-            [].concat(data.price_per_kg || data.reason || []).join(" ") ||
-            "Unable to update the price."
-        );
-
-        return;
-      }
-
-      // Reload the table from Django.
-      await loadPriceEntries();
-
-      // Refresh the parent dashboard when available.
-      if (refreshPrices) {
-        await refreshPrices();
-      }
-
-
-
-      notify(
-        isPublished
-          ? `${record.fish_name} price corrected. The original price is kept in the history.`
-          : `${record.fish_name} price updated.`
-      );
-    } catch (error) {
-      console.error(
-        "Price update connection error:",
-        error
-      );
-
-      notify(
-        "Unable to connect to the AquaTimbang server."
-      );
-    }
+  // Fix a record's fish and/or price (published ones need a reason).
+  const [correcting, setCorrecting] = useState(null);
+  const editPrice = (record) => setCorrecting(record);
+  const afterCorrection = async (message) => {
+    setCorrecting(null);
+    notify(message);
+    await loadPriceEntries();
+    if (refreshPrices) await refreshPrices();
   };
 
   // ------------------------------------------------------------
@@ -1765,6 +1677,17 @@ function PriceEntry({
   // ------------------------------------------------------------
   return (
     <>
+      {correcting && (
+        <CorrectRecordDialog
+          record={{
+            id: correcting.id, fishId: correcting.fish_species, fishName: correcting.fish_name,
+            municipality: correcting.municipality_name, date: correcting.recorded_date,
+            price: correcting.price_per_kg, published: String(correcting.status).toLowerCase() === "published",
+          }}
+          onClose={() => setCorrecting(null)}
+          onSaved={afterCorrection}
+        />
+      )}
       <div className="page-title">
         <div>
           <h2>Daily Price Entry</h2>
@@ -1992,7 +1915,7 @@ function PriceEntry({
                       <div className="action-icons">
                         {/* Edit this Django price record. */}
                         <button
-                          title={record.status === "published" ? "Correct published price" : "Edit"}
+                          title={record.status === "published" ? "Correct record (fish or price)" : "Edit record"}
                           onClick={() =>
                             editPrice(record)
                           }

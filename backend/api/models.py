@@ -1131,6 +1131,13 @@ class PriceCorrection(models.Model):
     price_record = models.ForeignKey(PriceRecord, on_delete=models.CASCADE, related_name="corrections")
     previous_price = models.DecimalField(max_digits=10, decimal_places=2)
     new_price = models.DecimalField(max_digits=10, decimal_places=2)
+    # Set when the correction also fixed a wrong fish species.
+    previous_species = models.ForeignKey(
+        "FishSpecies", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
+    new_species = models.ForeignKey(
+        "FishSpecies", on_delete=models.SET_NULL, null=True, blank=True, related_name="+"
+    )
     reason = models.TextField()
     corrected_by = models.ForeignKey(
         "auth.User",
