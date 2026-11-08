@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { askConfirm } from "./ConfirmDialog.jsx";
 import PasswordInput from "./PasswordInput.jsx";
 import { apiUrl, authHeaders } from "../api/config.js";
 import {
@@ -101,7 +102,7 @@ function ProfilePhotoCard({ account, photo, notify }) {
   };
 
   const remove = async () => {
-    if (!window.confirm("Remove your profile photo?")) return;
+    if (!await askConfirm("Remove your profile photo?")) return;
     setBusy(true);
     try {
       await account.changePhoto(null);

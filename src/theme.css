@@ -1538,3 +1538,39 @@ table th {
   border: 0; background: rgba(7, 26, 43, 0.75); color: #fff; font-size: 11px; cursor: pointer;
   display: grid; place-items: center; padding: 0;
 }
+
+/* ---------- AquaTimbang confirmation pop-up (replaces the browser's box) ---------- */
+
+.confirm-backdrop {
+  position: fixed; inset: 0; z-index: 100001; background: rgba(7, 26, 43, 0.55);
+  display: grid; place-items: center; padding: 16px;
+}
+.confirm-box {
+  width: min(420px, 100%); background: #fff; border-radius: 20px; padding: 26px 24px 20px;
+  box-shadow: 0 24px 60px rgba(3, 11, 20, 0.35); text-align: center; display: grid; gap: 10px;
+  border-top: 5px solid var(--aqua);
+}
+.confirm-box.danger { border-top-color: var(--coral); }
+.confirm-icon {
+  width: 54px; height: 54px; margin: 0 auto 4px; border-radius: 50%; display: grid; place-items: center;
+  font-size: 26px; font-weight: 800; background: #e6f6fa; color: var(--ocean);
+}
+.confirm-box.danger .confirm-icon { background: #ffe9ec; color: #d92d45; }
+.confirm-box h3 { margin: 0; font-family: "Playfair Display", Georgia, serif; font-size: 22px; color: var(--navy-900); }
+.confirm-message p { margin: 0; color: #344054; line-height: 1.55; font-size: 15px; }
+.confirm-message .confirm-detail { margin-top: 8px; font-size: 13px; color: #667085; }
+.confirm-actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 10px; }
+.confirm-actions button { width: 100%; padding: 12px 14px; }
+.confirm-danger-btn {
+  border: 0; border-radius: 999px; background: linear-gradient(135deg, #ff4d5e, #d92d45); color: #fff;
+  font: inherit; font-weight: 600; cursor: pointer; box-shadow: 0 8px 18px rgba(217, 45, 69, 0.28);
+}
+.confirm-danger-btn:hover { filter: brightness(1.05); }
+.confirm-danger-btn:focus-visible, .confirm-actions .primary-btn:focus-visible { outline: 3px solid rgba(63, 193, 217, 0.5); outline-offset: 2px; }
+.confirm-box.with-input { text-align: left; }
+.confirm-box.with-input .confirm-icon { margin: 0 0 4px; }
+.confirm-input-unit { display: flex; align-items: center; border: 1px solid #cfdbe6; border-radius: 12px; overflow: hidden; background: #fff; }
+.confirm-input-unit span { padding: 0 12px; color: #5b7389; font-weight: 600; }
+.confirm-input-unit input { flex: 1; min-width: 0; border: 0; padding: 12px 4px; font: inherit; font-size: 18px; outline: none; }
+.confirm-input-unit:focus-within, .confirm-textarea:focus { border-color: var(--aqua); box-shadow: 0 0 0 3px rgba(63, 193, 217, 0.2); }
+.confirm-textarea { width: 100%; border: 1px solid #cfdbe6; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; resize: vertical; outline: none; }
