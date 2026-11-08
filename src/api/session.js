@@ -15,10 +15,16 @@ function clearSavedLogin() {
 }
 
 // Tell the app the session is over; App returns to the login page.
-function endSession(message) {
-  clearSavedLogin();
+function announceEnded(message) {
   window.dispatchEvent(new CustomEvent(SESSION_ENDED_EVENT, { detail: { message } }));
 }
+
+function endSession(message) {
+  clearSavedLogin();
+  announceEnded(message);
+}
+
+const MISSING_LOGIN = "You were logged out, maybe in another tab or window. Please log in again.";
 
 /**
  * Watch every API response. When the server rejects the saved login
@@ -34,12 +40,27 @@ export function installSessionGuard() {
     const response = await originalFetch(input, init);
     const url = typeof input === "string" ? input : input?.url || "";
     const isAuthRequest = /\/auth\/(login|register|logout)\//.test(url);
-    if (response.status === 401 && url.startsWith(API_BASE_URL) && !isAuthRequest && localStorage.getItem("authToken")) {
-      const data = await response.clone().json().catch(() => null);
-      endSession(data?.detail || "Your session has ended. Please log in again.");
+    if (response.status === 401 && url.startsWith(API_BASE_URL) && !isAuthRequest) {
+      if (localStorage.getItem("authToken")) {
+        // The server no longer accepts the saved login (expired or ended elsewhere).
+        const data = await response.clone().json().catch(() => null);
+        endSession(data?.detail || "Your session has ended. Please log in again.");
+      } else {
+        // The login was already removed, e.g. by logging out in another tab.
+        announceEnded(MISSING_LOGIN);
+      }
     }
     return response;
   };
+
+  // All tabs share one login. When another tab logs out, or logs in as a
+  // different user, this tab returns to the login page instead of failing.
+  window.addEventListener("storage", (event) => {
+    if (event.key !== "authToken" || !event.oldValue || event.newValue === event.oldValue) return;
+    announceEnded(event.newValue
+      ? "Someone logged in with a different account in another tab. Please log in again here."
+      : MISSING_LOGIN);
+  });
 }
 
 // End the session on the server too (best effort), then forget it here.
