@@ -396,10 +396,10 @@ useEffect(() => {
       ],
     },
     {
-      label: "FISHERFOLK",
+      label: "FISH VENDORS",
       items: [
         { name: "Vendor Registrations", icon: "☑" },
-        { name: "Fisherfolk Management", icon: "👥" },
+        { name: "Vendor Management", icon: "👥" },
         { name: "Price Suggestions", icon: "📥" },
         { name: "Fish Scanner Photos", icon: "◉" },
       ],
@@ -463,7 +463,7 @@ useEffect(() => {
         return <ExternalFactorsPage notify={notify} />;
       case "Vendor Registrations":
         return <VendorRegistrations notify={notify} />;
-      case "Fisherfolk Management":
+      case "Vendor Management":
         return <FisherfolkManagement fisherfolk={fisherfolk} suggestions={suggestions} loading={fisherfolkLoading} error={fisherfolkError} />;
       case "Fish Scanner Photos":
         return <FishScanReview notify={notify} />;
@@ -835,10 +835,10 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
           </div>
         </div>
 
-        <div className="stat-card clickable" onClick={() => goTo("Fisherfolk Management")}>
+        <div className="stat-card clickable" onClick={() => goTo("Vendor Management")}>
           <div className="stat-icon purple">👥</div>
           <div>
-            <span>Participating Fisherfolk</span>
+            <span>Participating Vendors</span>
             <h2>{participatingFisherfolk}</h2>
             <small>{pendingSuggestions} suggestions pending</small>
           </div>
@@ -2535,7 +2535,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
     <>
       <div className="page-title">
         <div>
-          <h2>Fisherfolk Management</h2>
+          <h2>Vendor Management</h2>
           <p>Monitor the fish vendor accounts registered under your municipality.</p>
         </div>
       </div>
@@ -2544,7 +2544,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
         <div className="modal-backdrop" onClick={() => setViewing(null)}>
           <div className="modal profile-modal" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>Fisherfolk Profile</h3>
+              <h3>Vendor Profile</h3>
               <button className="modal-close" onClick={() => setViewing(null)}>✕</button>
             </div>
 
@@ -2591,7 +2591,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
         <div className="table-tools">
           <div className="search-box">
             🔍
-            <input type="text" placeholder="Search fisherfolk..." value={search} onChange={(e) => setSearch(e.target.value)} />
+            <input type="text" placeholder="Search vendors..." value={search} onChange={(e) => setSearch(e.target.value)} />
           </div>
         </div>
 
@@ -2609,11 +2609,11 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" className="empty-row">Loading fisherfolk…</td></tr>
+              <tr><td colSpan="7" className="empty-row">Loading vendors…</td></tr>
             ) : error ? (
               <tr><td colSpan="7" className="empty-row">{error}</td></tr>
             ) : visible.length === 0 ? (
-              <tr><td colSpan="7" className="empty-row">No fisherfolk found.</td></tr>
+              <tr><td colSpan="7" className="empty-row">No vendors found.</td></tr>
             ) : (
               visible.map((f) => (
                 <tr key={f.id}>
@@ -3403,7 +3403,7 @@ function PriceAnomalies({ priceRecords, suggestions }) {
 
       <div className="panel" style={{ marginTop: 18 }}>
         <div className="panel-header">
-          <div><h3>Unusual Fisherfolk Suggestions</h3><p>More than 30% away from that species' community average</p></div>
+          <div><h3>Unusual Vendor Suggestions</h3><p>More than 30% away from that species' community average</p></div>
         </div>
         <table>
           <thead><tr><th>SPECIES</th><th>SUGGESTED PRICE</th><th>COMMUNITY AVERAGE</th><th>SUBMITTED BY</th><th>DEVIATION</th></tr></thead>
@@ -3730,7 +3730,7 @@ function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goT
   return (
     <>
       <div className="page-title">
-        <div><h2>Notifications</h2><p>Alerts about fisherfolk suggestions, flagged entries, and pending work.</p></div>
+        <div><h2>Notifications</h2><p>Alerts about vendor price suggestions, flagged entries, and pending work.</p></div>
         {dismissedNotifs.length > 0 && <button className="secondary-btn" onClick={() => setDismissedNotifs([])}>Restore Dismissed</button>}
       </div>
 

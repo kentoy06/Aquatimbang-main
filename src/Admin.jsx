@@ -124,12 +124,12 @@ function AuditActionBadge({ action }) {
 function auditModule(log) {
   const type = String(log.target_type || "").toLowerCase().replaceAll("_", " ");
   if (type.includes("authentication")) return "Authentication";
-  if (type.includes("suggestion")) return "Fisherfolk Suggestions";
+  if (type.includes("suggestion")) return "Vendor Suggestions";
   if (type.includes("price")) return "Price Records";
   if (type.includes("species") || type.includes("fishspecies")) return "Fish Species";
   if (type.includes("user") || type.includes("profile") || type.includes("account")) return "User Management";
   if (type.includes("municipality") || type.includes("market")) return "Municipality & Market";
-  if (type.includes("suggestion")) return "Fisherfolk Suggestions";
+  if (type.includes("suggestion")) return "Vendor Suggestions";
   if (type.includes("announcement")) return "System Announcements";
   return log.target_type ? auditLabel(log.target_type) : "Other";
 }
@@ -348,7 +348,7 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
   const pendingSuggestions = suggestions.filter((s) => s.status === "Pending Review");
   if (pendingSuggestions.length > 0) {
     notifs.push({
-      id: nid++, type: "info", page: "Fisherfolk Suggestions",
+      id: nid++, type: "info", page: "Vendor Suggestions",
       title: `${pendingSuggestions.length} vendor suggestion${pendingSuggestions.length > 1 ? "s" : ""} awaiting review`,
       detail: pendingSuggestions.slice(0, 3).map((s) => s.species).join(", "),
     });
@@ -602,7 +602,7 @@ useEffect(() => {
     {
       label: "MONITORING",
       items: [
-        { name: "Fisherfolk Suggestions", icon: "💬" },
+        { name: "Vendor Suggestions", icon: "💬" },
         { name: "Predictive Analytics", icon: "∿" },
         { name: "External Factors", icon: "☁" },
         { name: "Data Monitoring", icon: "◫" },
@@ -673,7 +673,7 @@ useEffect(() => {
         );
       case "System Configuration":
         return <SystemConfiguration notify={notify} />;
-      case "Fisherfolk Suggestions":
+      case "Vendor Suggestions":
         return (
           <FisherfolkSuggestions
             suggestions={suggestions} error={suggestionsError}
@@ -3267,7 +3267,7 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
     <>
       <div className="page-title">
         <div>
-          <h2>Fisherfolk Suggested Price Monitoring</h2>
+          <h2>Vendor Suggested Price Monitoring</h2>
           <p>Review prices suggested by fish vendors and compare them against official rates.</p>
         </div>
       </div>
@@ -3311,7 +3311,7 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
           <div>
             <span>Maximum Suggested</span>
             <h2>{stats.max !== null ? peso(stats.max) : "—"}</h2>
-            <small>{stats.participants} participating fisherfolk</small>
+            <small>{stats.participants} participating vendors</small>
           </div>
         </div>
       </div>
