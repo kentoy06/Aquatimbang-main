@@ -206,6 +206,7 @@ const PRICE_STATUS_LABELS = {
   published: "Published",
   flagged: "Flagged",
   rejected: "Rejected",
+  withdrawn: "Withdrawn",
 };
 
 // Django PriceRecord → row shape used by the dashboard tables.
@@ -222,6 +223,7 @@ const toPriceRow = (r) => ({
   status: PRICE_STATUS_LABELS[r.status] || r.status,
   isCorrection: Boolean(r.is_correction),
   corrections: r.corrections || [],
+  createdAt: r.created_at,
 });
 
 // Django user (from /auth/users/) → row shape used by the dashboard tables.
@@ -2852,6 +2854,26 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
   const [correcting, setCorrecting] = useState(null);
   const correctRecord = (r) => setCorrecting(r);
 
+  // A price published by mistake today can be removed (withdrawn) with a reason.
+  const encodedToday = (r) =>
+    r.createdAt && new Date(r.createdAt).toLocaleDateString("en-CA") === new Date().toLocaleDateString("en-CA");
+  const withdrawRecord = async (r) => {
+    const reason = await askText(
+      `Remove the published ${r.species} price (${peso(r.price)}/kg, ${fmtDate(r.date)})?\n\nIt will no longer show as an official price. The record and your reason stay in the Activity Logs.`,
+      "",
+      { title: "Remove today's price", confirmLabel: "Remove price", numeric: false },
+    );
+    if (reason === null) return;
+    if (reason.trim().length < 5) { notify("Write why this price is being removed."); return; }
+    try {
+      const data = await sendJson(`/prices/${r.id}/withdraw/`, "POST", { reason: reason.trim() });
+      notify(data.message);
+      onChanged();
+    } catch (err) {
+      notify(err.message);
+    }
+  };
+
   const exportCSV = () => {
     const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
     const rows = [
@@ -2987,8 +3009,9 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
                   </td>
                   <td>
                     <div className="action-icons">
-                      <button title={r.status === "Published" ? "Correct record (fish or price)" : "Edit record"} onClick={() => correctRecord(r)}>✎</button>
-                      {r.status !== "Published" && <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>}
+                      {r.status !== "Withdrawn" && <button title={r.status === "Published" ? "Correct record (fish or price)" : "Edit record"} onClick={() => correctRecord(r)}>✎</button>}
+                      {r.status !== "Published" && r.status !== "Withdrawn" && <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>}
+                      {r.status === "Published" && encodedToday(r) && <button title="Remove (encoded today by mistake)" onClick={() => withdrawRecord(r)}>✕</button>}
                     </div>
                   </td>
                 </tr>

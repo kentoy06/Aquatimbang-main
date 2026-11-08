@@ -1231,6 +1231,41 @@ class PriceCorrectionAndSettingsTests(TestCase):
         self.assertEqual(response.status_code, 400)
         self.assertIn("already has a price", response.data["fish_species"])
 
+    def test_remove_price_published_today_by_mistake(self):
+        url = f"/api/prices/{self.published.pk}/withdraw/"
+        self.assertEqual(self.client_for("Fish Vendor").post(url, {"reason": "Encoded by mistake"}, format="json").status_code, 403)
+        self.assertIn("reason", self.client_for("LGU Officer").post(url, {"reason": ""}, format="json").data)
+        response = self.client_for("LGU Officer").post(url, {"reason": "Encoded by mistake, no catch today"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.published.refresh_from_db()
+        self.assertEqual(self.published.status, "withdrawn")
+        self.assertEqual(self.published.rejection_reason, "Encoded by mistake, no catch today")
+        log = ActivityLog.objects.filter(action="withdrawn").latest("created_at")
+        self.assertEqual(log.details["price_per_kg"], "180.00")
+        # Vendors no longer see it among published prices.
+        published = self.client_for("Fish Vendor").get("/api/prices/published/").data
+        rows = published["results"] if isinstance(published, dict) else published
+        self.assertNotIn(self.published.pk, [r["id"] for r in rows])
+        # The right price can be entered again for that day.
+        again = self.client_for("LGU Officer").post("/api/prices/", {
+            "fish_species": self.species.pk, "municipality": self.cebu.pk, "price_per_kg": "175",
+            "recorded_date": str(self.published.recorded_date),
+        }, format="json")
+        self.assertEqual(again.status_code, 201, again.data)
+        twice = self.client_for("LGU Officer").post("/api/prices/", {
+            "fish_species": self.species.pk, "municipality": self.cebu.pk, "price_per_kg": "176",
+            "recorded_date": str(self.published.recorded_date),
+        }, format="json")
+        self.assertEqual(twice.status_code, 400)  # a real duplicate is still refused
+
+    def test_older_published_price_cannot_be_withdrawn(self):
+        import datetime as _dt
+        PriceRecord.objects.filter(pk=self.published.pk).update(created_at=timezone.now() - _dt.timedelta(days=2))
+        response = self.client_for("Administrator").post(
+            f"/api/prices/{self.published.pk}/withdraw/", {"reason": "Old mistake"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("encoded today", response.data["message"])
+
     def test_correction_requires_reason_and_lgu_or_admin(self):
         self.assertIn("reason", self.client_for("Administrator").post(
             f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "170"}, format="json").data)
