@@ -2115,3 +2115,24 @@ class PublicFishProfileTests(TestCase):
         self.assertEqual(APIClient().get("/api/public/fish/9999/").status_code, 404)
         lonely = FishSpecies.objects.create(name="Lapu-lapu")
         self.assertEqual(APIClient().get(f"/api/public/fish/{lonely.pk}/").status_code, 404)
+
+
+class ProfileRegistrationDetailsTests(TestCase):
+    """My Profile returns what was asked at registration."""
+
+    def test_profile_includes_registration_answers(self):
+        role = Role.objects.create(name="Fish Vendor")
+        cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        user = User.objects.create_user("reg_vendor", "rv@example.com", "TestPass123!")
+        UserProfile.objects.create(
+            user=user, role=role, municipality=cebu, account_status="approved", is_active=True,
+            date_of_birth=datetime.date(1985, 3, 2), sex="female", reviewed_at=timezone.now(),
+            registration_reason="I sell bangus at Carbon Market.",
+        )
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=user).key}")
+        data = client.get("/api/auth/me/").data
+        self.assertEqual(data["date_of_birth"], "1985-03-02")
+        self.assertEqual(data["sex"], "female")
+        self.assertTrue(data["reviewed_at"])
+        self.assertEqual(data["registration_reason"], "I sell bangus at Carbon Market.")

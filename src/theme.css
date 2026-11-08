@@ -1585,3 +1585,10 @@ table th {
 
 /* A published price removed on the day it was encoded. */
 .badge.withdrawn { background: #f1f5f9; color: #64748b; border: 1px dashed #cbd5e1; }
+
+/* My Profile: registration details. */
+.reg-doc-ok { color: #15803d !important; }
+.reg-doc-missing { color: #94a3b8 !important; font-weight: 500 !important; }
+.reg-reason { margin-top: 12px; background: #f3f7fa; border-radius: 12px; padding: 10px 12px; }
+.reg-reason span { font-size: 12px; color: #5b7389; }
+.reg-reason p { margin: 4px 0 0; color: #1e293b; line-height: 1.5; }
