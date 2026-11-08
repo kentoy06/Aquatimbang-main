@@ -1478,3 +1478,63 @@ table th {
 .factor-guide-grid strong { color: var(--navy-900); }
 .factor-guide-grid p { margin: 0; font-size: 13px; color: #475569; line-height: 1.5; }
 .factor-guide-use { margin: 12px 0 14px; font-size: 13px; color: #475569; }
+
+/* ---------- Import Price History ---------- */
+
+.import-mode { border: 1px solid var(--line); border-radius: 12px; padding: 10px 14px 12px; margin: 14px 0 0; display: grid; gap: 8px; }
+.import-mode legend { font-size: 13px; font-weight: 700; color: var(--navy-900); padding: 0 6px; }
+.import-mode label { display: flex; gap: 10px; align-items: flex-start; cursor: pointer; }
+.import-mode input { margin-top: 4px; accent-color: var(--ocean); }
+.import-mode strong { display: block; font-size: 14px; }
+.import-mode small { display: block; color: #64748b; font-size: 12px; }
+.undo-confirm { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.undo-confirm span { font-size: 13px; font-weight: 600; color: #b91c1c; }
+.undo-confirm button { padding: 6px 12px; }
+
+/* ---------- Announcement pop-up ---------- */
+
+.announce-backdrop { z-index: 9000; }
+.announce-modal { width: min(500px, calc(100vw - 24px)); max-height: calc(100vh - 40px); overflow-y: auto; display: grid; gap: 12px; border-top: 5px solid var(--orange); }
+.announce-head { display: flex; gap: 12px; align-items: center; }
+.announce-icon { width: 46px; height: 46px; border-radius: 14px; background: #fff0e4; display: grid; place-items: center; font-size: 24px; flex: 0 0 46px; }
+.announce-head small { color: var(--orange-dark); font-weight: 700; font-size: 12px; letter-spacing: .06em; text-transform: uppercase; }
+.announce-head h3 { margin: 2px 0 0; font-size: 20px; color: var(--navy-900); }
+.announce-list { display: grid; gap: 12px; }
+.announce-list article { display: grid; gap: 4px; }
+.announce-list article + article { border-top: 1px solid var(--line); padding-top: 12px; }
+.announce-list p { margin: 0; white-space: pre-line; color: #344054; line-height: 1.55; }
+.announce-list small { color: #667085; }
+.announce-note { margin: 0; font-size: 12px; color: #64748b; }
+.announce-modal .primary-btn { min-width: 140px; }
+
+/* ---------- One icon style everywhere ---------- */
+/* Emoji icons come with their own colours. Drawing the glyph transparent
+   with a solid shadow turns each into a plain silhouette: white in the
+   sidebar, dark navy on one light background in the pages. */
+.sidebar .nav-icon {
+  color: transparent !important;
+  text-shadow: 0 0 0 #ffffff;
+  opacity: 0.85;
+}
+.sidebar .nav-item.active .nav-icon,
+.sidebar .nav-item:hover .nav-icon { opacity: 1; }
+
+.content .stat-icon,
+.content .config-icon {
+  background: #e6f2f6 !important;
+  color: transparent !important;
+  text-shadow: 0 0 0 var(--navy-800);
+}
+
+/* Chosen fish with their photos, below the dropdown. */
+.fish-multi-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 8px; }
+.fish-multi-card {
+  position: relative; display: grid; justify-items: center; gap: 6px; padding: 10px 6px 8px;
+  border: 1px solid #cfe5ec; border-radius: 12px; background: #f4fbfd; text-align: center;
+}
+.fish-multi-card > span:not([aria-hidden]) { font-size: 13px; font-weight: 600; color: var(--navy-900); }
+.fish-multi-card button {
+  position: absolute; top: 4px; right: 4px; width: 22px; height: 22px; border-radius: 50%;
+  border: 0; background: rgba(7, 26, 43, 0.75); color: #fff; font-size: 11px; cursor: pointer;
+  display: grid; place-items: center; padding: 0;
+}

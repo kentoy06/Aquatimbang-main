@@ -470,6 +470,36 @@ class FishSpecies(models.Model):
 
         return self.name
 
+class PriceImportBatch(models.Model):
+    """
+    One CSV import of price history. Remembers which prices came from it,
+    so a wrong file can be undone.
+    """
+
+    batch_key = models.CharField(max_length=40, unique=True)
+    file_name = models.CharField(max_length=200, blank=True)
+    source = models.CharField(max_length=150, blank=True)
+    imported_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="price_imports"
+    )
+    # True: the prices went to Review & Publish instead of being published.
+    sent_to_review = models.BooleanField(default=False)
+    record_count = models.PositiveIntegerField(default=0)
+    first_date = models.DateField(null=True, blank=True)
+    last_date = models.DateField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    undone_at = models.DateTimeField(null=True, blank=True)
+    undone_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="undone_price_imports"
+    )
+
+    class Meta:
+        ordering = ["-created_at"]
+
+    def __str__(self):
+        return f"{self.file_name or self.source} ({self.record_count} prices)"
+
+
 class PriceRecord(models.Model):
 
     """
@@ -629,6 +659,11 @@ A pending record may also be flagged or rejected.
     # True once a published price has been corrected; the original and
     # every later change are kept in PriceCorrection (Table 19).
     is_correction = models.BooleanField(default=False)
+
+    # The CSV import this price came from, if any (so it can be undone).
+    import_batch = models.ForeignKey(
+        "PriceImportBatch", on_delete=models.SET_NULL, null=True, blank=True, related_name="records"
+    )
 
     # ---------------------------------------------------------
 

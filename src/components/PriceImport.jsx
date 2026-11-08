@@ -4,11 +4,11 @@ import { parseCsv, TEMPLATE_CSV, toImportRows } from "../api/csvImport.js";
 
 const CHUNK = 2000;
 
-async function sendChunk(rows, source, dryRun) {
+async function sendChunk(rows, source, dryRun, options) {
   const response = await fetch(apiUrl("/prices/import/"), {
     method: "POST",
     headers: authHeaders({ "Content-Type": "application/json" }),
-    body: JSON.stringify({ rows, source, dry_run: dryRun }),
+    body: JSON.stringify({ rows, source, dry_run: dryRun, ...options }),
   });
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.message || data?.detail || `Import failed (HTTP ${response.status}).`);
@@ -16,10 +16,10 @@ async function sendChunk(rows, source, dryRun) {
 }
 
 // Send all rows in chunks and add up the results.
-async function runImport(rows, source, dryRun, onProgress) {
+async function runImport(rows, source, dryRun, onProgress, options = {}) {
   const total = { ready: 0, imported: 0, already_recorded: 0, error_count: 0, errors: [], first_date: null, last_date: null };
   for (let start = 0; start < rows.length; start += CHUNK) {
-    const result = await sendChunk(rows.slice(start, start + CHUNK), source, dryRun);
+    const result = await sendChunk(rows.slice(start, start + CHUNK), source, dryRun, options);
     total.ready += result.ready;
     total.imported += result.imported;
     total.already_recorded += result.already_recorded;
@@ -56,6 +56,9 @@ export default function PriceImport({ notify, onImported }) {
   const [busy, setBusy] = useState("");
   const [progress, setProgress] = useState(0);
   const [done, setDone] = useState(null);
+  // Import as published prices (old official records) or send them to Review & Publish.
+  const [sendToReview, setSendToReview] = useState(false);
+  const [historyKey, setHistoryKey] = useState(0);
 
   useEffect(() => {
     fetchAll("/municipalities/").then((rows) => setMunicipalities(rows.filter((m) => m.is_active !== false))).catch(() => {});
@@ -81,13 +84,18 @@ export default function PriceImport({ notify, onImported }) {
     setBusy(dryRun ? "check" : "import");
     setProgress(0);
     try {
-      const result = await runImport(parsed.rows, source.trim(), dryRun, setProgress);
+      // One batch id for every chunk of this file, so the whole import can be undone.
+      const batchId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+      const result = await runImport(parsed.rows, source.trim(), dryRun, setProgress, dryRun ? {} : {
+        batch_id: batchId, file_name: fileName, send_to_review: sendToReview,
+      });
       if (dryRun) {
         setCheck(result);
       } else {
         setDone(result);
         setCheck(null);
-        notify(`${result.imported.toLocaleString()} prices imported.`);
+        notify(`${result.imported.toLocaleString()} prices imported${sendToReview ? " and sent to Review & Publish" : ""}.`);
+        setHistoryKey((k) => k + 1);
         onImported?.();
       }
     } catch (err) {
@@ -104,7 +112,7 @@ export default function PriceImport({ notify, onImported }) {
       <div className="page-title">
         <div>
           <h2>Import Price History</h2>
-          <p>Add past prices (for example from DVFM records) from a spreadsheet saved as CSV. They are saved as published prices on their original dates.</p>
+          <p>Add past prices (for example from DVFM records) from a spreadsheet saved as CSV, on their original dates. A wrong file can be undone under Recent Imports.</p>
         </div>
         <button className="secondary-btn" onClick={downloadTemplate}>↓ Download template</button>
       </div>
@@ -133,7 +141,7 @@ export default function PriceImport({ notify, onImported }) {
           <div className="info-box">
             <strong>Accepted layouts</strong>
             <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
-              <li>One row per price: <code>Date, Fish, Municipality, Price</code></li>
+              <li>One row per price: <code>Date, Fish, Municipality, Price</code> (also <code>species</code>, <code>price_per_kg_php</code> and similar names)</li>
               <li>One column per fish: <code>Date, Bangus, Galunggong, …</code> (choose the municipality above, or add a Municipality column)</li>
             </ul>
             Fish and municipality names must match the ones in AquaTimbang. Blank cells are skipped. Prices already recorded for the same fish, municipality and day are kept and not overwritten.
@@ -209,6 +217,18 @@ export default function PriceImport({ notify, onImported }) {
                 </div>
               )}
 
+              <fieldset className="import-mode">
+                <legend>After importing, the prices should be</legend>
+                <label>
+                  <input type="radio" name="import-mode" checked={!sendToReview} onChange={() => setSendToReview(false)} />
+                  <span><strong>Published right away</strong><small>For past official records (e.g. DVFM history) that were already checked.</small></span>
+                </label>
+                <label>
+                  <input type="radio" name="import-mode" checked={sendToReview} onChange={() => setSendToReview(true)} />
+                  <span><strong>Sent to Review &amp; Publish</strong><small>For new or unchecked data: an officer approves them before vendors see them.</small></span>
+                </label>
+              </fieldset>
+
               <div className="button-row" style={{ marginTop: 14 }}>
                 <button className="secondary-btn" onClick={() => run(true)} disabled={Boolean(busy)}>Check File</button>
                 <button className="primary-btn" onClick={() => run(false)} disabled={Boolean(busy) || !check || check.ready === 0}>
@@ -221,13 +241,100 @@ export default function PriceImport({ notify, onImported }) {
           {done && (
             <div className="info-box" style={{ marginTop: 12 }} role="status">
               ✔ <strong>{done.imported.toLocaleString()} prices imported</strong>
-              {done.first_date && <> ({done.first_date} to {done.last_date})</>}. They now appear in Price Trends, Reports and the forecasts.
+              {done.first_date && <> ({done.first_date} to {done.last_date})</>}.{" "}
+              {sendToReview ? "They are waiting in Review & Publish." : "They now appear in Price Trends, Reports and the forecasts."}
+              {" "}Wrong file? Undo it under Recent Imports below.
               {done.already_recorded > 0 && <> {done.already_recorded.toLocaleString()} were already recorded and kept.</>}
               {done.error_count > 0 && <> {done.error_count.toLocaleString()} rows with problems were skipped.</>}
             </div>
           )}
         </div>
       </div>
+
+      <RecentImports reloadKey={historyKey} notify={notify} onUndone={onImported} />
     </>
+  );
+}
+
+// Past imports with an Undo button for a wrong file.
+function RecentImports({ reloadKey, notify, onUndone }) {
+  const [rows, setRows] = useState(null);
+  const [error, setError] = useState("");
+  const [confirming, setConfirming] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [refresh, setRefresh] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl("/prices/import-batches/"), { headers: authHeaders() })
+      .then(async (r) => { const d = await r.json().catch(() => null); if (!r.ok) throw new Error(d?.message || "Could not load past imports."); return d; })
+      .then((d) => { if (!cancelled) { setRows(d); setError(""); } })
+      .catch((e) => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, [reloadKey, refresh]);
+
+  const undo = async (batch) => {
+    setBusy(true);
+    try {
+      const response = await fetch(apiUrl(`/prices/import-batches/${batch.id}/undo/`), { method: "POST", headers: authHeaders() });
+      const data = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(data?.message || "Could not undo the import.");
+      notify(data.message);
+      setConfirming(null);
+      setRefresh((k) => k + 1);
+      onUndone?.();
+    } catch (e) {
+      notify(e.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const when = (iso) => new Date(iso).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" });
+
+  return (
+    <div className="panel" style={{ marginTop: 18 }}>
+      <div className="panel-header">
+        <div>
+          <h3>Recent Imports</h3>
+          <p>Imported a wrong file? Undo removes every price that came from it. Each import and undo is also kept in the Audit Log.</p>
+        </div>
+      </div>
+      {error && <div className="warn-box" style={{ margin: "0 18px 18px" }}>{error}</div>}
+      <div style={{ overflowX: "auto" }}>
+        <table>
+          <thead><tr><th>IMPORTED</th><th>FILE</th><th>DATES</th><th>PRICES</th><th>STATUS</th><th>ACTION</th></tr></thead>
+          <tbody>
+            {rows === null && !error && <tr><td colSpan="6" className="empty-row">Loading…</td></tr>}
+            {rows?.length === 0 && <tr><td colSpan="6" className="empty-row">No imports yet.</td></tr>}
+            {rows?.map((b) => (
+              <tr key={b.id}>
+                <td>{when(b.created_at)}<small style={{ display: "block", color: "#64748b" }}>by {b.imported_by}</small></td>
+                <td><strong>{b.file_name || "—"}</strong><small style={{ display: "block", color: "#64748b" }}>{b.source}</small></td>
+                <td>{b.first_date ? `${b.first_date} to ${b.last_date}` : "—"}</td>
+                <td>{b.undone_at ? b.record_count.toLocaleString() : `${b.remaining.toLocaleString()} of ${b.record_count.toLocaleString()}`}</td>
+                <td>
+                  {b.undone_at
+                    ? <span className="badge inactive" title={`Undone by ${b.undone_by} on ${when(b.undone_at)}`}>Undone</span>
+                    : <span className={`badge ${b.sent_to_review ? "pending" : "success"}`}>{b.sent_to_review ? "Sent to review" : "Published"}</span>}
+                </td>
+                <td>
+                  {b.undone_at ? <small style={{ color: "#64748b" }}>by {b.undone_by}</small>
+                    : confirming === b.id ? (
+                      <div className="undo-confirm">
+                        <span>Remove {b.remaining.toLocaleString()} prices?</span>
+                        <button className="secondary-btn" disabled={busy} onClick={() => setConfirming(null)}>Keep</button>
+                        <button className="reject" disabled={busy} onClick={() => undo(b)}>{busy ? "Undoing…" : "Yes, undo"}</button>
+                      </div>
+                    ) : (
+                      <button className="secondary-btn" onClick={() => setConfirming(b.id)}>↶ Undo import</button>
+                    )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
   );
 }

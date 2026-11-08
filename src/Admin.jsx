@@ -589,7 +589,7 @@ useEffect(() => {
         { name: "Dashboard", icon: "▦" },
         { name: "User Management", icon: "♙" },
         { name: "Fish Species", icon: "🐟" },
-        { name: "Fish Scanner Photos", icon: "📷" },
+        { name: "Fish Scanner Photos", icon: "◉" },
         { name: "Municipality & Market", icon: "⚑" },
         { name: "Price Records", icon: "₱" },
         { name: "Import Price History", icon: "⇪" },
@@ -600,16 +600,16 @@ useEffect(() => {
       label: "MONITORING",
       items: [
         { name: "Fisherfolk Suggestions", icon: "💬" },
-        { name: "Predictive Analytics", icon: "📈" },
+        { name: "Predictive Analytics", icon: "∿" },
         { name: "External Factors", icon: "☁" },
-        { name: "Data Monitoring", icon: "🗄" },
+        { name: "Data Monitoring", icon: "◫" },
         { name: "Notifications", icon: "🔔" },
       ],
     },
     {
       label: "REPORTS",
       items: [
-        { name: "Reports Management", icon: "📄" },
+        { name: "Reports Management", icon: "▤" },
         { name: "Activity Logs", icon: "◷" },
       ],
     },
@@ -791,8 +791,8 @@ useEffect(() => {
         <header className="topbar">
           <button className="menu-toggle" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>☰</button>
           <div>
-            <h1>{activePage}</h1>
-            <p>Manage and monitor the AquaTimbang system</p>
+            <h1>Administrator Panel</h1>
+            <p>{new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
           </div>
 
           <div className="topbar-right">
@@ -3556,7 +3556,7 @@ function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
         <div className="panel-header">
           <div>
             <h3>Species Price History</h3>
-            <p>Most recent 12 records for the selected species</p>
+            <p>Most recent 12 records for the fish you choose here</p>
           </div>
           <select value={speciesName} onChange={(e) => setSpeciesChoice(e.target.value)}>
             {activeSpecies.map((s) => <option key={s.id}>{s.name}</option>)}
@@ -3567,6 +3567,7 @@ function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
           <thead>
             <tr>
               <th>DATE</th>
+              <th>FISH</th>
               <th>MUNICIPALITY</th>
               <th>PRICE / KG</th>
               <th>ENTERED BY</th>
@@ -3576,12 +3577,18 @@ function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
           <tbody>
             {speciesHistory.length === 0 ? (
               <tr>
-                <td colSpan="5" className="empty-row">No records for this species yet.</td>
+                <td colSpan="6" className="empty-row">No records for this species yet.</td>
               </tr>
             ) : (
               speciesHistory.map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
+                  <td>
+                    <span className="audit-fish">
+                      <FishThumb fish={activeSpecies.find((sp) => sp.name === r.species) || { name: r.species }} size={32} />
+                      <span>{r.species}</span>
+                    </span>
+                  </td>
                   <td>{r.municipality}</td>
                   <td><strong>{peso(r.price)}</strong></td>
                   <td>{r.enteredBy}</td>

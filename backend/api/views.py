@@ -16,7 +16,8 @@ from django.utils import timezone
 # Django REST Framework tools.
 from rest_framework import status, viewsets
 from .authentication import ExpiringTokenAuthentication
-from .models import PriceCorrection
+from .models import PriceCorrection, PriceImportBatch
+import uuid
 from .serializers import check_price_bounds
 from decimal import Decimal, InvalidOperation
 from rest_framework import serializers
@@ -270,6 +271,63 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         return queryset
 
     # --------------------------------------------------------
+    # PAST IMPORTS AND UNDO
+    # --------------------------------------------------------
+    def _import_batches(self, request):
+        role = approved_role(request.user)
+        if role not in ("LGU Officer", "Administrator"):
+            raise PermissionDenied("Only LGU Officers and Administrators can manage imports.")
+        batches = PriceImportBatch.objects.select_related("imported_by", "undone_by")
+        return batches if role == "Administrator" else batches.filter(imported_by=request.user)
+
+    @action(detail=False, methods=["get"], url_path="import-batches")
+    def import_batches(self, request):
+        """Recent imports (an LGU Officer sees their own; Administrators see all)."""
+        from django.db.models import Count
+        rows = self._import_batches(request).annotate(remaining=Count("records"))[:30]
+        return Response([
+            {
+                "id": b.pk,
+                "file_name": b.file_name,
+                "source": b.source,
+                "imported_by": b.imported_by.username if b.imported_by else "Deleted account",
+                "sent_to_review": b.sent_to_review,
+                "record_count": b.record_count,
+                "remaining": b.remaining,
+                "first_date": b.first_date,
+                "last_date": b.last_date,
+                "created_at": b.created_at,
+                "undone_at": b.undone_at,
+                "undone_by": b.undone_by.username if b.undone_by else None,
+            }
+            for b in rows
+        ])
+
+    @action(detail=False, methods=["post"], url_path=r"import-batches/(?P<batch_id>\d+)/undo")
+    def undo_import(self, request, batch_id=None):
+        """Remove every price that came from one import (a wrong file)."""
+        batch = self._import_batches(request).filter(pk=batch_id).first()
+        if batch is None:
+            return Response({"message": "Import not found."}, status=status.HTTP_404_NOT_FOUND)
+        if batch.undone_at:
+            return Response({"message": "This import was already undone."}, status=status.HTTP_400_BAD_REQUEST)
+        with transaction.atomic():
+            removed = batch.records.count()
+            batch.records.all().delete()
+            batch.undone_at = timezone.now()
+            batch.undone_by = request.user
+            batch.save(update_fields=["undone_at", "undone_by"])
+            log_activity(request.user, "undid import", "PriceRecord", 0, f"{removed:,} imported prices removed", {
+                "file": batch.file_name,
+                "source": batch.source,
+                "import_id": batch.pk,
+                "removed": removed,
+                "from": str(batch.first_date) if batch.first_date else None,
+                "to": str(batch.last_date) if batch.last_date else None,
+            })
+        return Response({"message": f"Import undone: {removed:,} prices from {batch.file_name or batch.source} were removed.", "removed": removed})
+
+    # --------------------------------------------------------
     # IMPORT PRICE HISTORY (e.g. a DVFM spreadsheet saved as CSV)
     # --------------------------------------------------------
     IMPORT_MAX_ROWS = 5000
@@ -303,6 +361,9 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             )
         source = str(request.data.get("source") or "Imported price history").strip()[:150]
         dry_run = bool(request.data.get("dry_run"))
+        # Old official records are published at once; new or unsure data can
+        # go to Review & Publish first.
+        send_to_review = bool(request.data.get("send_to_review"))
 
         species = {fish.name.strip().lower(): fish for fish in FishSpecies.objects.all()}
         places = {place.name.strip().lower(): place for place in Municipality.objects.all()}
@@ -367,9 +428,24 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         new_rows = [c for c in candidates if (c[1].id, c[2].id, c[3]) not in existing]
 
         imported = 0
+        batch = None
         if new_rows and not dry_run:
             now = timezone.now()
             with transaction.atomic():
+                # Every chunk of one file shares the batch key sent by the browser.
+                batch_key = str(request.data.get("batch_id") or uuid.uuid4().hex)[:40]
+                batch, _ = PriceImportBatch.objects.get_or_create(
+                    batch_key=batch_key,
+                    defaults={
+                        "file_name": str(request.data.get("file_name") or "")[:200],
+                        "source": source,
+                        "imported_by": request.user,
+                        "sent_to_review": send_to_review,
+                    },
+                )
+                if batch.imported_by_id != request.user.pk or batch.undone_at:
+                    raise PermissionDenied("This import cannot be added to.")
+                published = not batch.sent_to_review
                 PriceRecord.objects.bulk_create(
                     [
                         PriceRecord(
@@ -379,17 +455,23 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                             price_per_kg=price,
                             source=source,
                             remarks="Imported price history",
-                            status=PriceRecord.STATUS_PUBLISHED,
+                            status=PriceRecord.STATUS_PUBLISHED if published else PriceRecord.STATUS_PENDING,
                             recorded_by=request.user,
-                            reviewed_by=request.user,
-                            reviewed_at=now,
-                            published_by=request.user,
-                            published_at=now,
+                            reviewed_by=request.user if published else None,
+                            reviewed_at=now if published else None,
+                            published_by=request.user if published else None,
+                            published_at=now if published else None,
+                            import_batch=batch,
                         )
                         for _, fish, place, day, price in new_rows
                     ],
                     batch_size=1000,
                 )
+                chunk_dates = [c[3] for c in new_rows]
+                batch.record_count += len(new_rows)
+                batch.first_date = min([d for d in (batch.first_date, min(chunk_dates)) if d])
+                batch.last_date = max([d for d in (batch.last_date, max(chunk_dates)) if d])
+                batch.save(update_fields=["record_count", "first_date", "last_date"])
                 imported = len(new_rows)
                 dates = [c[3] for c in new_rows]
                 ActivityLog.objects.create(
@@ -402,6 +484,9 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                     target_name=f"{imported:,} historical prices",
                     details={
                         "source": source,
+                        "file": batch.file_name,
+                        "import_id": batch.pk,
+                        "sent_to_review": batch.sent_to_review,
                         "imported": imported,
                         "from": min(dates).isoformat(),
                         "to": max(dates).isoformat(),
@@ -411,6 +496,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         all_dates = [c[3] for c in new_rows]
         return Response({
             "dry_run": dry_run,
+            "import_id": batch.pk if batch else None,
             "rows": len(rows),
             "ready": len(new_rows),
             "imported": imported,
