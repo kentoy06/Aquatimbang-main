@@ -13,6 +13,7 @@ from .views import (
     PriceRecordViewSet,
     health_check,
     public_summary,
+    public_fish_profile,
     my_profile,
     my_photo,
     request_password_reset,
@@ -304,6 +305,13 @@ urlpatterns = [
         "public/summary/",
         public_summary,
         name="public-summary"
+    ),
+
+    # Public fish profile for the landing page (published prices only).
+    path(
+        "public/fish/<int:fish_id>/",
+        public_fish_profile,
+        name="public-fish-profile"
     ),
 
         path(

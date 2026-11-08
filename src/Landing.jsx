@@ -4,6 +4,7 @@ import "./App.css";
 import "./Landing.css";
 import { apiUrl } from "./api/config.js";
 import { FishThumb } from "./components/FishPhoto.jsx";
+import FishProfileModal from "./components/FishProfileModal.jsx";
 
 const peso = (value) =>
   `₱${Number(value).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -75,6 +76,7 @@ function OceanScene() {
 }
 
 function Landing({ onGetStarted, onRegister }) {
+  const [profile, setProfile] = useState(null);
   const [summary, setSummary] = useState(null);
   const [photoOk, setPhotoOk] = useState(true);
 
@@ -177,7 +179,7 @@ function Landing({ onGetStarted, onRegister }) {
         <span className="section-eyebrow">Today's market</span>
         <h2>Official Fish Prices</h2>
         <p className="section-lead">
-          The latest price per kilo published by the LGU for each fish and municipality.
+          The latest price per kilo published by the LGU for each fish and municipality. Tap a fish for its details.
           {summary?.latest_published_date && <> Last updated {formatDate(summary.latest_published_date)}.</>}
         </p>
         {prices.length === 0 ? (
@@ -185,7 +187,13 @@ function Landing({ onGetStarted, onRegister }) {
         ) : (
           <div className="price-board">
             {prices.map((p) => (
-              <div className="price-tile" key={`${p.fish_id}-${p.municipality_name}`}>
+              <button
+                type="button"
+                className="price-tile"
+                key={`${p.fish_id}-${p.municipality_name}`}
+                onClick={() => setProfile(p)}
+                aria-label={`${p.fish_name} in ${p.municipality_name}: ${peso(p.price_per_kg)} per kilo. Show details`}
+              >
                 <FishThumb fish={{ id: p.fish_id, name: p.fish_name, has_photo: p.has_photo, updated_at: p.updated_at }} size={54} />
                 <div>
                   <strong>{p.fish_name}</strong>
@@ -193,13 +201,21 @@ function Landing({ onGetStarted, onRegister }) {
                   <span className="price-date">{formatDate(p.recorded_date)}</span>
                 </div>
                 <b>{peso(p.price_per_kg)}<small>/kg</small></b>
-              </div>
+              </button>
             ))}
           </div>
         )}
         <div className="section-cta">
           <button className="pill-btn pill-orange" onClick={onGetStarted}>Log in for trends &amp; forecasts</button>
         </div>
+        {profile && (
+          <FishProfileModal
+            item={profile}
+            onClose={() => setProfile(null)}
+            onLogin={() => { setProfile(null); onGetStarted(); }}
+            onRegister={() => { setProfile(null); onRegister?.(); }}
+          />
+        )}
         </div>
         )}
 
