@@ -1636,6 +1636,42 @@ class PriceImportTests(TestCase):
         self.assertEqual(lgu.get("/api/prices/?since=yesterday").status_code, 400)
 
 
+    def good_rows(self, start_day=3):
+        return [
+            {"row": n, "date": f"2022-02-{start_day + n:02d}", "fish": "Bangus", "municipality": "Cebu City", "price": "160"}
+            for n in range(1, 4)
+        ]
+
+    def test_import_in_chunks_is_one_batch_that_can_be_undone(self):
+        from .models import PriceImportBatch
+        lgu = self.client_for("im_lgu")
+        rows = self.good_rows()
+        for part in (rows[:2], rows[2:]):
+            response = lgu.post("/api/prices/import/", {"rows": part, "source": "DVFM", "batch_id": "abc123", "file_name": "wrong.csv"}, format="json")
+            self.assertEqual(response.status_code, 200, response.data)
+        batch = PriceImportBatch.objects.get(batch_key="abc123")
+        self.assertEqual(batch.record_count, 3)
+        self.assertEqual(PriceRecord.objects.filter(import_batch=batch, status="published").count(), 3)
+        listed = lgu.get("/api/prices/import-batches/").data
+        self.assertEqual(listed[0]["file_name"], "wrong.csv")
+        self.assertEqual(listed[0]["remaining"], 3)
+
+        self.assertEqual(self.client_for("im_vendor").post(f"/api/prices/import-batches/{batch.pk}/undo/").status_code, 403)
+        undo = lgu.post(f"/api/prices/import-batches/{batch.pk}/undo/")
+        self.assertEqual(undo.status_code, 200, undo.data)
+        self.assertEqual(undo.data["removed"], 3)
+        self.assertFalse(PriceRecord.objects.filter(import_batch=batch).exists())
+        self.assertTrue(ActivityLog.objects.filter(action="undid import").exists())
+        self.assertEqual(lgu.post(f"/api/prices/import-batches/{batch.pk}/undo/").status_code, 400)
+
+    def test_import_can_go_to_review_first(self):
+        lgu = self.client_for("im_lgu")
+        response = lgu.post("/api/prices/import/", {"rows": self.good_rows(10), "source": "Market survey", "send_to_review": True, "batch_id": "rev1"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        records = PriceRecord.objects.filter(import_batch__batch_key="rev1")
+        self.assertEqual(records.count(), 3)
+        self.assertTrue(all(r.status == "pending" and r.published_at is None for r in records))
+
 class OwnProfilePhotoTests(TestCase):
     def setUp(self):
         import tempfile

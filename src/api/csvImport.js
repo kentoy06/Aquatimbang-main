@@ -87,7 +87,30 @@ export function detectDayFirst(values) {
   });
 }
 
-const findColumn = (header, kind) => header.findIndex((h) => HEADER_NAMES[kind].includes(normal(h)));
+// "price_per_kg_php", "Price (₱)", "PRICE/KG" all read as "price per kg".
+const headerKey = (value) => normal(value)
+  .replace(/[_\-.]+/g, " ")
+  .replace(/[()[\]₱]/g, " ")
+  .replace(/\b(php|peso|pesos)\b/g, " ")
+  .replace(/\s+/g, " ")
+  .trim();
+
+// Words that mark a column's meaning when the exact name isn't in HEADER_NAMES.
+const HEADER_WORDS = {
+  date: /\b(date|petsa|day)\b/,
+  fish: /\b(fish|species|isda|commodity)\b/,
+  municipality: /\b(municipality|city|lgu|munisipyo|location)\b/,
+  price: /\b(price|presyo|amount)\b/,
+};
+
+function findColumn(header, kind) {
+  const keys = header.map(headerKey);
+  const exact = keys.findIndex((k) => HEADER_NAMES[kind].includes(k));
+  return exact >= 0 ? exact : keys.findIndex((k) => HEADER_WORDS[kind].test(k));
+}
+
+// A column that is clearly not a fish name (never read as one in the wide layout).
+const NOT_FISH = /\b(price|presyo|amount|species|fish|isda|market|merkado|unit|note|notes|remarks|source|id|no|stall|weight|kg)\b/;
 const cleanPrice = (value) => clean(value).replace(/[₱,]|php/gi, "").trim();
 
 /**
@@ -110,9 +133,14 @@ export function toImportRows(table, { defaultMunicipality = "", dayFirst = null 
   const rows = [];
   const layout = fishCol >= 0 && priceCol >= 0 ? "long" : "wide";
   const fishColumns = layout === "wide"
-    ? header.map((name, i) => ({ name, i })).filter(({ name, i }) => name && i !== dateCol && i !== placeCol)
+    ? header.map((name, i) => ({ name, i })).filter(({ name, i }) => name && i !== dateCol && i !== placeCol && !NOT_FISH.test(headerKey(name)))
     : [];
-  if (layout === "wide" && !fishColumns.length) problems.push('No fish columns found. Use "Fish" and "Price" columns, or one column per fish.');
+  if (layout === "wide" && !fishColumns.length) problems.push(`No fish columns found. Use "Fish" (or "Species") and "Price" columns, or one column per fish. Columns found: ${header.join(", ")}`);
+  if (layout === "wide" && (fishCol >= 0) !== (priceCol >= 0)) {
+    problems.push(fishCol >= 0
+      ? `Found a fish column ("${header[fishCol]}") but no price column. Name the price column "Price".`
+      : `Found a price column ("${header[priceCol]}") but no fish column. Name the fish column "Fish".`);
+  }
   if (problems.length) return { rows: [], layout, problems, dayFirst: dayFirstUsed, fishColumns: [] };
 
   body.forEach((cells, index) => {

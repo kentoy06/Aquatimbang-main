@@ -10,35 +10,98 @@ const AUDIENCES = [
 const formatDate = (value) =>
   value ? new Date(value).toLocaleDateString("en-PH", { dateStyle: "medium" }) : "";
 
-// Announcements the logged-in user can see (all of them for Administrators).
-export function useAnnouncements(reloadKey = 0) {
+// How often dashboards look for new announcements.
+const LIVE_CHECK_MS = 60 * 1000;
+
+/**
+ * Announcements the logged-in user can see (all of them for Administrators).
+ * With `live`, they are checked again every minute and whenever the tab is
+ * opened again, so a new announcement shows up without refreshing.
+ */
+export function useAnnouncements(reloadKey = 0, { live = false } = {}) {
   const [announcements, setAnnouncements] = useState([]);
   const [error, setError] = useState("");
+  const [tick, setTick] = useState(0);
+
   useEffect(() => {
+    if (!live) return undefined;
+    const again = () => { if (document.visibilityState === "visible") setTick((t) => t + 1); };
+    const timer = setInterval(again, LIVE_CHECK_MS);
+    document.addEventListener("visibilitychange", again);
+    window.addEventListener("focus", again);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", again);
+      window.removeEventListener("focus", again);
+    };
+  }, [live]);
+
+  useEffect(() => {
+    if (!localStorage.getItem("authToken")) return undefined;
     let cancelled = false;
     fetchAll("/announcements/")
       .then((rows) => { if (!cancelled) { setAnnouncements(rows); setError(""); } })
       .catch((err) => { if (!cancelled) setError(err.message); });
     return () => { cancelled = true; };
-  }, [reloadKey]);
+  }, [reloadKey, tick]);
   return { announcements, error };
 }
 
-// Active announcements shown at the top of a dashboard.
-export function AnnouncementBanner({ announcements, title = "Announcements" }) {
-  const active = announcements.filter((a) => a.is_active);
-  if (!active.length) return null;
+// Which announcements this user already saw (kept on this device).
+const seenKey = () => {
+  try {
+    const user = JSON.parse(localStorage.getItem("user") || "{}");
+    return `aquatimbang-seen-announcements-${user.id ?? "anon"}`;
+  } catch {
+    return "aquatimbang-seen-announcements-anon";
+  }
+};
+function readSeen() {
+  try { return new Set(JSON.parse(localStorage.getItem(seenKey()) || "[]")); } catch { return new Set(); }
+}
+function writeSeen(ids) {
+  try { localStorage.setItem(seenKey(), JSON.stringify([...ids].slice(-200))); } catch { /* storage unavailable */ }
+}
+
+/**
+ * Pops up announcements the user hasn't seen yet, newest first. "Got it"
+ * marks them seen; afterwards they stay in the Notifications tab only.
+ */
+export function AnnouncementPopup({ announcements }) {
+  const [seen, setSeen] = useState(readSeen);
+  const unseen = announcements
+    .filter((a) => a.is_active && !seen.has(a.id))
+    .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+  if (!unseen.length) return null;
+
+  const gotIt = () => {
+    const next = new Set(seen);
+    unseen.forEach((a) => next.add(a.id));
+    writeSeen(next);
+    setSeen(next);
+  };
+
   return (
-    <div className="panel" style={{ marginBottom: 18, borderLeft: "4px solid #f79009" }}>
-      <div className="panel-header"><div><h3>📢 {title}</h3></div></div>
-      <div style={{ padding: "0 18px 14px", display: "grid", gap: 12 }}>
-        {active.slice(0, 3).map((a) => (
-          <div key={a.id}>
-            <strong>{a.title}</strong>
-            <p style={{ margin: "4px 0 2px", whiteSpace: "pre-line", color: "#344054" }}>{a.message}</p>
-            <small style={{ color: "#667085" }}>{formatDate(a.created_at)}</small>
+    <div className="modal-backdrop announce-backdrop">
+      <div className="modal announce-modal" role="dialog" aria-modal="true" aria-labelledby="announce-title">
+        <div className="announce-head">
+          <span className="announce-icon" aria-hidden="true">📢</span>
+          <div>
+            <small>{unseen.length > 1 ? `${unseen.length} new announcements` : "New announcement"}</small>
+            <h3 id="announce-title">{unseen[0].title}</h3>
           </div>
-        ))}
+        </div>
+        <div className="announce-list">
+          {unseen.slice(0, 5).map((a, i) => (
+            <article key={a.id}>
+              {i > 0 && <strong>{a.title}</strong>}
+              <p>{a.message}</p>
+              <small>{formatDate(a.created_at)}{a.created_by_name ? ` · from ${a.created_by_name}` : ""}</small>
+            </article>
+          ))}
+        </div>
+        <p className="announce-note">You can read it again anytime in Notifications.</p>
+        <div className="button-row"><button className="primary-btn" onClick={gotIt} autoFocus>Got it</button></div>
       </div>
     </div>
   );
@@ -116,7 +179,7 @@ export function AnnouncementsManager({ notify }) {
       <div className="page-title">
         <div>
           <h2>System Announcements</h2>
-          <p>Messages shown on the dashboards of Fish Vendors and LGU Officers.</p>
+          <p>Messages that pop up for Fish Vendors and LGU Officers and stay in their Notifications.</p>
         </div>
       </div>
 
@@ -126,7 +189,7 @@ export function AnnouncementsManager({ notify }) {
             <div className="config-icon orange">📢</div>
             <div>
               <h3>{editing ? "Edit Announcement" : "New Announcement"}</h3>
-              <p>Shown at the top of the chosen users' dashboards</p>
+              <p>Pops up on the chosen users' screens within a minute, then stays in their Notifications</p>
             </div>
           </div>
           <div className="form-group">

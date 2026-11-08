@@ -17,7 +17,7 @@ import ProfitHelper from "./components/ProfitHelper.jsx";
 import { ScanFishButton } from "./components/ScanFish.jsx";
 import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
-import { AnnouncementBanner, useAnnouncements } from "./components/Announcements.jsx";
+import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
 import { LANGUAGES, LanguageContext, translate, useLanguageSetting, useT } from "./i18n/vendor.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
@@ -220,7 +220,7 @@ useEffect(() => {
   const speciesForVendor = mineFirst(registeredFishSpecies);
   const openFish = (id) => setFishInfoId(String(id));
 
-  const { announcements } = useAnnouncements();
+  const { announcements } = useAnnouncements(0, { live: true });
   const notifications = buildVendorNotifications(mySuggestions, publishedPrices, announcements);
   const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
 
@@ -230,8 +230,8 @@ useEffect(() => {
       items: [
         { name: "Dashboard", icon: "▦" },
         { name: "Current Fish Prices", icon: "₱" },
-        { name: "Price Trends", icon: "📈" },
-        { name: "Price Forecast", icon: "◔" },
+        { name: "Price Trends", icon: "↗" },
+        { name: "Price Forecast", icon: "∿" },
       ],
     },
     {
@@ -245,8 +245,8 @@ useEffect(() => {
     {
       label: "TOOLS",
       items: [
-        { name: "Fair Price Calculator", icon: "🧮" },
-        { name: "Export Reports", icon: "📄" },
+        { name: "Fair Price Calculator", icon: "⊞" },
+        { name: "Export Reports", icon: "⤓" },
       ],
     },
     {
@@ -374,8 +374,8 @@ useEffect(() => {
         <header className="topbar">
           <button className="menu-toggle" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>☰</button>
           <div>
-            <h1>{t(activePage)}</h1>
-            <p>{t("View official fish prices and compute fair selling amounts")}</p>
+            <h1>{t("Fish Vendor")}</h1>
+            <p>{new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
           </div>
 
           <div className="topbar-right">
@@ -397,6 +397,7 @@ useEffect(() => {
         </header>
 
         <section className="content">{renderPage()}</section>
+        <AnnouncementPopup announcements={announcements} />
       </main>
 
       {fishInfoId && (
@@ -487,7 +488,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
   let id = 1;
 
   announcements.filter((a) => a.is_active).forEach((a) => {
-    notifs.push({ id: `announcement-${a.id}`, type: "info", page: "Dashboard", title: `📢 ${a.title}`, detail: a.message });
+    notifs.push({ id: `announcement-${a.id}`, type: "info", page: "Notifications", title: `📢 ${a.title}`, detail: `${a.message} (${new Date(a.created_at).toLocaleDateString("en-PH", { dateStyle: "medium" })})` });
   });
 
   mySuggestions.forEach((s) => {
@@ -1504,7 +1505,6 @@ function LiveVendorDashboard({ records, loading, error, municipality, onMunicipa
   const average = rows.length ? rows.reduce((sum, r) => sum + Number(r.price_per_kg), 0) / rows.length : null;
   const pending = mySuggestions.filter((s) => s.status === "Pending Review").length;
   return <>
-    <AnnouncementBanner announcements={announcements} title={t("Announcements")} />
     <div className="welcome-card"><div><span className="eyebrow">{t("FISH VENDOR")}</span><h2>{t("Welcome, {name}!", { name: vendorName.split(" ")[0] })}</h2><p>{t("Official LGU prices for {place}.", { place: municipality || t("all municipalities") })}</p></div><div className="welcome-fish">🐟</div></div>
     <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
     <div className="panel my-fish-panel">

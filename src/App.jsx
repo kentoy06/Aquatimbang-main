@@ -82,11 +82,14 @@ function App() {
     setPage("login");
   }, []);
 
+  // Only a tab showing a dashboard is sent back to the login page.
+  const onDashboard = ["Admin", "Vendor", "LGU"].includes(page);
   useEffect(() => {
+    if (!onDashboard) return undefined;
     const onEnded = (event) => showSessionEnded(event.detail?.message || "Please log in again.");
     window.addEventListener(SESSION_ENDED_EVENT, onEnded);
     return () => window.removeEventListener(SESSION_ENDED_EVENT, onEnded);
-  }, [showSessionEnded]);
+  }, [showSessionEnded, onDashboard]);
 
   // Automatic logout after inactivity on any dashboard.
   useIdleLogout(["Admin", "Vendor", "LGU"].includes(page), showSessionEnded);

@@ -79,12 +79,13 @@ export default function FishMultiSelect({ fish, selected, onToggle, id = "fish-m
       )}
 
       {chosen.length > 0 && (
-        <div className="fish-multi-chips">
+        <div className="fish-multi-cards" aria-label="Fish you chose">
           {chosen.map((f) => (
-            <span key={f.id} className="fish-multi-chip">
-              {f.name}
-              <button type="button" aria-label={`Remove ${f.name}`} onClick={() => onToggle(f.id)}>✕</button>
-            </span>
+            <div key={f.id} className="fish-multi-card">
+              <FishThumb fish={f} size={64} />
+              <span>{f.name}</span>
+              <button type="button" aria-label={`Remove ${f.name}`} title="Remove" onClick={() => onToggle(f.id)}>✕</button>
+            </div>
           ))}
         </div>
       )}

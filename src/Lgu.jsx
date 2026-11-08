@@ -30,7 +30,7 @@ import FishScanReview from "./components/FishScanReview.jsx";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
 import { listExternalFactors } from "./api/forecast.js";
 import { FishPhotoInput, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
-import { AnnouncementBanner, useAnnouncements } from "./components/Announcements.jsx";
+import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
 import { describeFilters, exportReport } from "./api/reportExport.js";
 import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
 
@@ -377,7 +377,8 @@ useEffect(() => {
     setTimeout(() => setToast(""), 2600);
   };
 
-  const notifications = buildLguNotifications(suggestions, priceRecords, fisherfolk);
+  const { announcements } = useAnnouncements(0, { live: true });
+  const notifications = buildLguNotifications(suggestions, priceRecords, fisherfolk, announcements);
   const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
 
   const menuGroups = [
@@ -395,30 +396,30 @@ useEffect(() => {
     {
       label: "FISHERFOLK",
       items: [
-        { name: "Vendor Registrations", icon: "✅" },
+        { name: "Vendor Registrations", icon: "☑" },
         { name: "Fisherfolk Management", icon: "👥" },
         { name: "Price Suggestions", icon: "📥" },
-        { name: "Fish Scanner Photos", icon: "📷" },
+        { name: "Fish Scanner Photos", icon: "◉" },
       ],
     },
     {
       label: "REFERENCE PRICES",
       items: [
         { name: "Official Reference Prices", icon: "₱" },
-        { name: "Price Trends", icon: "📈" },
+        { name: "Price Trends", icon: "↗" },
         { name: "Price Comparison", icon: "⇄" },
         { name: "Price Anomalies", icon: "⚠" },
       ],
     },
     {
       label: "FORECASTING",
-      items: [{ name: "Price Forecast", icon: "◔" }],
+      items: [{ name: "Price Forecast", icon: "∿" }],
     },
     {
       label: "REPORTS & AUDIT",
       items: [
         { name: "Reports", icon: "▤" },
-        { name: "Validation History", icon: "🗂" },
+        { name: "Validation History", icon: "☷" },
         { name: "Audit Log", icon: "◷" },
       ],
     },
@@ -577,8 +578,8 @@ useEffect(() => {
         <header className="topbar">
           <button className="menu-toggle" onClick={() => setMenuOpen(true)} aria-label="Open menu" aria-expanded={menuOpen}>☰</button>
           <div>
-            <h1>{activePage}</h1>
-            <p>Encode, validate, and publish official fish prices</p>
+            <h1>LGU Officer Panel</h1>
+            <p>{new Date().toLocaleDateString("en-PH", { weekday: "long", month: "long", day: "numeric", year: "numeric" })}</p>
           </div>
 
           <div className="topbar-right">
@@ -599,6 +600,7 @@ useEffect(() => {
         </header>
 
         <section className="content">{renderPage()}</section>
+        <AnnouncementPopup announcements={announcements} />
       </main>
 
       {toast && <div className="toast">{toast}</div>}
@@ -606,9 +608,17 @@ useEffect(() => {
   );
 }
 
-function buildLguNotifications(suggestions, priceRecords, fisherfolk) {
+function buildLguNotifications(suggestions, priceRecords, fisherfolk, announcements = []) {
   const notifs = [];
   let id = 1;
+
+  // Announcements from the Administrator stay here as history.
+  announcements.filter((a) => a.is_active).forEach((a) => {
+    notifs.push({
+      id: `announcement-${a.id}`, type: "info", page: "Notifications", title: `📢 ${a.title}`,
+      detail: `${a.message} (${new Date(a.created_at).toLocaleDateString("en-PH", { dateStyle: "medium" })})`,
+    });
+  });
 
   const pendingSuggestions = suggestions.filter((s) => s.status === "Pending Review");
   if (pendingSuggestions.length > 0) {
@@ -666,7 +676,6 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk) {
    ================================================================ */
 
 function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, fisherfolk, goTo, userName }) {
-  const { announcements } = useAnnouncements();
   // Build today's local date as YYYY-MM-DD, matching Django's recorded_date field.
   const today = new Date().toLocaleDateString("en-CA");
 
@@ -680,20 +689,22 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
     todaysRecords.map((record) => record.fish_species)
   ).size;
 
-  // Calculate today's average using only today's Django records.
-  const averagePriceToday = todaysRecords.length
-    ? todaysRecords.reduce(
-        (total, record) => total + Number(record.price_per_kg || 0),
-        0
-      ) / todaysRecords.length
-    : 0;
+  // Latest day that has published prices, and how many fish were priced that day.
+  // (An average of different fish together means nothing, so none is shown.)
+  const publishedDates = priceRecords
+    .filter((record) => String(record.status || "").toLowerCase() === "published" && record.recorded_date)
+    .map((record) => record.recorded_date);
+  const latestPriceDay = publishedDates.length ? publishedDates.reduce((a, b) => (a > b ? a : b)) : "";
+  const fishOnLatestDay = new Set(
+    priceRecords
+      .filter((record) => record.recorded_date === latestPriceDay && String(record.status || "").toLowerCase() === "published")
+      .map((record) => record.fish_species)
+  ).size;
 
-  // Find the start of the current week (Sunday) in local time.
+  // The last 7 days, counted by each price's own date (imported prices included).
   const startOfWeek = new Date();
   startOfWeek.setHours(0, 0, 0, 0);
-  startOfWeek.setDate(startOfWeek.getDate() - startOfWeek.getDay());
-
-  // Count real Django price records from the current week.
+  startOfWeek.setDate(startOfWeek.getDate() - 6);
   const recordsThisWeek = priceRecords.filter((record) => {
     if (!record.recorded_date) return false;
     const recordDate = new Date(`${record.recorded_date}T00:00:00`);
@@ -731,7 +742,6 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
 
   return (
     <>
-      <AnnouncementBanner announcements={announcements} />
       <div className="welcome-card">
         <div>
           <span className="eyebrow">LGU OFFICER</span>
@@ -799,24 +809,25 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
         <div className="stat-card">
           <div className="stat-icon blue">₱</div>
           <div>
-            <span>Average Price Today</span>
-            <h2>₱{averagePriceToday.toFixed(2)}</h2>
+            <span>Latest Prices</span>
+            <h2>{latestPriceDay ? new Date(`${latestPriceDay}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric" }) : "—"}</h2>
+            <small>{latestPriceDay ? `${fishOnLatestDay} fish priced that day` : "No published prices yet"}</small>
           </div>
         </div>
 
         <div className="stat-card">
           <div className="stat-icon orange">▤</div>
           <div>
-            <span>Records This Week</span>
+            <span>Records in the Last 7 Days</span>
             <h2>{recordsThisWeek}</h2>
-            <small>from Django price records</small>
+            <small>by price date, imports included</small>
           </div>
         </div>
 
         <div className="stat-card clickable" onClick={() => goTo("Price Suggestions")}>
           <div className="stat-icon green">📥</div>
           <div>
-            <span>Suggestions This Week</span>
+            <span>Suggestions (Last 7 Days)</span>
             <h2>{suggestionsThisWeek}</h2>
             <small>submitted by fish vendors</small>
           </div>

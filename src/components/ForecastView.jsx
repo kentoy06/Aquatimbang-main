@@ -188,7 +188,7 @@ function ForecastView({ species = [], municipalities = [], defaultMunicipalityId
               <div><span>Forecast for {end ? longDate(end.date) : "—"}</span><h2>{peso(end?.price)}</h2><small>{changeText} · range {peso(end?.lower)} – {peso(end?.upper)}</small></div>
             </div>
             <div className="stat-card">
-              <div className="stat-icon purple">◔</div>
+              <div className="stat-icon purple">∿</div>
               <div><span>Forecast Accuracy (MAPE)</span><h2>{result.mape !== null ? `${result.mape}%` : "—"}</h2><small>{result.mape !== null ? `Average error on the last ${result.holdout_days} days` : "Not measured for trend lines"}</small></div>
             </div>
             <div className="stat-card">
