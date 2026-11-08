@@ -1196,6 +1196,41 @@ class PriceCorrectionAndSettingsTests(TestCase):
         self.assertEqual(record["corrections"][0]["reason"], "Typo in encoding")
         self.assertTrue(ActivityLog.objects.filter(action="corrected", target_type="PriceRecord").exists())
 
+    def test_correct_wrong_fish_keeps_original(self):
+        bangus = FishSpecies.objects.create(name="Bangus")
+        response = self.client_for("LGU Officer").post(
+            f"/api/prices/{self.published.pk}/correct/",
+            {"fish_species": bangus.pk, "price_per_kg": "190", "reason": "Encoded under the wrong fish"}, format="json",
+        )
+        self.assertEqual(response.status_code, 200, response.data)
+        record = response.data["record"]
+        self.assertEqual(record["fish_name"], "Bangus")
+        self.assertEqual(record["price_per_kg"], "190.00")
+        correction = record["corrections"][0]
+        self.assertEqual((correction["previous_fish"], correction["new_fish"]), ("Galunggong", "Bangus"))
+        self.assertEqual(correction["previous_price"], "180.00")
+        log = ActivityLog.objects.filter(action="corrected").latest("created_at")
+        self.assertEqual(log.details["changes"]["fish_species"], {"from": "Galunggong", "to": "Bangus"})
+
+        # Fish only, price unchanged, works too; nothing changed is refused.
+        tamban = FishSpecies.objects.create(name="Tamban")
+        only_fish = self.client_for("Administrator").post(
+            f"/api/prices/{self.published.pk}/correct/", {"fish_species": tamban.pk, "reason": "Still wrong fish"}, format="json")
+        self.assertEqual(only_fish.status_code, 200, only_fish.data)
+        self.assertEqual(only_fish.data["record"]["price_per_kg"], "190.00")
+        same = self.client_for("Administrator").post(
+            f"/api/prices/{self.published.pk}/correct/", {"fish_species": tamban.pk, "reason": "again"}, format="json")
+        self.assertEqual(same.status_code, 400)
+
+    def test_correction_cannot_create_a_duplicate(self):
+        bangus = FishSpecies.objects.create(name="Bangus")
+        PriceRecord.objects.create(fish_species=bangus, municipality=self.cebu, price_per_kg=Decimal("200"),
+                                   recorded_date=self.published.recorded_date, status="published")
+        response = self.client_for("LGU Officer").post(
+            f"/api/prices/{self.published.pk}/correct/", {"fish_species": bangus.pk, "reason": "Wrong fish"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("already has a price", response.data["fish_species"])
+
     def test_correction_requires_reason_and_lgu_or_admin(self):
         self.assertIn("reason", self.client_for("Administrator").post(
             f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "170"}, format="json").data)

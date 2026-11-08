@@ -856,6 +856,10 @@ class PriceRecordSerializer(serializers.ModelSerializer):
 
                 "new_price": str(c.new_price),
 
+                "previous_fish": c.previous_species.name if c.previous_species else None,
+
+                "new_fish": c.new_species.name if c.new_species else None,
+
                 "reason": c.reason,
 
                 "corrected_by": c.corrected_by.username if c.corrected_by else None,

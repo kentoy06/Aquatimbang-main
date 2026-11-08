@@ -1574,3 +1574,11 @@ table th {
 .confirm-input-unit input { flex: 1; min-width: 0; border: 0; padding: 12px 4px; font: inherit; font-size: 18px; outline: none; }
 .confirm-input-unit:focus-within, .confirm-textarea:focus { border-color: var(--aqua); box-shadow: 0 0 0 3px rgba(63, 193, 217, 0.2); }
 .confirm-textarea { width: 100%; border: 1px solid #cfdbe6; border-radius: 12px; padding: 10px 12px; font: inherit; font-size: 14px; resize: vertical; outline: none; }
+
+/* Correct a price record (fish + price + reason). */
+.correct-box { width: min(480px, 100%); gap: 12px; max-height: calc(100vh - 32px); overflow-y: auto; }
+.correct-box .form-group { margin: 0; }
+.correct-original { margin: 0; padding: 10px 12px; border-radius: 10px; background: #f3f7fa; color: #475569; font-size: 13px; }
+.correct-fish { display: flex; align-items: center; gap: 10px; }
+.correct-fish select { flex: 1; min-width: 0; }
+.correct-note { display: block; margin-top: 6px; color: #64748b; font-size: 12px; }

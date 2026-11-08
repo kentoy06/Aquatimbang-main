@@ -1,5 +1,6 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
+import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
 import "./App.css";
@@ -212,6 +213,7 @@ const toPriceRow = (r) => ({
   id: r.id,
   date: r.recorded_date,
   species: r.fish_name,
+  speciesId: r.fish_species,
   municipality: r.municipality_name,
   market: r.municipality_name,
   price: Number(r.price_per_kg),
@@ -2846,35 +2848,9 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
     }
   };
 
-  const correctRecord = async (r) => {
-    const input = await askText(`New price per kg for ${r.species} on ${fmtDate(r.date)}:`, r.price);
-    if (input === null) return;
-
-    const newPrice = parseFloat(input);
-    if (isNaN(newPrice) || newPrice <= 0) {
-      notify("Invalid price entered.");
-      return;
-    }
-    try {
-      if (r.status === "Published") {
-        // Published prices keep their original value in the correction history.
-        const reason = await askText("Reason for this correction (kept in the audit trail):", "");
-        if (reason === null) return;
-        if (!reason.trim()) {
-          notify("A reason is required to correct a published price.");
-          return;
-        }
-        await sendJson(`/prices/${r.id}/correct/`, "POST", { price_per_kg: newPrice.toFixed(2), reason: reason.trim() });
-        notify("Price corrected. The original price is kept in the history.");
-      } else {
-        await send(r, "PATCH", { price_per_kg: newPrice.toFixed(2) });
-        notify("Record updated.");
-      }
-      onChanged();
-    } catch (err) {
-      notify(err.message);
-    }
-  };
+  // Fix a record's fish and/or price (published ones need a reason).
+  const [correcting, setCorrecting] = useState(null);
+  const correctRecord = (r) => setCorrecting(r);
 
   const exportCSV = () => {
     const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
@@ -2897,6 +2873,17 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
 
   return (
     <>
+      {correcting && (
+        <CorrectRecordDialog
+          record={{
+            id: correcting.id, fishId: correcting.speciesId, fishName: correcting.species,
+            municipality: correcting.municipality, date: fmtDate(correcting.date), price: correcting.price,
+            published: correcting.status === "Published",
+          }}
+          onClose={() => setCorrecting(null)}
+          onSaved={(message) => { setCorrecting(null); notify(message); onChanged(); }}
+        />
+      )}
       <div className="page-title">
         <div>
           <h2>Price Records</h2>
@@ -2989,7 +2976,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
                   <td>
                     <strong>{peso(r.price)}</strong>
                     {r.isCorrection && r.corrections.length > 0 && (
-                      <small className="muted-text" style={{ display: "block" }} title={r.corrections.map((c) => `${peso(c.previous_price)} → ${peso(c.new_price)}: ${c.reason} (${c.corrected_by || "—"})`).join("\n")}>
+                      <small className="muted-text" style={{ display: "block" }} title={r.corrections.map((c) => `${c.previous_fish ? `${c.previous_fish} → ${c.new_fish}, ` : ""}${peso(c.previous_price)} → ${peso(c.new_price)}: ${c.reason} (${c.corrected_by || "—"})`).join("\n")}>
                         Corrected · was {peso(r.corrections[0].previous_price)}
                       </small>
                     )}
@@ -3000,7 +2987,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
                   </td>
                   <td>
                     <div className="action-icons">
-                      <button title={r.status === "Published" ? "Correct price" : "Edit price"} onClick={() => correctRecord(r)}>✎</button>
+                      <button title={r.status === "Published" ? "Correct record (fish or price)" : "Edit record"} onClick={() => correctRecord(r)}>✎</button>
                       {r.status !== "Published" && <button title="Delete" onClick={() => deleteRecord(r)}>✕</button>}
                     </div>
                   </td>

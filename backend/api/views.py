@@ -551,37 +551,69 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         reason = request.data.get("reason")
         if not isinstance(reason, str) or not reason.strip():
             return Response({"reason": "Give a reason for the correction."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            new_price = Decimal(str(request.data.get("price_per_kg"))).quantize(Decimal("0.01"))
-        except (InvalidOperation, ValueError, TypeError):
-            return Response({"price_per_kg": "Enter a valid price."}, status=status.HTTP_400_BAD_REQUEST)
-        if new_price <= 0:
-            return Response({"price_per_kg": "Price per kilogram must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
-        try:
-            check_price_bounds(new_price)
-        except serializers.ValidationError as error:
-            return Response({"price_per_kg": error.detail[0]}, status=status.HTTP_400_BAD_REQUEST)
-        if new_price == record.price_per_kg:
-            return Response({"price_per_kg": "The new price is the same as the current one."}, status=status.HTTP_400_BAD_REQUEST)
 
-        previous = record.price_per_kg
+        # The price, the fish species, or both can be corrected.
+        new_price = record.price_per_kg
+        if request.data.get("price_per_kg") not in (None, ""):
+            try:
+                new_price = Decimal(str(request.data.get("price_per_kg"))).quantize(Decimal("0.01"))
+            except (InvalidOperation, ValueError, TypeError):
+                return Response({"price_per_kg": "Enter a valid price."}, status=status.HTTP_400_BAD_REQUEST)
+            if new_price <= 0:
+                return Response({"price_per_kg": "Price per kilogram must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
+            try:
+                check_price_bounds(new_price)
+            except serializers.ValidationError as error:
+                return Response({"price_per_kg": error.detail[0]}, status=status.HTTP_400_BAD_REQUEST)
+
+        new_species = record.fish_species
+        if request.data.get("fish_species") not in (None, ""):
+            try:
+                new_species = FishSpecies.objects.get(pk=int(request.data.get("fish_species")), is_active=True)
+            except (ValueError, TypeError, FishSpecies.DoesNotExist):
+                return Response({"fish_species": "Choose an active fish species."}, status=status.HTTP_400_BAD_REQUEST)
+            if new_species.pk != record.fish_species_id and PriceRecord.objects.filter(
+                fish_species=new_species,
+                municipality_id=record.municipality_id,
+                recorded_date=record.recorded_date,
+            ).exclude(status=PriceRecord.STATUS_REJECTED).exclude(pk=record.pk).exists():
+                return Response(
+                    {"fish_species": f"{new_species.name} already has a price in {record.municipality.name} for "
+                                     f"{record.recorded_date:%b %d, %Y}. Correct that record instead."},
+                    status=status.HTTP_400_BAD_REQUEST,
+                )
+
+        species_changed = new_species.pk != record.fish_species_id
+        if new_price == record.price_per_kg and not species_changed:
+            return Response(
+                {"price_per_kg": "Nothing changed. Enter a different price or choose a different fish."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+
+        previous_price = record.price_per_kg
+        previous_species = record.fish_species
         PriceCorrection.objects.create(
             price_record=record,
-            previous_price=previous,
+            previous_price=previous_price,
             new_price=new_price,
+            previous_species=previous_species if species_changed else None,
+            new_species=new_species if species_changed else None,
             reason=reason.strip(),
             corrected_by=request.user,
         )
         record.price_per_kg = new_price
+        record.fish_species = new_species
         record.is_correction = True
-        record.save(update_fields=["price_per_kg", "is_correction", "updated_at"])
-        self._log_price("corrected", record, {
-            "changes": {"price_per_kg": {"from": str(previous), "to": str(new_price)}},
-            "reason": reason.strip(),
-        })
+        record.save(update_fields=["price_per_kg", "fish_species", "is_correction", "updated_at"])
+        changes = {}
+        if new_price != previous_price:
+            changes["price_per_kg"] = {"from": str(previous_price), "to": str(new_price)}
+        if species_changed:
+            changes["fish_species"] = {"from": previous_species.name, "to": new_species.name}
+        self._log_price("corrected", record, {"changes": changes, "reason": reason.strip()})
         record = self.get_queryset().get(pk=record.pk)
         return Response(
-            {"message": "Price corrected. The original price is kept in the history.", "record": self.get_serializer(record).data},
+            {"message": "Price corrected. The original is kept in the history.", "record": self.get_serializer(record).data},
             status=status.HTTP_200_OK,
         )
 
