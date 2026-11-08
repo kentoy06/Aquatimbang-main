@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import { askConfirm } from "./components/ConfirmDialog.jsx";
 import React, { useEffect, useState, lazy, Suspense } from "react";
 import "./App.css";
 import "./Vendor.css";
@@ -885,7 +886,7 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
   };
 
   const withdraw = async (s) => {
-    if (!window.confirm(t("Withdraw your {fish} suggestion? The LGU will no longer review it.", { fish: s.species }))) return;
+    if (!await askConfirm(t("Withdraw your {fish} suggestion? The LGU will no longer review it.", { fish: s.species }), { confirmLabel: t("Withdraw"), cancelLabel: t("Cancel"), danger: true, title: t("Please confirm") })) return;
     setBusyId(s.id);
     try {
       replace(await withdrawVendorSuggestion(s.id));

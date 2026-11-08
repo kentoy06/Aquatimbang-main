@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { askConfirm } from "./ConfirmDialog.jsx";
 import { deleteExternalFactor, listExternalFactors, saveExternalFactor } from "../api/forecast.js";
 import ClosedSeasonsSection from "./ClosedSeasonsSection.jsx";
 
@@ -62,7 +63,7 @@ function ExternalFactorsPage({ notify }) {
   });
 
   const remove = async (factor) => {
-    if (!window.confirm(`Delete the external factors for ${factor.date}?`)) return;
+    if (!await askConfirm(`Delete the external factors for ${factor.date}?`)) return;
     try {
       await deleteExternalFactor(factor.id);
       notify("Entry deleted.");

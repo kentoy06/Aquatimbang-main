@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { askConfirm } from "./ConfirmDialog.jsx";
 import { deleteClosedSeason, listClosedSeasons, listFishSpecies, saveClosedSeason } from "../api/forecast.js";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
@@ -96,7 +97,7 @@ export default function ClosedSeasonsSection({ notify }) {
   };
 
   const remove = async (season) => {
-    if (!window.confirm(`Delete "${season.name}"? You can also turn it off instead.`)) return;
+    if (!await askConfirm(`Delete "${season.name}"? You can also turn it off instead.`)) return;
     try {
       await deleteClosedSeason(season.id);
       notify("Closed season deleted.");

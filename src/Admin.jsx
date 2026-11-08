@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
 import "./App.css";
@@ -1610,7 +1611,7 @@ const submitReview = async () => {
 
   const toggleActive = async (u) => {
     const activate = u.status !== "Active";
-    if (!activate && !window.confirm(`Deactivate ${u.name}? They will be logged out and cannot log in until reactivated.`)) return;
+    if (!activate && !await askConfirm(`Deactivate ${u.name}? They will be logged out and cannot log in until reactivated.`)) return;
     try {
       upsertAccount(await sendJson(`/auth/users/${u.id}/status/`, "POST", { active: activate }));
       notify(`${u.name} ${activate ? "reactivated" : "deactivated"}.`);
@@ -1642,7 +1643,7 @@ const submitReview = async () => {
   };
 
   const deleteAccount = async (u) => {
-    if (!window.confirm(`Permanently delete ${u.name}'s account? This cannot be undone.`)) return;
+    if (!await askConfirm(`Permanently delete ${u.name}'s account? This cannot be undone.`)) return;
     try {
       const data = await sendJson(`/auth/users/${u.id}/`, "DELETE");
       setDatabaseUsers((prev) => prev.filter((a) => a.id !== u.id));
@@ -2236,7 +2237,7 @@ const toggleStatus = async (s) => {
 
   if (
     !nextActive &&
-    !window.confirm(`Deactivate ${s.name}? It will no longer be available for new price entries.`)
+    !await askConfirm(`Deactivate ${s.name}? It will no longer be available for new price entries.`)
   ) {
     return;
   }
@@ -2274,7 +2275,7 @@ const toggleStatus = async (s) => {
     return;
   }
 
-  if (!window.confirm(
+  if (!await askConfirm(
     `Permanently delete ${s.name}? This action cannot be undone.`
   )) {
     return;
@@ -2835,7 +2836,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
   };
 
   const deleteRecord = async (r) => {
-    if (!window.confirm(`Permanently delete this ${r.species} record (${peso(r.price)}, ${fmtDate(r.date)})?`)) return;
+    if (!await askConfirm(`Permanently delete this ${r.species} record (${peso(r.price)}, ${fmtDate(r.date)})?`)) return;
     try {
       await send(r, "DELETE");
       notify("Record deleted.");
@@ -2846,7 +2847,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
   };
 
   const correctRecord = async (r) => {
-    const input = window.prompt(`New price per kg for ${r.species} on ${fmtDate(r.date)}:`, r.price);
+    const input = await askText(`New price per kg for ${r.species} on ${fmtDate(r.date)}:`, r.price);
     if (input === null) return;
 
     const newPrice = parseFloat(input);
@@ -2857,7 +2858,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
     try {
       if (r.status === "Published") {
         // Published prices keep their original value in the correction history.
-        const reason = window.prompt("Reason for this correction (kept in the audit trail):", "");
+        const reason = await askText("Reason for this correction (kept in the audit trail):", "");
         if (reason === null) return;
         if (!reason.trim()) {
           notify("A reason is required to correct a published price.");
@@ -3254,7 +3255,7 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
     );
 
   const setStatus = async (s, decision) => {
-    const feedback = window.prompt(`Optional feedback for ${s.submittedBy} (${s.species}):`, "");
+    const feedback = await askText(`Optional feedback for ${s.submittedBy} (${s.species}):`, "");
     if (feedback === null) return;
     setSavingId(s.id);
     try {

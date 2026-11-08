@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
@@ -1035,7 +1036,7 @@ function LGUFishSpeciesManagement({ notify }) {
   const toggle = async (item) => {
     if (busy) return;
     const next = !item.is_active;
-    if (!next && !window.confirm(`Deactivate ${item.name}? It will not be available for new price entries.`)) return;
+    if (!next && !await askConfirm(`Deactivate ${item.name}? It will not be available for new price entries.`)) return;
     setBusy(true);
     try {
       await request(`${API}${item.id}/`, "PATCH", { is_active: next });
@@ -1557,7 +1558,7 @@ function PriceEntry({
   // ------------------------------------------------------------
   const editPrice = async (record) => {
     // Ask the LGU officer for the new price.
-    const input = window.prompt(
+    const input = await askText(
       `Enter the new price per kg for ${record.fish_name}:`,
       record.price_per_kg
     );
@@ -1582,7 +1583,7 @@ function PriceEntry({
     const isPublished = record.status === "published";
     let reason = "";
     if (isPublished) {
-      reason = window.prompt("This price is already published. Reason for the correction (kept in the audit trail):", "");
+      reason = await askText("This price is already published. Reason for the correction (kept in the audit trail):", "");
       if (reason === null) return;
       if (!reason.trim()) {
         notify("A reason is required to correct a published price.");
@@ -1659,7 +1660,7 @@ function PriceEntry({
   // ------------------------------------------------------------
   const removeEntry = async (record) => {
     // Confirm before permanently deleting the record.
-    const confirmed = window.confirm(
+    const confirmed = await askConfirm(
       `Delete the price record for ${record.fish_name}?`
     );
 
@@ -1735,7 +1736,7 @@ function PriceEntry({
   const [submittingId, setSubmittingId] = useState(null);
   const submitForReview = async (record) => {
     if (String(record.status).toLowerCase() !== "draft") return;
-    if (!window.confirm(`Submit ${record.fish_name} at ${peso(record.price_per_kg)} for review?`)) return;
+    if (!await askConfirm(`Submit ${record.fish_name} at ${peso(record.price_per_kg)} for review?`)) return;
     setSubmittingId(record.id);
     try {
       const token = getToken();
@@ -2177,7 +2178,7 @@ console.log("Bangus #8 comparison:", {
     // Ask for confirmation when approving a flagged price.
     if (
       record.status === "Flagged" &&
-      !window.confirm(
+      !await askConfirm(
         `${record.species} is flagged at ${peso(
           record.price
         )}. Approve anyway?`
@@ -2240,7 +2241,7 @@ console.log("Bangus #8 comparison:", {
   // Reject a price record.
   const reject = async (record) => {
     if (
-      !window.confirm(
+      !await askConfirm(
         `Reject the ${record.species} entry?`
       )
     ) {
@@ -2838,7 +2839,7 @@ function PriceSuggestions({ notify }) {
   };
 
   const markReviewed = async (suggestion) => {
-    const feedback = window.prompt(
+    const feedback = await askText(
       `Review ${suggestion.species} from ${
         suggestion.submittedBy || "Vendor"
       }.\n\nEnter LGU feedback:`,
@@ -2851,7 +2852,7 @@ function PriceSuggestions({ notify }) {
   };
 
   const reject = async (suggestion) => {
-    const feedback = window.prompt(
+    const feedback = await askText(
       `Why are you rejecting the ${
         suggestion.species
       } suggestion of ${peso(suggestion.suggestedPrice)}?`
@@ -2872,7 +2873,7 @@ function PriceSuggestions({ notify }) {
   };
 
   const adoptAsReference = async (suggestion) => {
-    const confirmed = window.confirm(
+    const confirmed = await askConfirm(
       `Adopt the ${peso(
         suggestion.suggestedPrice
       )} suggestion for ${
@@ -2882,7 +2883,7 @@ function PriceSuggestions({ notify }) {
 
     if (!confirmed) return;
 
-    const feedback = window.prompt(
+    const feedback = await askText(
       "Enter feedback for the vendor:",
       "Suggestion adopted for reference."
     );

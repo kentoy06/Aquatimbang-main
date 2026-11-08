@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { askConfirm } from "./ConfirmDialog.jsx";
 import { apiUrl, authHeaders, fetchAll } from "../api/config.js";
 
 const AUDIENCES = [
@@ -163,7 +164,7 @@ export function AnnouncementsManager({ notify }) {
   };
 
   const remove = async (a) => {
-    if (!window.confirm(`Delete "${a.title}"? This cannot be undone.`)) return;
+    if (!await askConfirm(`Delete "${a.title}"? This cannot be undone.`)) return;
     try {
       await send(`/announcements/${a.id}/`, "DELETE");
       notify("Announcement deleted.");

@@ -302,6 +302,7 @@ const PHRASES = {
   "Withdrawn": ["Binawi", "Gibawi"],
   "Edit": ["I-edit", "Usba"],
   "Withdraw": ["Bawiin", "Bawia"],
+  "Please confirm": ["Pakikumpirma", "Palihug kumpirmaha"],
   "Save": ["I-save", "I-save"],
   "Cancel": ["Kanselahin", "Kanselahon"],
   "Enter a price greater than zero.": ["Maglagay ng presyong higit sa zero.", "Pagbutang og presyo nga labaw sa zero."],
