@@ -1,6 +1,7 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
 import React, { useEffect, useState, lazy, Suspense } from "react";
+import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Vendor.css";
 
@@ -224,6 +225,8 @@ useEffect(() => {
   const { announcements } = useAnnouncements(0, { live: true });
   const notifications = buildVendorNotifications(mySuggestions, publishedPrices, announcements);
   const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
+  // Unread private messages for the sidebar badge.
+  const unreadMessages = useUnreadMessages();
 
   const menuGroups = [
     {
@@ -253,6 +256,7 @@ useEffect(() => {
     {
       label: "ACCOUNT",
       items: [
+        { name: "Messages", icon: "✉" },
         { name: "Notifications", icon: "🔔" },
         { name: "My Profile", icon: "♙" },
         { name: "Help / How to Use", icon: "❓" },
@@ -306,6 +310,8 @@ useEffect(() => {
         return <FairPriceCalculator records={publishedPrices} registeredSpecies={speciesForVendor} myFish={myFish} speciesLoadError={speciesLoadError} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} notify={notify} />;
       case "Export Reports":
         return <ExportReports mySuggestions={mySuggestions} suggestionsLoading={suggestionsLoading} suggestionsError={suggestionsError} records={publishedPrices} loading={publishedLoading} error={publishedError} municipality={selectedPriceMunicipality} onMunicipalityChange={setSelectedPriceMunicipality} availableMunicipalities={priceMunicipalities} defaultMunicipality={identity.municipality} registeredSpecies={registeredFishSpecies} notify={notify} />;
+      case "Messages":
+        return <Messages />;
       case "Notifications":
         return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} goTo={setActivePage} />;
       case "My Profile":
@@ -348,6 +354,9 @@ useEffect(() => {
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{t(item.name)}</span>
+                  {item.name === "Messages" && unreadMessages > 0 && (
+                    <span className="nav-badge">{unreadMessages}</span>
+                  )}
                   {item.name === "Notifications" && unread.length > 0 && (
                     <span className="nav-badge">{unread.length}</span>
                   )}

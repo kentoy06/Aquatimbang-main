@@ -6,6 +6,7 @@ import MarketInsights from "./components/MarketInsights.jsx";
 import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
+import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Admin.css";
 import { API_BASE_URL, apiUrl, authHeaders, fetchAll } from "./api/config.js";
@@ -615,6 +616,7 @@ useEffect(() => {
         { name: "Market Insights", icon: "✦" },
         { name: "External Factors", icon: "☁" },
         { name: "Data Monitoring", icon: "◫" },
+        { name: "Messages", icon: "✉" },
         { name: "Notifications", icon: "🔔" },
       ],
     },
@@ -636,6 +638,8 @@ useEffect(() => {
 
   const notifications = buildNotifications(users, priceRecords, species, municipalities, suggestions);
   const unreadNotifs = notifications.filter((n) => !dismissedNotifs.includes(n.id));
+  // Unread private messages for the sidebar badge.
+  const unreadMessages = useUnreadMessages();
 
   const renderPage = () => {
     switch (activePage) {
@@ -708,6 +712,8 @@ useEffect(() => {
             goTo={setActivePage}
           />
         );
+      case "Messages":
+        return <Messages />;
       case "Notifications":
         return (
           <Notifications
@@ -774,6 +780,9 @@ useEffect(() => {
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{item.name}</span>
+                  {item.name === "Messages" && unreadMessages > 0 && (
+                    <span className="nav-badge">{unreadMessages}</span>
+                  )}
                   {item.name === "Notifications" && unreadNotifs.length > 0 && (
                     <span className="nav-badge">{unreadNotifs.length}</span>
                   )}

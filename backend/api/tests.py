@@ -2371,3 +2371,61 @@ class PresenceTests(TestCase):
         self.assertTrue(vendor_row()["is_online"])
         self.assertEqual(vclient.post("/api/auth/logout/").status_code, 200)
         self.assertFalse(vendor_row()["is_online"])
+
+
+class MessagingTests(TestCase):
+    """Vendor <-> LGU (same municipality), LGU <-> Admin, Vendor <-> Admin; no vendor to vendor."""
+
+    def setUp(self):
+        roles = {n: Role.objects.get_or_create(name=n)[0] for n in ("Administrator", "LGU Officer", "Fish Vendor")}
+        self.cebu = Municipality.objects.create(name="Msg Cebu", province="Cebu")
+        self.talisay = Municipality.objects.create(name="Msg Talisay", province="Cebu")
+
+        def make(name, role, place=None):
+            user = User.objects.create_user(name, f"{name}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=user, role=roles[role], municipality=place, account_status="approved", is_active=True)
+            return user
+
+        self.admin = make("m_admin", "Administrator")
+        self.lgu = make("m_lgu", "LGU Officer", self.cebu)
+        self.vendor = make("m_vendor", "Fish Vendor", self.cebu)
+        self.vendor2 = make("m_vendor2", "Fish Vendor", self.cebu)
+        self.far_vendor = make("m_far", "Fish Vendor", self.talisay)
+
+    def client_for(self, user):
+        c = APIClient()
+        c.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=user)[0].key}")
+        return c
+
+    def test_who_can_message_whom(self):
+        vendor = self.client_for(self.vendor)
+        names = {r["username"] for r in vendor.get("/api/messages/contacts/").data}
+        self.assertEqual(names, {"m_admin", "m_lgu"})          # no vendors, no other municipality
+        self.assertEqual(vendor.post("/api/messages/conversations/", {"user_id": self.vendor2.pk}, format="json").status_code, 403)
+        self.assertEqual(self.client_for(self.far_vendor).post("/api/messages/conversations/", {"user_id": self.lgu.pk}, format="json").status_code, 403)
+        self.assertEqual(self.client_for(self.lgu).post("/api/messages/conversations/", {"user_id": self.admin.pk}, format="json").status_code, 200)
+        self.assertEqual(self.client_for(self.far_vendor).post("/api/messages/conversations/", {"user_id": self.admin.pk}, format="json").status_code, 200)
+
+    def test_send_read_and_privacy(self):
+        vendor, lgu = self.client_for(self.vendor), self.client_for(self.lgu)
+        convo = vendor.post("/api/messages/conversations/", {"user_id": self.lgu.pk}, format="json").data["id"]
+        self.assertEqual(vendor.post(f"/api/messages/conversations/{convo}/", {"body": "  "}, format="json").status_code, 400)
+        sent = vendor.post(f"/api/messages/conversations/{convo}/", {"body": "Why did Galunggong go up?"}, format="json")
+        self.assertEqual(sent.status_code, 201)
+
+        self.assertEqual(lgu.get("/api/messages/unread/").data["unread"], 1)
+        listed = lgu.get("/api/messages/conversations/").data
+        self.assertEqual(listed[0]["with"]["username"], "m_vendor")
+        self.assertEqual(listed[0]["unread"], 1)
+        thread = lgu.get(f"/api/messages/conversations/{convo}/").data
+        self.assertEqual(thread["messages"][0]["body"], "Why did Galunggong go up?")
+        self.assertFalse(thread["messages"][0]["from_me"])
+        self.assertEqual(lgu.get("/api/messages/unread/").data["unread"], 0)   # opening marks it read
+
+        lgu.post(f"/api/messages/conversations/{convo}/", {"body": "Storm this week."}, format="json")
+        newer = vendor.get(f"/api/messages/conversations/{convo}/", {"after": sent.data["id"]}).data["messages"]
+        self.assertEqual([m["body"] for m in newer], ["Storm this week."])
+
+        # Someone outside the conversation cannot read it.
+        self.assertEqual(self.client_for(self.vendor2).get(f"/api/messages/conversations/{convo}/").status_code, 404)
+        self.assertEqual(self.client_for(self.admin).get(f"/api/messages/conversations/{convo}/").status_code, 404)

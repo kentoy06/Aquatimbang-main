@@ -7,6 +7,7 @@ import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
+import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Lgu.css";
 import {
@@ -390,6 +391,8 @@ useEffect(() => {
   const { announcements } = useAnnouncements(0, { live: true });
   const notifications = buildLguNotifications(suggestions, priceRecords, fisherfolk, announcements);
   const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
+  // Unread private messages for the sidebar badge.
+  const unreadMessages = useUnreadMessages();
 
   const menuGroups = [
     {
@@ -436,6 +439,7 @@ useEffect(() => {
     {
       label: "ACCOUNT",
       items: [
+        { name: "Messages", icon: "✉" },
         { name: "Notifications", icon: "🔔" },
         { name: "My Profile", icon: "♙" },
       ],
@@ -512,6 +516,8 @@ useEffect(() => {
         return <ValidationHistory notify={notify} />;
       case "Audit Log":
         return <AuditLog notify={notify} />;
+      case "Messages":
+        return <Messages />;
       case "Notifications":
         return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} goTo={setActivePage} />;
       case "My Profile":
@@ -555,6 +561,9 @@ useEffect(() => {
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{item.name}</span>
+                  {item.name === "Messages" && unreadMessages > 0 && (
+                    <span className="nav-badge">{unreadMessages}</span>
+                  )}
                   {item.name === "Notifications" && unread.length > 0 && (
                     <span className="nav-badge">{unread.length}</span>
                   )}

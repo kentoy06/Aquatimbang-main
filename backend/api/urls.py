@@ -38,6 +38,10 @@ from .views import (
     change_my_password,
     logout_user,
     presence_heartbeat,
+    message_contacts,
+    conversations,
+    conversation_messages,
+    unread_message_count,
     system_settings,
     weight_entries,
     delete_weight_entry,
@@ -294,6 +298,12 @@ urlpatterns = [
 
     # Open pages report that the user is still here (Online / Offline).
     path("auth/heartbeat/", presence_heartbeat, name="presence-heartbeat"),
+
+    # Private messages (vendor <-> LGU, LGU <-> admin, vendor <-> admin).
+    path("messages/contacts/", message_contacts, name="message-contacts"),
+    path("messages/unread/", unread_message_count, name="message-unread"),
+    path("messages/conversations/", conversations, name="conversations"),
+    path("messages/conversations/<int:conversation_id>/", conversation_messages, name="conversation-messages"),
 
     # End this session on the server.
     path(
