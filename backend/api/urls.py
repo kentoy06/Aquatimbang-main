@@ -17,6 +17,8 @@ from .views import (
     price_check,
     price_outliers,
     market_insights,
+    insight_settings,
+    insight_settings_preview,
     my_profile,
     my_photo,
     request_password_reset,
@@ -314,6 +316,8 @@ urlpatterns = [
     path("insights/price-check/", price_check, name="price-check"),
     path("insights/outliers/", price_outliers, name="price-outliers"),
     path("insights/rules/", market_insights, name="market-insights"),
+    path("insights/settings/", insight_settings, name="insight-settings"),
+    path("insights/settings/preview/", insight_settings_preview, name="insight-settings-preview"),
 
     # Public fish profile for the landing page (published prices only).
     path(

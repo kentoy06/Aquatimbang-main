@@ -1195,6 +1195,57 @@ class SystemSetting(models.Model):
         return f"Price range {self.min_price_per_kg}-{self.max_price_per_kg}"
 
 
+class InsightSetting(models.Model):
+    """
+    The cut-offs used by learned anomaly detection and Market Insights (one
+    row). LGU Officers and Administrators can preview and change them; every
+    change is logged with a reason.
+    """
+
+    DEFAULTS = {
+        "window_days": 90,
+        "unusual_percent": 12.0,
+        "very_unusual_percent": 25.0,
+        "usual_window_days": 28,
+        "level_percent": 4.0,
+        "min_days": 5,
+        "min_confidence_percent": 40.0,
+        "min_lift": 1.25,
+    }
+
+    # Learned anomaly detection
+    window_days = models.PositiveSmallIntegerField(default=90)
+    unusual_percent = models.DecimalField(max_digits=5, decimal_places=1, default=12)
+    very_unusual_percent = models.DecimalField(max_digits=5, decimal_places=1, default=25)
+    # Market Insights (association rules)
+    usual_window_days = models.PositiveSmallIntegerField(default=28)
+    level_percent = models.DecimalField(max_digits=4, decimal_places=1, default=4)
+    min_days = models.PositiveSmallIntegerField(default=5)
+    min_confidence_percent = models.DecimalField(max_digits=4, decimal_places=1, default=40)
+    min_lift = models.DecimalField(max_digits=4, decimal_places=2, default=1.25)
+
+    last_reason = models.CharField(max_length=300, blank=True)
+    updated_by = models.ForeignKey(
+        "auth.User", on_delete=models.SET_NULL, null=True, blank=True, related_name="+",
+    )
+    updated_at = models.DateTimeField(auto_now=True)
+
+    @classmethod
+    def load(cls):
+        row, _ = cls.objects.get_or_create(pk=1)
+        return row
+
+    def values(self):
+        """The cut-offs as plain numbers."""
+        return {
+            key: (int(getattr(self, key)) if isinstance(default, int) else float(getattr(self, key)))
+            for key, default in self.DEFAULTS.items()
+        }
+
+    def __str__(self):
+        return "Insight settings"
+
+
 # ============================================================
 # FAIR PRICE CALCULATIONS AND GENERATED REPORTS
 # ============================================================

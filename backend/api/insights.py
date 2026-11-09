@@ -3,7 +3,7 @@ Data mining on published fish prices.
 
 1. Learned anomaly detection (outlier detection)
    For each fish and municipality, the "normal" price is learned from the
-   last NORMAL_WINDOW_DAYS of published prices: the median and the median
+   last 90 days (adjustable in Insight Settings) of published prices: the median and the median
    absolute deviation (MAD). A price is scored with the robust z-score
 
        z = 0.6745 * (price - median) / MAD
@@ -36,10 +36,24 @@ from .models import ClosedFishingSeason, ExternalFactor, PriceRecord
 # 1. Learned anomaly detection
 # ---------------------------------------------------------------------------
 
+# The z-score cut-offs follow Iglewicz & Hoaglin (1993) and stay fixed.
+# The percent and window cut-offs are kept in InsightSetting, where the
+# LGU can preview and change them.
 NORMAL_WINDOW_DAYS = 90
 MIN_HISTORY = 10
-UNUSUAL_Z, UNUSUAL_PCT = 3.5, 12.0
-VERY_UNUSUAL_Z, VERY_UNUSUAL_PCT = 5.0, 25.0
+UNUSUAL_Z = 3.5
+VERY_UNUSUAL_Z = 5.0
+
+
+def current_params():
+    """The cut-offs in use now (InsightSetting), as plain numbers."""
+    from .models import InsightSetting
+    return InsightSetting.load().values()
+
+
+def _params(params):
+    from .models import InsightSetting
+    return {**InsightSetting.DEFAULTS, **(params if params is not None else current_params())}
 
 
 def _normal_from(prices):
@@ -53,37 +67,39 @@ def _normal_from(prices):
     return {"median": round(mid, 2), "mad": mad, "low": round(float(low), 2), "high": round(float(high), 2), "count": len(values)}
 
 
-def score_price(price, normal):
+def score_price(price, normal, params=None):
     """Compare one price with a learned normal range."""
+    p = _params(params)
     price = float(price)
     z = 0.6745 * (price - normal["median"]) / normal["mad"]
     pct = (price - normal["median"]) / normal["median"] * 100 if normal["median"] else 0.0
-    if abs(z) >= VERY_UNUSUAL_Z and abs(pct) >= VERY_UNUSUAL_PCT:
+    if abs(z) >= VERY_UNUSUAL_Z and abs(pct) >= p["very_unusual_percent"]:
         level = "very_unusual"
-    elif abs(z) >= UNUSUAL_Z and abs(pct) >= UNUSUAL_PCT:
+    elif abs(z) >= UNUSUAL_Z and abs(pct) >= p["unusual_percent"]:
         level = "unusual"
     else:
         level = "normal"
     return {"level": level, "z_score": round(z, 2), "percent_from_usual": round(pct, 1)}
 
 
-def history_before(species_id, municipality_id, day, exclude_id=None):
-    """Published prices of the NORMAL_WINDOW_DAYS before `day`."""
+def history_before(species_id, municipality_id, day, exclude_id=None, window_days=NORMAL_WINDOW_DAYS):
+    """Published prices of the `window_days` before `day`."""
     rows = PriceRecord.objects.filter(
         status=PriceRecord.STATUS_PUBLISHED,
         fish_species_id=species_id,
         municipality_id=municipality_id,
         recorded_date__lt=day,
-        recorded_date__gte=day - timedelta(days=NORMAL_WINDOW_DAYS),
+        recorded_date__gte=day - timedelta(days=window_days),
     )
     if exclude_id:
         rows = rows.exclude(pk=exclude_id)
     return list(rows.values_list("price_per_kg", flat=True))
 
 
-def check_price(species, municipality, price, day):
+def check_price(species, municipality, price, day, params=None):
     """Is this price unusual for this fish, place and time? Used while encoding."""
-    history = history_before(species.pk, municipality.pk, day)
+    p = _params(params)
+    history = history_before(species.pk, municipality.pk, day, window_days=p["window_days"])
     if len(history) < MIN_HISTORY:
         return {
             "level": "no_history",
@@ -91,7 +107,7 @@ def check_price(species, municipality, price, day):
             "history_count": len(history),
         }
     normal = _normal_from(history)
-    result = score_price(price, normal)
+    result = score_price(price, normal, p)
     pct = result["percent_from_usual"]
     direction = "higher" if pct > 0 else "lower"
     usual = f"₱{normal['low']:,.2f}–₱{normal['high']:,.2f}"
@@ -109,19 +125,21 @@ def check_price(species, municipality, price, day):
         "usual_low": normal["low"],
         "usual_high": normal["high"],
         "history_count": normal["count"],
-        "window_days": NORMAL_WINDOW_DAYS,
+        "window_days": p["window_days"],
     }
 
 
-def find_outliers(records):
+def find_outliers(records, params=None):
     """
     Score many price records against their own history. `records` is a
     queryset of PriceRecord; only unusual ones are returned, worst first.
     """
+    p = _params(params)
+    window_days = p["window_days"]
     records = list(records.select_related("fish_species", "municipality"))
     if not records:
         return []
-    start = min(r.recorded_date for r in records) - timedelta(days=NORMAL_WINDOW_DAYS)
+    start = min(r.recorded_date for r in records) - timedelta(days=window_days)
     end = max(r.recorded_date for r in records)
     groups = {}
     for fish_id, place_id, day, price, pk in PriceRecord.objects.filter(
@@ -135,7 +153,7 @@ def find_outliers(records):
 
     found = []
     for record in records:
-        window_start = record.recorded_date - timedelta(days=NORMAL_WINDOW_DAYS)
+        window_start = record.recorded_date - timedelta(days=window_days)
         history = [
             price for day, price, pk in groups.get((record.fish_species_id, record.municipality_id), [])
             if window_start <= day < record.recorded_date and pk != record.pk
@@ -143,7 +161,7 @@ def find_outliers(records):
         if len(history) < MIN_HISTORY:
             continue
         normal = _normal_from(history)
-        result = score_price(record.price_per_kg, normal)
+        result = score_price(record.price_per_kg, normal, p)
         if result["level"] == "normal":
             continue
         found.append({
@@ -167,11 +185,9 @@ def find_outliers(records):
 # 2. Market insights: association rules
 # ---------------------------------------------------------------------------
 
-USUAL_WINDOW_DAYS = 28
-LEVEL_PCT = 4.0          # above/below the usual level by this much counts
-MIN_RULE_COUNT = 5       # a rule must happen on at least this many days
-MIN_CONFIDENCE = 0.40
-MIN_LIFT = 1.25
+# Defaults (see InsightSetting): usual = median of the previous 28 days;
+# above/below usual by 4% counts; a rule needs 5 days, 40% confidence and
+# a lift of 1.25.
 
 CONDITION_LABELS = {
     "stormy": "it is stormy",
@@ -186,8 +202,11 @@ CONDITION_LABELS = {
 OUTCOME_LABELS = {"above": "above its usual price", "below": "below its usual price"}
 
 
-def _transactions(species_id=None, municipality_id=None, days=730):
+def _transactions(species_id=None, municipality_id=None, days=730, params=None):
     """Build one transaction (conditions + outcome) per fish, place and day."""
+    p = _params(params)
+    usual_window = p["usual_window_days"]
+    level_pct = p["level_percent"]
     prices = PriceRecord.objects.filter(status=PriceRecord.STATUS_PUBLISHED)
     if species_id:
         prices = prices.filter(fish_species_id=species_id)
@@ -197,7 +216,7 @@ def _transactions(species_id=None, municipality_id=None, days=730):
     if latest is None:
         return [], None, None
     start = latest - timedelta(days=days)
-    rows = prices.filter(recorded_date__gte=start - timedelta(days=USUAL_WINDOW_DAYS)).values_list(
+    rows = prices.filter(recorded_date__gte=start - timedelta(days=usual_window)).values_list(
         "fish_species_id", "municipality_id", "recorded_date", "price_per_kg"
     )
     series = {}
@@ -221,13 +240,13 @@ def _transactions(species_id=None, municipality_id=None, days=730):
         for index, day in enumerate(days_sorted):
             if day < start:
                 continue
-            first = bisect_left(days_sorted, day - timedelta(days=USUAL_WINDOW_DAYS))
+            first = bisect_left(days_sorted, day - timedelta(days=usual_window))
             window = values[first:index]
-            if len(window) < 10:
+            if len(window) < min(10, max(3, usual_window // 2)):
                 continue
             usual = median(window)
             pct = (by_day[day] - usual) / usual * 100 if usual else 0
-            outcome = "above" if pct >= LEVEL_PCT else "below" if pct <= -LEVEL_PCT else "usual"
+            outcome = "above" if pct >= level_pct else "below" if pct <= -level_pct else "usual"
 
             items = set()
             factor = factors.get(day)
@@ -256,9 +275,13 @@ def _transactions(species_id=None, municipality_id=None, days=730):
     return transactions, start, latest
 
 
-def mine_rules(species_id=None, municipality_id=None, days=730):
+def mine_rules(species_id=None, municipality_id=None, days=730, params=None):
     """Association rules "conditions -> price above/below usual", strongest first."""
-    transactions, start, latest = _transactions(species_id, municipality_id, days)
+    p = _params(params)
+    MIN_RULE_COUNT = p["min_days"]
+    MIN_CONFIDENCE = p["min_confidence_percent"] / 100
+    MIN_LIFT = p["min_lift"]
+    transactions, start, latest = _transactions(species_id, municipality_id, days, p)
     total = len(transactions)
     if total < 30:
         return {"transactions": total, "rules": [], "baseline": None, "from": start, "to": latest}
@@ -315,10 +338,58 @@ def mine_rules(species_id=None, municipality_id=None, days=730):
         "from": start,
         "to": latest,
         "settings": {
-            "usual_window_days": USUAL_WINDOW_DAYS,
-            "level_percent": LEVEL_PCT,
+            "usual_window_days": p["usual_window_days"],
+            "level_percent": p["level_percent"],
             "min_days": MIN_RULE_COUNT,
             "min_confidence": MIN_CONFIDENCE,
             "min_lift": MIN_LIFT,
         },
     }
+
+
+# ---------------------------------------------------------------------------
+# 3. Insight Settings: checking new cut-offs
+# ---------------------------------------------------------------------------
+
+PARAM_LIMITS = {
+    # key: (lowest, highest, label)
+    "window_days": (30, 365, "Days used to learn the usual price"),
+    "unusual_percent": (1, 100, "Unusual price difference (%)"),
+    "very_unusual_percent": (2, 200, "Very unusual price difference (%)"),
+    "usual_window_days": (7, 90, "Days used for the usual price in Market Insights"),
+    "level_percent": (1, 50, "Above/below usual by at least (%)"),
+    "min_days": (2, 100, "Minimum days for a pattern"),
+    "min_confidence_percent": (10, 100, "Minimum confidence (%)"),
+    "min_lift": (1, 5, "Minimum lift"),
+}
+
+
+def clean_params(data):
+    """Check proposed cut-offs. Returns (values, errors)."""
+    from .models import InsightSetting
+    values, errors = {}, {}
+    current = current_params()
+    for key, default in InsightSetting.DEFAULTS.items():
+        raw = data.get(key, current[key])
+        low, high, label = PARAM_LIMITS[key]
+        try:
+            number = float(raw)
+            if number != number:  # NaN
+                raise ValueError
+        except (TypeError, ValueError):
+            errors[key] = f"{label}: enter a number."
+            continue
+        if isinstance(default, int):
+            if number != int(number):
+                errors[key] = f"{label}: enter a whole number."
+                continue
+            number = int(number)
+        else:
+            number = round(number, 2 if key == "min_lift" else 1)
+        if not low <= number <= high:
+            errors[key] = f"{label}: use a value from {low} to {high}."
+            continue
+        values[key] = number
+    if not errors and values["very_unusual_percent"] <= values["unusual_percent"]:
+        errors["very_unusual_percent"] = "The very unusual difference must be bigger than the unusual one."
+    return values, errors
