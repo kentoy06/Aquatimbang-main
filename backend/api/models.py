@@ -1410,3 +1410,48 @@ class FishScanPhoto(models.Model):
 
     def __str__(self):
         return f"{self.fish_species} photo #{self.pk} ({self.status})"
+
+
+# ============================================================
+# MESSAGES (Vendor <-> LGU Officer, LGU Officer <-> Administrator,
+# Vendor <-> Administrator; never vendor to vendor)
+# ============================================================
+
+class Conversation(models.Model):
+    """A private conversation between two accounts."""
+
+    # Stored with the smaller user id first so each pair has one conversation.
+    user_low = models.ForeignKey("auth.User", on_delete=models.CASCADE, related_name="+")
+    user_high = models.ForeignKey("auth.User", on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    last_message_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["-last_message_at", "-id"]
+        constraints = [
+            models.UniqueConstraint(fields=["user_low", "user_high"], name="one_conversation_per_pair"),
+        ]
+
+    def other(self, user):
+        return self.user_high if user.pk == self.user_low_id else self.user_low
+
+    def has(self, user):
+        return user.pk in (self.user_low_id, self.user_high_id)
+
+    def __str__(self):
+        return f"{self.user_low_id} <-> {self.user_high_id}"
+
+
+class Message(models.Model):
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, related_name="messages")
+    sender = models.ForeignKey("auth.User", on_delete=models.CASCADE, related_name="+")
+    body = models.TextField(max_length=2000)
+    created_at = models.DateTimeField(auto_now_add=True)
+    read_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ["created_at", "id"]
+        indexes = [models.Index(fields=["conversation", "created_at"])]
+
+    def __str__(self):
+        return f"{self.sender_id}: {self.body[:30]}"

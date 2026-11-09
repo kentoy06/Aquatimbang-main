@@ -4069,3 +4069,159 @@ class FishScanPhotoViewSet(viewsets.ModelViewSet):
         log_activity(request.user, "exported", "FishScanPhoto", 0, f"{count} approved fish photos")
         stamp = timezone.localdate().isoformat()
         return FileResponse(archive, as_attachment=True, filename=f"aquatimbang_fish_photos_{stamp}.zip", content_type="application/zip")
+
+
+# ============================================================
+# MESSAGES
+# ============================================================
+from .models import Conversation, Message
+
+
+def _person(profile, logged_in=None):
+    from .authentication import presence
+    user = profile.user
+    return {
+        "id": user.pk,
+        "name": user.get_full_name() or user.username,
+        "username": user.username,
+        "role": profile.role.name,
+        "municipality": profile.municipality.name if profile.municipality else "",
+        **presence(profile, logged_in),
+    }
+
+
+def _conversation_row(conversation, me, logged_in=None):
+    other = conversation.other(me)
+    profile = getattr(other, "aquatimbang_profile", None)
+    last = conversation.messages.order_by("-created_at", "-id").first()
+    return {
+        "id": conversation.pk,
+        "with": _person(profile, logged_in) if profile else {"id": other.pk, "name": other.username, "role": "", "municipality": "", "is_online": False, "last_seen": None},
+        "last_message": {
+            "body": last.body[:120],
+            "from_me": last.sender_id == me.pk,
+            "created_at": last.created_at,
+        } if last else None,
+        "last_message_at": conversation.last_message_at,
+        "unread": conversation.messages.filter(read_at__isnull=True).exclude(sender=me).count(),
+    }
+
+
+def _message_row(message, me):
+    return {
+        "id": message.pk,
+        "body": message.body,
+        "from_me": message.sender_id == me.pk,
+        "created_at": message.created_at,
+        "read_at": message.read_at,
+    }
+
+
+def _require_approved(request):
+    if approved_role(request.user) is None:
+        raise PermissionDenied("An approved account is required.")
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def message_contacts(request):
+    """People this account may message."""
+    from .authentication import logged_in_user_ids
+    from .messaging import contacts_for
+    _require_approved(request)
+    logged_in = logged_in_user_ids()
+    rows = [_person(p, logged_in) for p in contacts_for(request.user)]
+    order = {"Administrator": 0, "LGU Officer": 1, "Fish Vendor": 2}
+    rows.sort(key=lambda r: (order.get(r["role"], 9), r["name"].lower()))
+    return Response(rows)
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def conversations(request):
+    """GET: my conversations, newest first. POST {user_id}: open one with that person."""
+    from django.db.models import Q
+    from .authentication import logged_in_user_ids
+    from .messaging import can_message
+    _require_approved(request)
+    me = request.user
+    if request.method == "GET":
+        logged_in = logged_in_user_ids()
+        rows = (
+            Conversation.objects.filter(Q(user_low=me) | Q(user_high=me), last_message_at__isnull=False)
+            .select_related("user_low__aquatimbang_profile__role", "user_high__aquatimbang_profile__role",
+                            "user_low__aquatimbang_profile__municipality", "user_high__aquatimbang_profile__municipality")
+        )
+        return Response([_conversation_row(c, me, logged_in) for c in rows])
+
+    try:
+        other = User.objects.get(pk=int(request.data.get("user_id")))
+    except (TypeError, ValueError, User.DoesNotExist):
+        return Response({"message": "Choose who to message."}, status=status.HTTP_400_BAD_REQUEST)
+    if not can_message(me, other):
+        return Response({"message": "You cannot message this account."}, status=status.HTTP_403_FORBIDDEN)
+    low, high = sorted([me, other], key=lambda u: u.pk)
+    conversation, _ = Conversation.objects.get_or_create(user_low=low, user_high=high)
+    return Response(_conversation_row(conversation, me))
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def conversation_messages(request, conversation_id):
+    """
+    GET ?after=<message id>: messages (newer than `after`), and marks the
+    other person's messages as read. POST {body}: send a message.
+    """
+    from .messaging import can_message
+    _require_approved(request)
+    me = request.user
+    try:
+        conversation = Conversation.objects.select_related("user_low", "user_high").get(pk=conversation_id)
+    except Conversation.DoesNotExist:
+        conversation = None
+    if conversation is None or not conversation.has(me):
+        return Response({"message": "Conversation not found."}, status=status.HTTP_404_NOT_FOUND)
+
+    if request.method == "GET":
+        rows = conversation.messages.all()
+        try:
+            after = int(request.query_params.get("after", 0))
+        except ValueError:
+            after = 0
+        if after:
+            rows = rows.filter(pk__gt=after)
+        else:
+            # The latest 200 messages on first open.
+            ids = list(conversation.messages.order_by("-created_at", "-id").values_list("pk", flat=True)[:200])
+            rows = rows.filter(pk__in=ids)
+        conversation.messages.filter(read_at__isnull=True).exclude(sender=me).update(read_at=timezone.now())
+        other_read = conversation.messages.filter(sender=me, read_at__isnull=False).order_by("-id").values_list("pk", flat=True).first()
+        return Response({
+            "messages": [_message_row(m, me) for m in rows],
+            "last_read_by_other": other_read,
+            "can_reply": can_message(me, conversation.other(me)),
+        })
+
+    body = str(request.data.get("body", "")).strip()
+    if not body:
+        return Response({"message": "Type a message first."}, status=status.HTTP_400_BAD_REQUEST)
+    if len(body) > 2000:
+        return Response({"message": "Messages can be up to 2,000 characters."}, status=status.HTTP_400_BAD_REQUEST)
+    if not can_message(me, conversation.other(me)):
+        return Response({"message": "You can no longer message this account."}, status=status.HTTP_403_FORBIDDEN)
+    message = Message.objects.create(conversation=conversation, sender=me, body=body)
+    Conversation.objects.filter(pk=conversation.pk).update(last_message_at=message.created_at)
+    return Response(_message_row(message, me), status=status.HTTP_201_CREATED)
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def unread_message_count(request):
+    """Total unread messages, for the sidebar badge."""
+    from django.db.models import Q
+    _require_approved(request)
+    me = request.user
+    count = Message.objects.filter(
+        Q(conversation__user_low=me) | Q(conversation__user_high=me), read_at__isnull=True,
+    ).exclude(sender=me).count()
+    return Response({"unread": count})
