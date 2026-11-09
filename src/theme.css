@@ -1592,3 +1592,14 @@ table th {
 .reg-reason { margin-top: 12px; background: #f3f7fa; border-radius: 12px; padding: 10px 12px; }
 .reg-reason span { font-size: 12px; color: #5b7389; }
 .reg-reason p { margin: 4px 0 0; color: #1e293b; line-height: 1.5; }
+
+/* Recent Imports: fish inside one import. */
+.undo-buttons { display: flex; flex-wrap: wrap; gap: 6px; }
+.undo-buttons button { padding: 7px 12px; }
+.import-fish-row > td { background: #f6fafc; padding: 12px 16px !important; }
+.import-fish { display: grid; gap: 8px; }
+.import-fish-muted { margin: 0; color: #5b7389; font-size: 13px; }
+.import-fish .inner-table button { padding: 6px 12px; white-space: nowrap; }
+
+/* Vendor account archived after 5 years without a login. */
+.badge.archived { background: #eef2f7; color: #475569; border: 1px dashed #94a3b8; }

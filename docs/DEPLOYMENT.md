@@ -231,3 +231,17 @@ python manage.py load_demo_data
   `python manage.py load_demo_data --clear`. Real records are never touched.
 - The first forecast for each fish takes up to a minute. Open each one once
   before the demo; after that the saved forecast loads instantly.
+
+## Archiving unused vendor accounts
+
+Fish Vendor accounts with no login for 5 years (or, if they never logged in,
+5 years after registering) are archived automatically: they can't log in, but
+nothing is deleted. The check runs by itself once a day, at the first login of
+the day, so no scheduled task is needed. To run it now:
+
+```
+python manage.py archive_inactive_vendors
+```
+
+An Administrator reactivates an archived vendor in User Management (Inactive
+tab, ▶ Activate).

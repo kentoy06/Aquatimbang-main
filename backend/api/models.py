@@ -207,6 +207,10 @@ class UserProfile(models.Model):
     # choose their own password before using the system.
     must_change_password = models.BooleanField(default=False)
 
+    # Set when the system archived the account after years without a login
+    # (see api/archiving.py). Cleared when an Administrator reactivates it.
+    archived_at = models.DateTimeField(null=True, blank=True)
+
     # Automatically records when the profile was created.
 
     created_at = models.DateTimeField(auto_now_add=True)
