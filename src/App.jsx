@@ -20,7 +20,7 @@ const Vendor = lazy(() => import("./Vendor.jsx"));
 const LGU = lazy(() => import("./Lgu.jsx"));
 const dashboardFallback = <div style={{ padding: 40, textAlign: "center", color: "#667085" }}>Loading your dashboard…</div>;
 import { API_BASE_URL } from "./api/config.js";
-import { logout, SESSION_ENDED_EVENT, useIdleLogout } from "./api/session.js";
+import { logout, SESSION_ENDED_EVENT, useIdleLogout, usePresenceHeartbeat } from "./api/session.js";
 import { ForgotPasswordForm, ResetPasswordPage } from "./components/PasswordReset.jsx";
 
 // Reset-password link from the email: ?reset_uid=...&reset_token=...
@@ -93,6 +93,8 @@ function App() {
 
   // Automatic logout after inactivity on any dashboard.
   useIdleLogout(["Admin", "Vendor", "LGU"].includes(page), showSessionEnded);
+  // Online / Offline status for the user lists.
+  usePresenceHeartbeat(["Admin", "Vendor", "LGU"].includes(page));
 
   const goLanding = () => setPage("landing");
   const goLogin = () => setPage("login");

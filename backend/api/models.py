@@ -219,6 +219,11 @@ class UserProfile(models.Model):
 
     updated_at = models.DateTimeField(auto_now=True)
 
+
+    # When this account last used AquaTimbang (any API request while
+    # logged in). Used to show Online / Offline.
+    last_seen = models.DateTimeField(null=True, blank=True)
+
     def __str__(self):
 
         # Display the username in Django Admin.

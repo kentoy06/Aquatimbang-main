@@ -2331,3 +2331,43 @@ class CommunityAverageTests(TestCase):
         self.assertEqual(float(row["average_price"]), 190.0)
         self.assertEqual(float(row["adopted_average"]), 195.0)
         self.assertIsNotNone(row["latest_adopted_at"])
+
+
+class PresenceTests(TestCase):
+    """Online / Offline in the Administrator's user list."""
+
+    def test_online_until_logout_or_quiet(self):
+        roles = {n: Role.objects.get_or_create(name=n)[0] for n in ("Administrator", "Fish Vendor")}
+        place = Municipality.objects.create(name="Mandaue", province="Cebu")
+        admin = User.objects.create_user("pr_admin", "pa@example.com", "TestPass123!")
+        UserProfile.objects.create(user=admin, role=roles["Administrator"], account_status="approved", is_active=True)
+        vendor = User.objects.create_user("pr_vendor", "pv@example.com", "TestPass123!")
+        vprofile = UserProfile.objects.create(user=vendor, role=roles["Fish Vendor"], municipality=place, account_status="approved", is_active=True)
+
+        def client_for(user):
+            c = APIClient()
+            c.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=user)[0].key}")
+            return c
+
+        def vendor_row():
+            rows = client_for(admin).get("/api/auth/users/").data
+            return next(r for r in rows if r["username"] == "pr_vendor")
+
+        self.assertFalse(vendor_row()["is_online"])            # never used the site
+
+        vclient = client_for(vendor)
+        self.assertEqual(vclient.post("/api/auth/heartbeat/").status_code, 200)
+        self.assertTrue(vendor_row()["is_online"])
+
+        # Quiet for longer than the online window -> offline, last seen kept.
+        UserProfile.objects.filter(pk=vprofile.pk).update(last_seen=timezone.now() - datetime.timedelta(minutes=10))
+        row = vendor_row()
+        self.assertFalse(row["is_online"])
+        self.assertIsNotNone(row["last_seen"])
+
+        # Back, then logged out -> offline immediately.
+        vclient.post("/api/auth/heartbeat/")
+        UserProfile.objects.filter(pk=vprofile.pk).update(last_seen=timezone.now())
+        self.assertTrue(vendor_row()["is_online"])
+        self.assertEqual(vclient.post("/api/auth/logout/").status_code, 200)
+        self.assertFalse(vendor_row()["is_online"])

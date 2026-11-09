@@ -3,6 +3,7 @@ import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { LearnedOutliers } from "./components/PriceInsights.jsx";
 import MarketInsights from "./components/MarketInsights.jsx";
+import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
 import "./App.css";
@@ -473,7 +474,7 @@ function Admin({ onLogout }) {
 
   // Load registered AquaTimbang users from Django.
 useEffect(() => {
-  const fetchDatabaseUsers = async () => {
+  const fetchDatabaseUsers = async (quiet = false) => {
     const token = localStorage.getItem("authToken");
 
     if (!token) {
@@ -481,7 +482,7 @@ useEffect(() => {
       return;
     }
 
-    setDatabaseUsersLoading(true);
+    if (!quiet) setDatabaseUsersLoading(true);
     setDatabaseUsersError("");
 
     try {
@@ -518,8 +519,6 @@ useEffect(() => {
 
       setDatabaseUsers(accounts);
 
-      console.log("Registered users loaded:", accounts.length);
-      console.log("Registered user list:", accounts);
 
     } catch (error) {
       console.error("Registered users error:", error);
@@ -531,6 +530,9 @@ useEffect(() => {
   };
 
   fetchDatabaseUsers();
+  // Refresh every minute so Online / Offline stays current.
+  const timer = setInterval(() => fetchDatabaseUsers(true), 60 * 1000);
+  return () => clearInterval(timer);
 }, []);
 
   /* ---------- SHARED STATE (loaded from Django) ---------- */
@@ -1463,7 +1465,8 @@ function UserManagement({
     : account.archived_at
       ? "Archived"
       : "Inactive",
-  online: false,
+  online: Boolean(account.is_online),
+  lastSeen: account.last_seen || null,
   source: "database",
   verification: account.verification,
   registeredDate: account.registered_at
@@ -1832,9 +1835,7 @@ const submitReview = async () => {
                 <div className="profile-badges">
                   <span className={`role ${roleClass(viewing.role)}`}>{viewing.role}</span>
                   <span className={`badge ${viewing.status.toLowerCase()}`}>{viewing.status}</span>
-                  <span className={`badge ${viewing.online ? "success" : "inactive"}`}>
-                    {viewing.online ? "Online" : "Offline"}
-                  </span>
+                  <Presence online={viewing.online} lastSeen={viewing.lastSeen} />
                 </div>
               </div>
             </div>
@@ -2037,6 +2038,7 @@ const submitReview = async () => {
               <th>USERNAME</th>
               <th>ROLE</th>
               <th>MUNICIPALITY</th>
+              <th>ONLINE</th>
               <th>LAST LOGIN</th>
               <th>STATUS</th>
               <th>ACTIONS</th>
@@ -2045,7 +2047,7 @@ const submitReview = async () => {
           <tbody>
             {visible.length === 0 ? (
               <tr>
-                <td colSpan="7" className="empty-row">No users found.</td>
+                <td colSpan="8" className="empty-row">No users found.</td>
               </tr>
             ) : (
               visible.map((u) => (
@@ -2067,6 +2069,7 @@ const submitReview = async () => {
                     )}
                   </td>
                   <td>{u.municipality}</td>
+                  <td><Presence online={u.online} lastSeen={u.lastSeen} /></td>
                   <td>{u.lastLogin}</td>
                   <td>
                     <span className={`badge ${u.status.toLowerCase()}`}>{u.status}</span>

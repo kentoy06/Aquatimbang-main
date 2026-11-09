@@ -37,6 +37,7 @@ from .views import (
     send_user_reset_link,
     change_my_password,
     logout_user,
+    presence_heartbeat,
     system_settings,
     weight_entries,
     delete_weight_entry,
@@ -290,6 +291,9 @@ urlpatterns = [
         reports,
         name="reports"
     ),
+
+    # Open pages report that the user is still here (Online / Offline).
+    path("auth/heartbeat/", presence_heartbeat, name="presence-heartbeat"),
 
     # End this session on the server.
     path(
