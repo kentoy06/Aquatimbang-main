@@ -71,6 +71,9 @@ def login_user(request):
     """
     Authenticate an AquaTimbang user and return a login token.
     """
+    # Once a day, archive vendor accounts unused for 5 years.
+    from .archiving import archive_once_a_day
+    archive_once_a_day()
     # Spaces typed before or after the username are ignored.
     username = str(request.data.get("username") or "").strip()
     password = request.data.get("password")
@@ -96,6 +99,11 @@ def login_user(request):
             candidate_profile = getattr(candidate, "aquatimbang_profile", None)
             if candidate_profile is not None and candidate_profile.account_status == UserProfile.STATUS_REJECTED:
                 message = rejected_message(candidate_profile)
+            elif candidate_profile is not None and candidate_profile.archived_at:
+                message = (
+                    "Your account was archived because it was not used for 5 years. "
+                    "Ask the Administrator to reactivate it."
+                )
             else:
                 message = "Account disabled. Contact administrator."
             return Response({"message": message}, status=status.HTTP_403_FORBIDDEN)
@@ -125,6 +133,11 @@ def login_user(request):
             message = f"Your account is pending approval. Please wait for {reviewer} to review it."
         elif profile.account_status == UserProfile.STATUS_REJECTED:
             message = rejected_message(profile)
+        elif profile.archived_at:
+            message = (
+                "Your account was archived because it was not used for 5 years. "
+                "Ask the Administrator to reactivate it."
+            )
         else:
             message = "Account disabled. Contact administrator."
         return Response({"message": message}, status=status.HTTP_403_FORBIDDEN)
@@ -319,7 +332,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
     def import_batches(self, request):
         """Recent imports (an LGU Officer sees their own; Administrators see all)."""
         from django.db.models import Count
-        rows = self._import_batches(request).annotate(remaining=Count("records"))[:30]
+        rows = self._import_batches(request).annotate(remaining=Count("records")).order_by("-created_at")[:30]
         return Response([
             {
                 "id": b.pk,
@@ -340,27 +353,78 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["post"], url_path=r"import-batches/(?P<batch_id>\d+)/undo")
     def undo_import(self, request, batch_id=None):
-        """Remove every price that came from one import (a wrong file)."""
+        """
+        Remove the prices that came from one import (a wrong file).
+        With "fish_species", only that fish's prices from the file are
+        removed; the rest of the import stays.
+        """
         batch = self._import_batches(request).filter(pk=batch_id).first()
         if batch is None:
             return Response({"message": "Import not found."}, status=status.HTTP_404_NOT_FOUND)
         if batch.undone_at:
             return Response({"message": "This import was already undone."}, status=status.HTTP_400_BAD_REQUEST)
+        fish = None
+        if request.data.get("fish_species") not in (None, ""):
+            try:
+                fish = FishSpecies.objects.get(pk=int(request.data["fish_species"]))
+            except (ValueError, TypeError, FishSpecies.DoesNotExist):
+                return Response({"fish_species": "Choose a fish from this import."}, status=status.HTTP_400_BAD_REQUEST)
         with transaction.atomic():
-            removed = batch.records.count()
-            batch.records.all().delete()
-            batch.undone_at = timezone.now()
-            batch.undone_by = request.user
-            batch.save(update_fields=["undone_at", "undone_by"])
-            log_activity(request.user, "undid import", "PriceRecord", 0, f"{removed:,} imported prices removed", {
+            records = batch.records.all()
+            if fish is not None:
+                records = records.filter(fish_species=fish)
+            dates = list(records.values_list("recorded_date", flat=True))
+            removed = len(dates)
+            if fish is not None and removed == 0:
+                return Response({"fish_species": f"{fish.name} has no prices left in this import."}, status=status.HTTP_400_BAD_REQUEST)
+            records.delete()
+            # The whole import counts as undone once nothing from it is left.
+            if not batch.records.exists():
+                batch.undone_at = timezone.now()
+                batch.undone_by = request.user
+                batch.save(update_fields=["undone_at", "undone_by"])
+            what = f"{removed:,} {fish.name} prices" if fish else f"{removed:,} imported prices"
+            log_activity(request.user, "undid import", "PriceRecord", 0, f"{what} removed", {
                 "file": batch.file_name,
                 "source": batch.source,
                 "import_id": batch.pk,
+                "fish": fish.name if fish else "all fish",
                 "removed": removed,
-                "from": str(batch.first_date) if batch.first_date else None,
-                "to": str(batch.last_date) if batch.last_date else None,
+                "from": str(min(dates)) if dates else None,
+                "to": str(max(dates)) if dates else None,
             })
-        return Response({"message": f"Import undone: {removed:,} prices from {batch.file_name or batch.source} were removed.", "removed": removed})
+        label = batch.file_name or batch.source
+        message = (
+            f"{removed:,} {fish.name} prices from {label} were removed. The other fish stay."
+            if fish else f"Import undone: {removed:,} prices from {label} were removed."
+        )
+        return Response({"message": message, "removed": removed})
+
+    @action(detail=False, methods=["get"], url_path=r"import-batches/(?P<batch_id>\d+)/fish")
+    def import_batch_fish(self, request, batch_id=None):
+        """Fish in one import, with how many prices and which dates are left."""
+        from django.db.models import Count, Max, Min
+        batch = self._import_batches(request).filter(pk=batch_id).first()
+        if batch is None:
+            return Response({"message": "Import not found."}, status=status.HTTP_404_NOT_FOUND)
+        rows = (
+            batch.records.values("fish_species_id", "fish_species__name")
+            .annotate(prices=Count("id"), first=Min("recorded_date"), last=Max("recorded_date"),
+                      low=Min("price_per_kg"), high=Max("price_per_kg"))
+            .order_by("fish_species__name")
+        )
+        municipalities = sorted(set(batch.records.values_list("municipality__name", flat=True)))
+        return Response({
+            "municipalities": municipalities,
+            "fish": [
+                {
+                    "id": r["fish_species_id"], "name": r["fish_species__name"], "prices": r["prices"],
+                    "first_date": r["first"], "last_date": r["last"],
+                    "low": str(r["low"]), "high": str(r["high"]),
+                }
+                for r in rows
+            ],
+        })
 
     # --------------------------------------------------------
     # IMPORT PRICE HISTORY (e.g. a DVFM spreadsheet saved as CSV)
@@ -2625,6 +2689,7 @@ def user_row(profile):
         "contact_number": profile.contact_number,
         "is_active": profile.is_active and user.is_active,
         "account_status": profile.account_status,
+        "archived_at": profile.archived_at.isoformat() if profile.archived_at else None,
         "reviewed_at": profile.reviewed_at.isoformat() if profile.reviewed_at else None,
         "reviewed_by": profile.reviewed_by.username if profile.reviewed_by else None,
         "rejection_reason": profile.rejection_reason,
@@ -2762,6 +2827,8 @@ def list_users(request):
     refused = require_admin(request)
     if refused:
         return refused
+    from .archiving import archive_once_a_day
+    archive_once_a_day()
 
     if request.method == "GET":
         profiles = UserProfile.objects.select_related(
@@ -2924,14 +2991,18 @@ def set_user_status(request, user_id):
             return Response({"message": "You cannot deactivate the last active Administrator."}, status=status.HTTP_400_BAD_REQUEST)
 
     with transaction.atomic():
+        was_archived = profile.archived_at is not None
         profile.is_active = active
-        profile.save(update_fields=["is_active", "updated_at"])
+        if active:
+            profile.archived_at = None
+        profile.save(update_fields=["is_active", "archived_at", "updated_at"])
         user.is_active = active
         user.save(update_fields=["is_active"])
         if not active:
             end_sessions(user)
         log_activity(request.user, "activated" if active else "deactivated", "UserAccount", user.pk, user.username, {
             "role": profile.role.name,
+            **({"was_archived": True} if active and was_archived else {}),
         })
     profile.refresh_from_db()
     return Response(user_row(profile), status=status.HTTP_200_OK)

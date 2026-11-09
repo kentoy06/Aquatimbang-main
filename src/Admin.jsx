@@ -241,6 +241,8 @@ const toUserRow = (account) => ({
       ? "Pending"
       : account.is_active
       ? "Active"
+      : account.archived_at
+      ? "Archived"
       : "Inactive",
   lastLogin: account.last_login,
 });
@@ -1453,7 +1455,9 @@ function UserManagement({
     ? "Pending"
     : account.is_active
     ? "Active"
-    : "Inactive",
+    : account.archived_at
+      ? "Archived"
+      : "Inactive",
   online: false,
   source: "database",
   verification: account.verification,
@@ -1471,14 +1475,14 @@ function UserManagement({
 
   const pendingCount = pendingRegistrations.length;
   const activeCount = combinedUsers.filter((u) => u.status === "Active").length;
-  const rejectedCount = combinedUsers.filter((u) => u.status === "Rejected" || u.status === "Inactive").length;
+  const rejectedCount = combinedUsers.filter((u) => ["Rejected", "Inactive", "Archived"].includes(u.status)).length;
 
   const visible = (
   tab === "Pending"
     ? databasePendingUsers
     : tab === "Inactive"
     ? combinedUsers.filter(
-        (u) => u.status === "Inactive" || u.status === "Rejected"
+        (u) => ["Inactive", "Rejected", "Archived"].includes(u.status)
       )
     : combinedUsers
 )

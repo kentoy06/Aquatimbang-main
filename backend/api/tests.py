@@ -1734,6 +1734,34 @@ class PriceImportTests(TestCase):
         self.assertTrue(ActivityLog.objects.filter(action="undid import").exists())
         self.assertEqual(lgu.post(f"/api/prices/import-batches/{batch.pk}/undo/").status_code, 400)
 
+    def test_undo_one_fish_from_an_import(self):
+        from .models import PriceImportBatch
+        tilapia = FishSpecies.objects.create(name="Tilapia")
+        lgu = self.client_for("im_lgu")
+        rows = self.good_rows() + [
+            {"row": 9, "date": "2022-02-08", "fish": "Tilapia", "municipality": "Cebu City", "price": "120"},
+            {"row": 10, "date": "2022-02-09", "fish": "Tilapia", "municipality": "Cebu City", "price": "121"},
+        ]
+        lgu.post("/api/prices/import/", {"rows": rows, "source": "DVFM", "batch_id": "mix1"}, format="json")
+        batch = PriceImportBatch.objects.get(batch_key="mix1")
+        fish = lgu.get(f"/api/prices/import-batches/{batch.pk}/fish/").data["fish"]
+        self.assertEqual({f["name"]: f["prices"] for f in fish}, {"Bangus": 3, "Tilapia": 2})
+
+        done = lgu.post(f"/api/prices/import-batches/{batch.pk}/undo/", {"fish_species": tilapia.pk}, format="json")
+        self.assertEqual(done.status_code, 200, done.data)
+        self.assertEqual(done.data["removed"], 2)
+        self.assertFalse(PriceRecord.objects.filter(import_batch=batch, fish_species=tilapia).exists())
+        self.assertEqual(PriceRecord.objects.filter(import_batch=batch).count(), 3)
+        batch.refresh_from_db()
+        self.assertIsNone(batch.undone_at)  # the Bangus prices are still there
+        again = lgu.post(f"/api/prices/import-batches/{batch.pk}/undo/", {"fish_species": tilapia.pk}, format="json")
+        self.assertEqual(again.status_code, 400)
+
+        # Removing the last fish marks the whole import as undone.
+        lgu.post(f"/api/prices/import-batches/{batch.pk}/undo/", {"fish_species": self.bangus.pk}, format="json")
+        batch.refresh_from_db()
+        self.assertIsNotNone(batch.undone_at)
+
     def test_import_can_go_to_review_first(self):
         lgu = self.client_for("im_lgu")
         response = lgu.post("/api/prices/import/", {"rows": self.good_rows(10), "source": "Market survey", "send_to_review": True, "batch_id": "rev1"}, format="json")
@@ -2136,3 +2164,53 @@ class ProfileRegistrationDetailsTests(TestCase):
         self.assertEqual(data["sex"], "female")
         self.assertTrue(data["reviewed_at"])
         self.assertEqual(data["registration_reason"], "I sell bangus at Carbon Market.")
+
+
+class VendorArchivingTests(TestCase):
+    """Vendor accounts unused for 5 years are archived automatically."""
+
+    def setUp(self):
+        cache.clear()
+        self.roles = {name: Role.objects.get_or_create(name=name)[0] for name in ("Administrator", "Fish Vendor", "LGU Officer")}
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        now = timezone.now()
+
+        def make(username, role, last_login=None, joined=None):
+            user = User.objects.create_user(username, f"{username}@example.com", "TestPass123!")
+            User.objects.filter(pk=user.pk).update(last_login=last_login, date_joined=joined or now)
+            UserProfile.objects.create(user=user, role=self.roles[role], municipality=self.cebu, account_status="approved", is_active=True)
+            return User.objects.get(pk=user.pk)
+
+        self.old_vendor = make("old_vendor", "Fish Vendor", last_login=now - datetime.timedelta(days=365 * 5 + 10))
+        self.never_vendor = make("never_vendor", "Fish Vendor", joined=now - datetime.timedelta(days=365 * 6))
+        self.recent_vendor = make("recent_vendor", "Fish Vendor", last_login=now - datetime.timedelta(days=365 * 4))
+        self.old_officer = make("old_officer", "LGU Officer", last_login=now - datetime.timedelta(days=365 * 7))
+        self.admin = make("arch_admin", "Administrator", last_login=now)
+
+    def test_unused_vendors_are_archived_not_deleted(self):
+        from .archiving import archive_inactive_vendors
+        self.assertEqual(archive_inactive_vendors(), 2)
+        for user in (self.old_vendor, self.never_vendor):
+            profile = UserProfile.objects.get(user=user)
+            self.assertFalse(profile.is_active)
+            self.assertIsNotNone(profile.archived_at)
+        self.assertTrue(UserProfile.objects.get(user=self.recent_vendor).is_active)
+        self.assertTrue(UserProfile.objects.get(user=self.old_officer).is_active)  # only vendors
+        self.assertEqual(ActivityLog.objects.filter(action="archived", actor_username="System").count(), 2)
+
+        login = APIClient().post("/api/auth/login/", {"username": "old_vendor", "password": "TestPass123!"}, format="json")
+        self.assertEqual(login.status_code, 403)
+        self.assertIn("archived", login.data["message"])
+
+    def test_archiving_runs_by_itself_and_admin_can_reactivate(self):
+        # The first login of the day runs the check, even another user's login.
+        APIClient().post("/api/auth/login/", {"username": "recent_vendor", "password": "TestPass123!"}, format="json")
+        self.assertIsNotNone(UserProfile.objects.get(user=self.old_vendor).archived_at)
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.create(user=self.admin).key}")
+        row = client.post(f"/api/auth/users/{self.old_vendor.pk}/status/", {"active": True}, format="json")
+        self.assertEqual(row.status_code, 200, row.data)
+        self.assertIsNone(row.data["archived_at"])
+        self.assertEqual(
+            APIClient().post("/api/auth/login/", {"username": "old_vendor", "password": "TestPass123!"}, format="json").status_code, 200
+        )

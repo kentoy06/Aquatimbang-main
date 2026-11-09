@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { apiUrl, authHeaders, fetchAll } from "../api/config.js";
 import { parseCsv, TEMPLATE_CSV, toImportRows } from "../api/csvImport.js";
+import { askConfirm } from "./ConfirmDialog.jsx";
 
 const CHUNK = 2000;
 
@@ -263,6 +264,7 @@ function RecentImports({ reloadKey, notify, onUndone }) {
   const [confirming, setConfirming] = useState(null);
   const [busy, setBusy] = useState(false);
   const [refresh, setRefresh] = useState(0);
+  const [openId, setOpenId] = useState(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -297,7 +299,7 @@ function RecentImports({ reloadKey, notify, onUndone }) {
       <div className="panel-header">
         <div>
           <h3>Recent Imports</h3>
-          <p>Imported a wrong file? Undo removes every price that came from it. Each import and undo is also kept in the Audit Log.</p>
+          <p>Imported a wrong file? Undo import removes every price from it, or open Show fish to remove just one fish. Each import and undo is kept in the Audit Log.</p>
         </div>
       </div>
       {error && <div className="warn-box" style={{ margin: "0 18px 18px" }}>{error}</div>}
@@ -308,7 +310,8 @@ function RecentImports({ reloadKey, notify, onUndone }) {
             {rows === null && !error && <tr><td colSpan="6" className="empty-row">Loading…</td></tr>}
             {rows?.length === 0 && <tr><td colSpan="6" className="empty-row">No imports yet.</td></tr>}
             {rows?.map((b) => (
-              <tr key={b.id}>
+              <React.Fragment key={b.id}>
+              <tr>
                 <td>{when(b.created_at)}<small style={{ display: "block", color: "#64748b" }}>by {b.imported_by}</small></td>
                 <td><strong>{b.file_name || "—"}</strong><small style={{ display: "block", color: "#64748b" }}>{b.source}</small></td>
                 <td>{b.first_date ? `${b.first_date} to ${b.last_date}` : "—"}</td>
@@ -327,14 +330,100 @@ function RecentImports({ reloadKey, notify, onUndone }) {
                         <button className="reject" disabled={busy} onClick={() => undo(b)}>{busy ? "Undoing…" : "Yes, undo"}</button>
                       </div>
                     ) : (
-                      <button className="secondary-btn" onClick={() => setConfirming(b.id)}>↶ Undo import</button>
+                      <div className="undo-buttons">
+                        <button className="secondary-btn" onClick={() => setOpenId(openId === b.id ? null : b.id)} aria-expanded={openId === b.id}>
+                          {openId === b.id ? "Hide fish" : "Show fish"}
+                        </button>
+                        <button className="secondary-btn" onClick={() => setConfirming(b.id)}>↶ Undo import</button>
+                      </div>
                     )}
                 </td>
               </tr>
+              {openId === b.id && !b.undone_at && (
+                <tr className="import-fish-row">
+                  <td colSpan="6">
+                    <ImportFishList batch={b} notify={notify} onChanged={() => { setRefresh((k) => k + 1); onUndone?.(); }} />
+                  </td>
+                </tr>
+              )}
+              </React.Fragment>
             ))}
           </tbody>
         </table>
       </div>
+    </div>
+  );
+}
+
+// The fish in one import, each with its own Undo.
+function ImportFishList({ batch, notify, onChanged }) {
+  const [data, setData] = useState(null);
+  const [error, setError] = useState("");
+  const [busyId, setBusyId] = useState(null);
+  const [reload, setReload] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetch(apiUrl(`/prices/import-batches/${batch.id}/fish/`), { headers: authHeaders() })
+      .then(async (r) => { const d = await r.json().catch(() => null); if (!r.ok) throw new Error(d?.message || "Could not load the fish."); return d; })
+      .then((d) => { if (!cancelled) { setData(d); setError(""); } })
+      .catch((e) => { if (!cancelled) setError(e.message); });
+    return () => { cancelled = true; };
+  }, [batch.id, reload]);
+
+  const peso = (n) => `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+
+  const undoFish = async (fish) => {
+    const ok = await askConfirm(
+      `Remove ${fish.name} from ${batch.file_name || "this import"}?\n\n${fish.prices.toLocaleString()} price${fish.prices === 1 ? "" : "s"} (${fish.first_date} to ${fish.last_date}) will be removed. The other fish in this import stay.`,
+      { confirmLabel: `Remove ${fish.name}`, danger: true },
+    );
+    if (!ok) return;
+    setBusyId(fish.id);
+    try {
+      const response = await fetch(apiUrl(`/prices/import-batches/${batch.id}/undo/`), {
+        method: "POST",
+        headers: authHeaders({ "Content-Type": "application/json" }),
+        body: JSON.stringify({ fish_species: fish.id }),
+      });
+      const result = await response.json().catch(() => null);
+      if (!response.ok) throw new Error(result?.message || result?.fish_species || "Could not remove this fish.");
+      notify(result.message);
+      setReload((k) => k + 1);
+      onChanged();
+    } catch (e) {
+      notify(e.message);
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  if (error) return <div className="warn-box">{error}</div>;
+  if (!data) return <p className="import-fish-muted">Loading the fish in this import…</p>;
+  if (data.fish.length === 0) return <p className="import-fish-muted">Nothing from this import is left.</p>;
+  return (
+    <div className="import-fish">
+      <p className="import-fish-muted">
+        {data.fish.length} fish in this import{data.municipalities.length ? ` · ${data.municipalities.join(", ")}` : ""}. Remove only the fish that was wrong.
+      </p>
+      <table className="inner-table">
+        <thead><tr><th>FISH</th><th>PRICES</th><th>DATES</th><th>PRICE RANGE</th><th>ACTION</th></tr></thead>
+        <tbody>
+          {data.fish.map((fish) => (
+            <tr key={fish.id}>
+              <td><strong>{fish.name}</strong></td>
+              <td>{fish.prices.toLocaleString()}</td>
+              <td>{fish.first_date === fish.last_date ? fish.first_date : `${fish.first_date} to ${fish.last_date}`}</td>
+              <td>{fish.low === fish.high ? peso(fish.low) : `${peso(fish.low)} – ${peso(fish.high)}`}</td>
+              <td>
+                <button className="reject" disabled={busyId !== null} onClick={() => undoFish(fish)}>
+                  {busyId === fish.id ? "Removing…" : "↶ Undo this fish"}
+                </button>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
