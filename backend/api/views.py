@@ -1645,6 +1645,101 @@ def public_summary(request):
         },
         status=status.HTTP_200_OK,
     )
+# ============================================================
+# DATA MINING: LEARNED ANOMALY DETECTION AND MARKET INSIGHTS
+# ============================================================
+def _lgu_or_admin(request):
+    if approved_role(request.user) not in ("LGU Officer", "Administrator"):
+        raise PermissionDenied("Only LGU Officers and Administrators can use price insights.")
+
+
+def _species_and_place(request, required=True):
+    from django.core.exceptions import ObjectDoesNotExist
+    from rest_framework.exceptions import ValidationError as DRFValidationError
+    try:
+        species = FishSpecies.objects.get(pk=int(request.query_params.get("species", ""))) if (
+            required or request.query_params.get("species")) else None
+    except (ValueError, ObjectDoesNotExist):
+        raise DRFValidationError({"species": "Choose a valid fish species."})
+    try:
+        place = Municipality.objects.get(pk=int(request.query_params.get("municipality", ""))) if (
+            required or request.query_params.get("municipality")) else None
+    except (ValueError, ObjectDoesNotExist):
+        raise DRFValidationError({"municipality": "Choose a valid municipality."})
+    return species, place
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def price_check(request):
+    """
+    Is a price unusual? GET /api/insights/price-check/?species=&municipality=&price=&date=
+    Compares it with the normal range learned from past published prices.
+    """
+    from datetime import date as _date
+    from .insights import check_price
+    _lgu_or_admin(request)
+    species, place = _species_and_place(request)
+    try:
+        price = Decimal(str(request.query_params.get("price", "")))
+        if not price.is_finite() or price <= 0:
+            raise InvalidOperation
+    except (InvalidOperation, ValueError):
+        return Response({"price": "Enter a valid price."}, status=status.HTTP_400_BAD_REQUEST)
+    try:
+        day = _date.fromisoformat(request.query_params.get("date") or timezone.localdate().isoformat())
+    except ValueError:
+        return Response({"date": "Use the date format YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
+    return Response(check_price(species, place, price, day))
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def price_outliers(request):
+    """Prices of the last ?days= (default 30) that are unusual for their fish and municipality."""
+    from datetime import timedelta
+    from .insights import NORMAL_WINDOW_DAYS, find_outliers
+    _lgu_or_admin(request)
+    try:
+        days = max(1, min(365, int(request.query_params.get("days", 30))))
+    except ValueError:
+        days = 30
+    since = timezone.localdate() - timedelta(days=days)
+    records = PriceRecord.objects.filter(recorded_date__gte=since).exclude(
+        status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN]
+    )
+    return Response({"days": days, "window_days": NORMAL_WINDOW_DAYS, "outliers": find_outliers(records)[:100]})
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def market_insights(request):
+    """Association rules: which conditions go with prices above/below usual."""
+    from django.core.cache import cache
+    from django.db.models import Max
+    from .insights import CONDITION_LABELS, mine_rules
+    _lgu_or_admin(request)
+    species, place = _species_and_place(request, required=False)
+    try:
+        days = max(60, min(1500, int(request.query_params.get("days", 730))))
+    except ValueError:
+        days = 730
+    # Reuse the result until prices or external factors change.
+    stamp = (
+        PriceRecord.objects.aggregate(m=Max("updated_at"))["m"],
+        ExternalFactor.objects.aggregate(m=Max("updated_at"))["m"],
+    )
+    import hashlib
+    raw = f"{species.pk if species else 0}|{place.pk if place else 0}|{days}|" + "|".join(v.isoformat() if v else "-" for v in stamp)
+    key = "market-insights:" + hashlib.sha1(raw.encode()).hexdigest()
+    result = cache.get(key)
+    if result is None:
+        result = mine_rules(species.pk if species else None, place.pk if place else None, days)
+        cache.set(key, result, 60 * 30)
+    return Response({**result, "condition_labels": CONDITION_LABELS,
+                     "fish": species.name if species else None, "municipality": place.name if place else None})
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public_fish_profile(request, fish_id):
