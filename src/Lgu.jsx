@@ -3,6 +3,7 @@ import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { LearnedOutliers, PriceCheckNote, usePriceCheck } from "./components/PriceInsights.jsx";
 import MarketInsights from "./components/MarketInsights.jsx";
+import InsightSettings from "./components/InsightSettings.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
@@ -417,7 +418,7 @@ useEffect(() => {
     },
     {
       label: "FORECASTING",
-      items: [{ name: "Price Forecast", icon: "∿" }, { name: "Market Insights", icon: "✦" }],
+      items: [{ name: "Price Forecast", icon: "∿" }, { name: "Market Insights", icon: "✦" }, { name: "Insight Settings", icon: "◑" }],
     },
     {
       label: "REPORTS & AUDIT",
@@ -481,6 +482,8 @@ useEffect(() => {
         return <PriceAnomalies priceRecords={priceRecords} suggestions={suggestions} />;
       case "Market Insights":
         return <MarketInsights />;
+      case "Insight Settings":
+        return <InsightSettings />;
       case "Price Forecast":
         return (
           <Suspense fallback={<div className="panel" style={{ padding: 24 }}>Loading forecast…</div>}>

@@ -1698,7 +1698,7 @@ def price_check(request):
 def price_outliers(request):
     """Prices of the last ?days= (default 30) that are unusual for their fish and municipality."""
     from datetime import timedelta
-    from .insights import NORMAL_WINDOW_DAYS, find_outliers
+    from .insights import current_params, find_outliers
     _lgu_or_admin(request)
     try:
         days = max(1, min(365, int(request.query_params.get("days", 30))))
@@ -1708,36 +1708,154 @@ def price_outliers(request):
     records = PriceRecord.objects.filter(recorded_date__gte=since).exclude(
         status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN]
     )
-    return Response({"days": days, "window_days": NORMAL_WINDOW_DAYS, "outliers": find_outliers(records)[:100]})
+    params = current_params()
+    return Response({"days": days, "window_days": params["window_days"], "outliers": find_outliers(records, params)[:100]})
+
+
+def _cached_rules(species_id, place_id, days, params):
+    """mine_rules, reused until prices, external factors or the cut-offs change."""
+    import hashlib
+    from django.core.cache import cache
+    from django.db.models import Max
+    from .insights import mine_rules
+    stamp = (
+        PriceRecord.objects.aggregate(m=Max("updated_at"))["m"],
+        ExternalFactor.objects.aggregate(m=Max("updated_at"))["m"],
+    )
+    raw = (
+        f"{species_id or 0}|{place_id or 0}|{days}|"
+        + "|".join(v.isoformat() if v else "-" for v in stamp)
+        + "|" + "|".join(f"{k}={params[k]}" for k in sorted(params))
+    )
+    key = "market-insights:" + hashlib.sha1(raw.encode()).hexdigest()
+    result = cache.get(key)
+    if result is None:
+        result = mine_rules(species_id, place_id, days, params)
+        cache.set(key, result, 60 * 30)
+    return result
 
 
 @api_view(["GET"])
 @permission_classes([IsAuthenticated])
 def market_insights(request):
     """Association rules: which conditions go with prices above/below usual."""
-    from django.core.cache import cache
-    from django.db.models import Max
-    from .insights import CONDITION_LABELS, mine_rules
+    from .insights import CONDITION_LABELS, current_params
     _lgu_or_admin(request)
     species, place = _species_and_place(request, required=False)
     try:
         days = max(60, min(1500, int(request.query_params.get("days", 730))))
     except ValueError:
         days = 730
-    # Reuse the result until prices or external factors change.
-    stamp = (
-        PriceRecord.objects.aggregate(m=Max("updated_at"))["m"],
-        ExternalFactor.objects.aggregate(m=Max("updated_at"))["m"],
-    )
-    import hashlib
-    raw = f"{species.pk if species else 0}|{place.pk if place else 0}|{days}|" + "|".join(v.isoformat() if v else "-" for v in stamp)
-    key = "market-insights:" + hashlib.sha1(raw.encode()).hexdigest()
-    result = cache.get(key)
-    if result is None:
-        result = mine_rules(species.pk if species else None, place.pk if place else None, days)
-        cache.set(key, result, 60 * 30)
+    result = _cached_rules(species.pk if species else None, place.pk if place else None, days, current_params())
     return Response({**result, "condition_labels": CONDITION_LABELS,
                      "fish": species.name if species else None, "municipality": place.name if place else None})
+
+
+def _insight_settings_payload(row):
+    from .insights import PARAM_LIMITS, UNUSUAL_Z, VERY_UNUSUAL_Z
+    from .models import InsightSetting
+    return {
+        "values": row.values(),
+        "defaults": InsightSetting.DEFAULTS,
+        "limits": {k: {"min": lo, "max": hi, "label": label} for k, (lo, hi, label) in PARAM_LIMITS.items()},
+        "fixed": {"unusual_z": UNUSUAL_Z, "very_unusual_z": VERY_UNUSUAL_Z},
+        "last_reason": row.last_reason,
+        "updated_by": row.updated_by.username if row.updated_by else None,
+        "updated_at": row.updated_at,
+    }
+
+
+@api_view(["GET", "PUT"])
+@permission_classes([IsAuthenticated])
+def insight_settings(request):
+    """
+    GET: the cut-offs used by price checks and Market Insights.
+    PUT: apply new cut-offs (LGU Officer or Administrator), with a reason.
+    """
+    from .insights import PARAM_LIMITS, clean_params
+    from .models import InsightSetting
+    _lgu_or_admin(request)
+    row = InsightSetting.load()
+    if request.method == "GET":
+        return Response(_insight_settings_payload(row))
+
+    reason = str(request.data.get("reason", "")).strip()
+    if not reason:
+        return Response({"reason": "Give a short reason for this change."}, status=status.HTTP_400_BAD_REQUEST)
+    values, errors = clean_params(request.data)
+    if errors:
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+    before = row.values()
+    changes = {
+        PARAM_LIMITS[k][2]: {"from": before[k], "to": values[k]}
+        for k in values if values[k] != before[k]
+    }
+    if not changes:
+        return Response({"message": "Nothing changed."}, status=status.HTTP_400_BAD_REQUEST)
+    with transaction.atomic():
+        for key, value in values.items():
+            setattr(row, key, value)
+        row.last_reason = reason[:300]
+        row.updated_by = request.user
+        row.save()
+        log_activity(request.user, "updated", "InsightSetting", 1, "Insight settings",
+                     {"changes": changes, "reason": reason[:300]})
+    row.refresh_from_db()
+    return Response(_insight_settings_payload(row))
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+def insight_settings_preview(request):
+    """
+    Try new cut-offs on the saved prices without applying them: how many
+    prices of the last 30 days would be flagged, and which patterns
+    Market Insights would show, now versus with the new values.
+    """
+    from datetime import timedelta
+    from .insights import clean_params, current_params, find_outliers
+    _lgu_or_admin(request)
+    proposed, errors = clean_params(request.data)
+    if errors:
+        return Response(errors, status=status.HTTP_400_BAD_REQUEST)
+    current = current_params()
+
+    since = timezone.localdate() - timedelta(days=30)
+    records = PriceRecord.objects.filter(recorded_date__gte=since).exclude(
+        status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN]
+    )
+    now_list = {row["id"]: row for row in find_outliers(records, current)}
+    new_list = {row["id"]: row for row in find_outliers(records, proposed)}
+
+    def brief(row):
+        return {k: row[k] for k in ("id", "fish", "municipality", "date", "price", "usual_median", "percent_from_usual", "level")}
+
+    def level_count(rows, level):
+        return sum(1 for r in rows.values() if r["level"] == level)
+
+    now_rules = _cached_rules(None, None, 730, current)
+    new_rules = _cached_rules(None, None, 730, proposed)
+    key = lambda r: (tuple(r["conditions"]), r["outcome"])
+    now_keys = {key(r): r for r in now_rules["rules"]}
+    new_keys = {key(r): r for r in new_rules["rules"]}
+
+    return Response({
+        "current": current,
+        "proposed": proposed,
+        "outliers": {
+            "days": 30,
+            "current": {"total": len(now_list), "unusual": level_count(now_list, "unusual"), "very_unusual": level_count(now_list, "very_unusual")},
+            "proposed": {"total": len(new_list), "unusual": level_count(new_list, "unusual"), "very_unusual": level_count(new_list, "very_unusual")},
+            "no_longer_flagged": [brief(r) for i, r in now_list.items() if i not in new_list][:50],
+            "newly_flagged": [brief(r) for i, r in new_list.items() if i not in now_list][:50],
+        },
+        "rules": {
+            "current": len(now_rules["rules"]),
+            "proposed": len(new_rules["rules"]),
+            "removed": [r["text"] for k, r in now_keys.items() if k not in new_keys],
+            "added": [r["text"] for k, r in new_keys.items() if k not in now_keys],
+        },
+    })
 
 
 @api_view(["GET"])

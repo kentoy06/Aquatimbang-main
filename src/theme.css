@@ -1642,3 +1642,29 @@ table th {
 .insights-how summary { cursor: pointer; padding: 12px 0; font-weight: 700; color: var(--navy-900); }
 .insights-how ol { margin: 0 0 14px; padding-left: 20px; color: #475569; font-size: 13px; line-height: 1.6; display: grid; gap: 6px; }
 @media (max-width: 520px) { .insight-measures { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* Insight Settings */
+.is-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(340px, 1fr)); gap: 16px; }
+.is-group { padding: 18px 20px; display: grid; gap: 12px; align-content: start; }
+.is-group h3 { margin: 0; color: var(--navy-900); }
+.is-muted { margin: 0; font-size: 13px; color: #64748b; }
+.is-field { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; font-size: 14px; color: #1f2d3d; padding: 8px 10px; border-radius: 10px; }
+.is-field.changed { background: #fff6ec; }
+.is-field input { width: 84px; padding: 7px 10px; border-radius: 8px; border: 1px solid #cfdbe6; font-size: 15px; font-weight: 700; text-align: center; font-variant-numeric: tabular-nums; }
+.is-was { color: var(--orange-dark); font-weight: 600; }
+.is-error { flex-basis: 100%; color: #b42318; font-weight: 600; }
+.is-fixed { margin: 0; font-size: 12.5px; color: #5b7389; border-top: 1px dashed var(--line); padding-top: 10px; }
+.is-actions { display: flex; flex-wrap: wrap; gap: 10px; justify-content: flex-end; margin: 16px 0 6px; }
+.is-actions button:disabled { opacity: .45; cursor: not-allowed; }
+.is-hint { text-align: right; }
+.is-notice { background: #ecfdf3; border: 1px solid #a6f4c5; color: #05603a; border-radius: 12px; padding: 12px 14px; margin-bottom: 14px; font-weight: 600; }
+.is-preview { padding: 18px 20px; margin-top: 14px; }
+.is-preview h3 { margin: 0 0 12px; color: var(--navy-900); }
+.is-preview h4 { margin: 18px 0 8px; color: var(--navy-900); font-size: 14px; }
+.is-table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+.is-table th, .is-table td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: left; }
+.is-table th { font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: #5b7389; }
+.is-compare td:not(:first-child), .is-compare th:not(:first-child) { text-align: center; font-variant-numeric: tabular-nums; width: 140px; }
+.is-rules { margin: 0; padding-left: 18px; display: grid; gap: 6px; font-size: 13.5px; }
+.is-last { margin-top: 14px; }
+@media (max-width: 640px) { .is-groups { grid-template-columns: 1fr; } .is-preview { overflow-x: auto; } }

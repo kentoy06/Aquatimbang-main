@@ -3,6 +3,7 @@ import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { LearnedOutliers } from "./components/PriceInsights.jsx";
 import MarketInsights from "./components/MarketInsights.jsx";
+import InsightSettings from "./components/InsightSettings.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
 import "./App.css";
@@ -611,6 +612,7 @@ useEffect(() => {
         { name: "Vendor Suggestions", icon: "💬" },
         { name: "Predictive Analytics", icon: "∿" },
         { name: "Market Insights", icon: "✦" },
+        { name: "Insight Settings", icon: "◑" },
         { name: "External Factors", icon: "☁" },
         { name: "Data Monitoring", icon: "◫" },
         { name: "Notifications", icon: "🔔" },
@@ -689,6 +691,8 @@ useEffect(() => {
         );
       case "Market Insights":
         return <MarketInsights />;
+      case "Insight Settings":
+        return <InsightSettings />;
       case "Predictive Analytics":
         return (
           <PredictiveAnalytics

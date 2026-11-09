@@ -2268,3 +2268,29 @@ class PriceInsightsTests(TestCase):
         self.assertTrue(storm, data["rules"])
         self.assertGreater(storm[0]["confidence"], 0.8)
         self.assertGreater(storm[0]["lift"], 2)
+
+    def test_settings_preview_then_apply(self):
+        from .models import ActivityLog, InsightSetting
+        client = self.client_for(self.officer)
+        settings_data = client.get("/api/insights/settings/").data
+        self.assertEqual(settings_data["values"]["unusual_percent"], 12.0)
+
+        # Preview only: the ₱320 entry (about 77% above usual) would no longer be flagged.
+        loose = {"unusual_percent": 90, "very_unusual_percent": 150}
+        preview = client.post("/api/insights/settings/preview/", loose, format="json").data
+        self.assertIn(self.wrong.pk, [r["id"] for r in preview["outliers"]["no_longer_flagged"]])
+        self.assertEqual(InsightSetting.load().values()["unusual_percent"], 12.0)
+
+        # Bad values and a missing reason are refused; vendors cannot change it.
+        self.assertEqual(client.post("/api/insights/settings/preview/", {"unusual_percent": 30, "very_unusual_percent": 20}, format="json").status_code, 400)
+        self.assertEqual(client.put("/api/insights/settings/", loose, format="json").status_code, 400)
+        self.assertEqual(self.client_for(self.vendor).put("/api/insights/settings/", {**loose, "reason": "x"}, format="json").status_code, 403)
+
+        # Apply: the price check now uses the new cut-off and the change is logged.
+        applied = client.put("/api/insights/settings/", {**loose, "reason": "Prices swing a lot here"}, format="json")
+        self.assertEqual(applied.status_code, 200)
+        self.assertEqual(applied.data["values"]["unusual_percent"], 90.0)
+        check = client.get("/api/insights/price-check/", {"species": self.fish.pk, "municipality": self.cebu.pk, "price": "300"}).data
+        self.assertEqual(check["level"], "normal")
+        log = ActivityLog.objects.get(target_type="InsightSetting")
+        self.assertEqual(log.details["reason"], "Prices swing a lot here")
