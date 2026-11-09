@@ -1533,10 +1533,13 @@ def list_fisherfolk(request):
     )
     if role == "LGU Officer":
         vendors = vendors.filter(municipality_id=profile.municipality_id)
+    from .authentication import logged_in_user_ids, presence
+    logged_in = logged_in_user_ids()
     results = []
     for vendor in vendors:
         verification = getattr(vendor, "vendor_verification", None)
         results.append({
+            **presence(vendor, logged_in),
             "id": vendor.user.id,
             "username": vendor.user.username,
             "name": vendor.user.get_full_name() or vendor.user.username,
@@ -2912,10 +2915,12 @@ def registration_review_denied(reviewer_profile, target_profile):
     return None
 
 
-def user_row(profile):
+def user_row(profile, logged_in_ids=None):
     """One account as shown in the Administrator's user list."""
+    from .authentication import presence
     user = profile.user
     return {
+        **presence(profile, logged_in_ids),
         "id": user.id,
         "first_name": user.first_name,
         "last_name": user.last_name,
@@ -3072,7 +3077,9 @@ def list_users(request):
         profiles = UserProfile.objects.select_related(
             "user", "role", "municipality", "reviewed_by"
         ).order_by("-user__date_joined")
-        return Response([user_row(profile) for profile in profiles], status=status.HTTP_200_OK)
+        from .authentication import logged_in_user_ids
+        logged_in = logged_in_user_ids()
+        return Response([user_row(profile, logged_in) for profile in profiles], status=status.HTTP_200_OK)
 
     values, errors = clean_account_fields(request.data, creating=True)
     if errors:
@@ -3422,11 +3429,19 @@ def record_failed_login(username):
 
 @api_view(["POST"])
 @permission_classes([IsAuthenticated])
+def presence_heartbeat(request):
+    """Open pages call this every minute; authentication records last_seen."""
+    return Response({"ok": True})
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
 def logout_user(request):
     """End this session on the server by deleting its token."""
     log_activity(request.user, "logged out", "Authentication", request.user.pk, request.user.username)
     if request.auth is not None:
         request.auth.delete()
+    UserProfile.objects.filter(user=request.user).update(last_seen=timezone.now())
     return Response({"message": "Logged out."}, status=status.HTTP_200_OK)
 
 

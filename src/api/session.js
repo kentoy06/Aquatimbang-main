@@ -102,3 +102,37 @@ export function useIdleLogout(enabled, onTimeout) {
     };
   }, [enabled, onTimeout]);
 }
+
+const HEARTBEAT_MS = 60 * 1000;
+// Count the user as here if they used this tab in the last 10 minutes.
+const RECENT_USE_MS = 10 * 60 * 1000;
+
+/**
+ * While `enabled`, tell the server every minute that this user is still
+ * here, so others see them as Online. Skipped when the tab is hidden or
+ * the user has not touched it for a while; then they show as Offline.
+ */
+export function usePresenceHeartbeat(enabled) {
+  useEffect(() => {
+    if (!enabled) return undefined;
+    let lastUse = Date.now();
+    const touch = () => { lastUse = Date.now(); };
+    const events = ["mousemove", "mousedown", "keydown", "scroll", "touchstart"];
+    events.forEach((name) => window.addEventListener(name, touch, { passive: true }));
+
+    const beat = () => {
+      if (document.visibilityState !== "visible" || Date.now() - lastUse > RECENT_USE_MS) return;
+      if (!localStorage.getItem("authToken")) return;
+      fetch(apiUrl("/auth/heartbeat/"), { method: "POST", headers: authHeaders() }).catch(() => {});
+    };
+    const onVisible = () => { if (document.visibilityState === "visible") { touch(); beat(); } };
+    beat();
+    const timer = setInterval(beat, HEARTBEAT_MS);
+    document.addEventListener("visibilitychange", onVisible);
+    return () => {
+      clearInterval(timer);
+      document.removeEventListener("visibilitychange", onVisible);
+      events.forEach((name) => window.removeEventListener(name, touch));
+    };
+  }, [enabled]);
+}

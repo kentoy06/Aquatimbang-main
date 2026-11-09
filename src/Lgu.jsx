@@ -3,6 +3,7 @@ import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { LearnedOutliers, PriceCheckNote, usePriceCheck } from "./components/PriceInsights.jsx";
 import MarketInsights from "./components/MarketInsights.jsx";
+import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
@@ -369,11 +370,14 @@ useEffect(() => {
     listVendorSuggestions()
       .then((rows) => { if (!cancelled) setSuggestions(rows); })
       .catch(() => { if (!cancelled) setSuggestions([]); });
-    fetchAll("/auth/fisherfolk/")
+    const loadVendors = () => fetchAll("/auth/fisherfolk/")
       .then((rows) => { if (!cancelled) { setFisherfolk(rows); setFisherfolkError(""); } })
       .catch((err) => { if (!cancelled) setFisherfolkError(err.message); })
       .finally(() => { if (!cancelled) setFisherfolkLoading(false); });
-    return () => { cancelled = true; };
+    loadVendors();
+    // Keep Online / Offline current while the vendor list is open.
+    const timer = activePage === "Vendor Management" ? setInterval(loadVendors, 60 * 1000) : null;
+    return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [activePage]);
 
   const [dismissedNotifs, setDismissedNotifs] = useState([]);
@@ -2676,6 +2680,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
               <div className="profile-field"><span>Registration Date</span><strong>{formatDay(viewing.date_joined)}</strong></div>
               <div className="profile-field"><span>Market / Stall</span><strong>{viewing.market_name || "—"}{viewing.stall_number ? ` · ${viewing.stall_number}` : ""}</strong></div>
               <div className="profile-field"><span>Price Suggestions</span><strong>{viewing.suggestion_count}</strong></div>
+              <div className="profile-field"><span>Online</span><strong><Presence online={viewing.is_online} lastSeen={viewing.last_seen} /></strong></div>
               <div className="profile-field"><span>Last Submission</span><strong>{formatDay(viewing.last_submission)}</strong></div>
             </div>
 
@@ -2715,6 +2720,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
               <th>MUNICIPALITY</th>
               <th>REGISTRATION DATE</th>
               <th>STATUS</th>
+              <th>ONLINE</th>
               <th>SUGGESTIONS</th>
               <th>LAST SUBMISSION</th>
               <th>ACTIONS</th>
@@ -2722,11 +2728,11 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan="7" className="empty-row">Loading vendors…</td></tr>
+              <tr><td colSpan="8" className="empty-row">Loading vendors…</td></tr>
             ) : error ? (
-              <tr><td colSpan="7" className="empty-row">{error}</td></tr>
+              <tr><td colSpan="8" className="empty-row">{error}</td></tr>
             ) : visible.length === 0 ? (
-              <tr><td colSpan="7" className="empty-row">No vendors found.</td></tr>
+              <tr><td colSpan="8" className="empty-row">No vendors found.</td></tr>
             ) : (
               visible.map((f) => (
                 <tr key={f.id}>
@@ -2739,6 +2745,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
                   <td>{f.municipality || "—"}</td>
                   <td>{formatDay(f.date_joined)}</td>
                   <td><span className={`badge ${statusLabel(f).toLowerCase()}`}>{statusLabel(f)}</span></td>
+                  <td><Presence online={f.is_online} lastSeen={f.last_seen} /></td>
                   <td>{f.suggestion_count}</td>
                   <td>{formatDay(f.last_submission)}</td>
                   <td>
