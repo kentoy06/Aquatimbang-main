@@ -1,6 +1,8 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
+import { LearnedOutliers } from "./components/PriceInsights.jsx";
+import MarketInsights from "./components/MarketInsights.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
 import "./App.css";
@@ -608,6 +610,7 @@ useEffect(() => {
       items: [
         { name: "Vendor Suggestions", icon: "💬" },
         { name: "Predictive Analytics", icon: "∿" },
+        { name: "Market Insights", icon: "✦" },
         { name: "External Factors", icon: "☁" },
         { name: "Data Monitoring", icon: "◫" },
         { name: "Notifications", icon: "🔔" },
@@ -684,6 +687,8 @@ useEffect(() => {
             onChanged={reloadData} notify={notify}
           />
         );
+      case "Market Insights":
+        return <MarketInsights />;
       case "Predictive Analytics":
         return (
           <PredictiveAnalytics
@@ -3566,6 +3571,8 @@ function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
           </div>
         </div>
       </div>
+
+      <LearnedOutliers title="Unusual prices across all fish (learned)" />
 
       <div className="panel">
         <div className="panel-header">

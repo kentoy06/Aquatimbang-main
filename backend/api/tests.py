@@ -2214,3 +2214,57 @@ class VendorArchivingTests(TestCase):
         self.assertEqual(
             APIClient().post("/api/auth/login/", {"username": "old_vendor", "password": "TestPass123!"}, format="json").status_code, 200
         )
+
+
+class PriceInsightsTests(TestCase):
+    """Learned anomaly detection and association-rule market insights."""
+
+    def setUp(self):
+        cache.clear()
+        roles = {name: Role.objects.get_or_create(name=name)[0] for name in ("LGU Officer", "Fish Vendor")}
+        self.cebu = Municipality.objects.create(name="Cebu City", province="Cebu")
+        self.fish = FishSpecies.objects.create(name="Galunggong")
+        self.officer = User.objects.create_user("ins_lgu", "il@example.com", "TestPass123!")
+        UserProfile.objects.create(user=self.officer, role=roles["LGU Officer"], municipality=self.cebu, account_status="approved", is_active=True)
+        self.vendor = User.objects.create_user("ins_vendor", "iv@example.com", "TestPass123!")
+        UserProfile.objects.create(user=self.vendor, role=roles["Fish Vendor"], municipality=self.cebu, account_status="approved", is_active=True)
+
+        # 120 days around ₱180; storms add about ₱20; one wrong entry of ₱320 yesterday.
+        self.today = timezone.localdate()
+        for back in range(120, 1, -1):
+            day = self.today - datetime.timedelta(days=back)
+            stormy = back % 6 == 0
+            ExternalFactor.objects.create(date=day, weather="stormy" if stormy else "sunny", fuel_price=Decimal("62"))
+            price = Decimal("200") if stormy else Decimal(180 + (back % 3))
+            PriceRecord.objects.create(fish_species=self.fish, municipality=self.cebu, price_per_kg=price,
+                                       recorded_date=day, status="published")
+        self.wrong = PriceRecord.objects.create(fish_species=self.fish, municipality=self.cebu, price_per_kg=Decimal("320"),
+                                                recorded_date=self.today - datetime.timedelta(days=1), status="published")
+
+    def client_for(self, user):
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=user)[0].key}")
+        return client
+
+    def test_price_check_learns_the_normal_range(self):
+        client = self.client_for(self.officer)
+        normal = client.get("/api/insights/price-check/", {"species": self.fish.pk, "municipality": self.cebu.pk, "price": "181"}).data
+        self.assertEqual(normal["level"], "normal")
+        high = client.get("/api/insights/price-check/", {"species": self.fish.pk, "municipality": self.cebu.pk, "price": "300"}).data
+        self.assertEqual(high["level"], "very_unusual")
+        self.assertIn("higher than the usual", high["message"])
+        self.assertEqual(self.client_for(self.vendor).get(
+            "/api/insights/price-check/", {"species": self.fish.pk, "municipality": self.cebu.pk, "price": "300"}).status_code, 403)
+
+    def test_outliers_find_the_wrong_entry(self):
+        data = self.client_for(self.officer).get("/api/insights/outliers/", {"days": 30}).data
+        ids = [row["id"] for row in data["outliers"]]
+        self.assertEqual(ids[0], self.wrong.pk)
+
+    def test_rules_find_storms_raise_prices(self):
+        data = self.client_for(self.officer).get("/api/insights/rules/", {"species": self.fish.pk}).data
+        self.assertGreater(data["transactions"], 50)
+        storm = [r for r in data["rules"] if r["conditions"] == ["stormy"] and r["outcome"] == "above"]
+        self.assertTrue(storm, data["rules"])
+        self.assertGreater(storm[0]["confidence"], 0.8)
+        self.assertGreater(storm[0]["lift"], 2)

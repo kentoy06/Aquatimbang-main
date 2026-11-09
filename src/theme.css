@@ -1603,3 +1603,42 @@ table th {
 
 /* Vendor account archived after 5 years without a login. */
 .badge.archived { background: #eef2f7; color: #475569; border: 1px dashed #94a3b8; }
+
+/* ---------- Learned price check (Price Entry) ---------- */
+.price-check { display: flex; gap: 10px; align-items: flex-start; margin-top: 8px; padding: 9px 12px; border-radius: 10px; font-size: 13px; line-height: 1.45; border: 1px solid; }
+.price-check p { margin: 0; }
+.price-check small { display: block; color: #64748b; margin-top: 2px; }
+.price-check > span { font-weight: 800; }
+.price-check.normal { background: #ecfdf3; border-color: #bbf7d0; color: #166534; }
+.price-check.no_history { background: #f3f7fa; border-color: #dde6ee; color: #475569; }
+.price-check.unusual { background: #fff7ed; border-color: #fed7aa; color: #9a3412; }
+.price-check.very_unusual { background: #fff1f2; border-color: #fecdd3; color: #be123c; }
+
+/* ---------- Market Insights ---------- */
+.insights-filters { display: flex; flex-wrap: wrap; gap: 14px; padding: 16px 18px; margin-bottom: 16px; }
+.insights-filters label { display: grid; gap: 6px; font-size: 13px; font-weight: 600; color: var(--navy-900); min-width: 170px; }
+.insights-filters select { padding: 9px 36px 9px 12px; border-radius: 10px; border: 1px solid #cfdbe6; background: #fff; font-weight: 400; }
+.insights-summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 12px; margin-bottom: 8px; }
+.insights-summary > div { background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 14px 16px; box-shadow: var(--shadow); }
+.insights-summary b { display: block; font-size: 26px; color: var(--navy-900); font-variant-numeric: tabular-nums; }
+.insights-summary span { font-size: 12px; color: #5b7389; }
+.insights-period { margin: 0 0 14px; font-size: 13px; color: #64748b; }
+.insights-rules { display: grid; grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; }
+.insight-rule { background: #fff; border: 1px solid var(--line); border-left: 5px solid var(--orange); border-radius: 16px; padding: 16px 18px; display: grid; gap: 10px; box-shadow: var(--shadow); }
+.insight-rule.below { border-left-color: #16a34a; }
+.insight-if { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.insight-label { font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; color: #5b7389; margin-right: 2px; }
+.insight-chip { background: #eef6fa; color: var(--navy-900); border-radius: 999px; padding: 4px 10px; font-size: 13px; font-weight: 600; }
+.insight-then { display: flex; gap: 10px; align-items: center; }
+.insight-arrow { font-size: 22px; color: var(--orange-dark); }
+.insight-rule.below .insight-arrow { color: #16a34a; }
+.insight-then strong { font-size: 28px; color: var(--navy-900); margin-right: 6px; }
+.insight-then span { font-size: 13px; color: #475569; }
+.insight-text { margin: 0; font-size: 13px; color: #475569; line-height: 1.5; }
+.insight-measures { margin: 0; display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 6px; border-top: 1px solid var(--line); padding-top: 10px; }
+.insight-measures dt { font-size: 10px; text-transform: uppercase; letter-spacing: .06em; color: #8094a6; }
+.insight-measures dd { margin: 2px 0 0; font-size: 12px; font-weight: 600; color: var(--navy-900); }
+.insights-how { margin-top: 18px; background: #fff; border: 1px solid var(--line); border-radius: 14px; padding: 4px 18px; }
+.insights-how summary { cursor: pointer; padding: 12px 0; font-weight: 700; color: var(--navy-900); }
+.insights-how ol { margin: 0 0 14px; padding-left: 20px; color: #475569; font-size: 13px; line-height: 1.6; display: grid; gap: 6px; }
+@media (max-width: 520px) { .insight-measures { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

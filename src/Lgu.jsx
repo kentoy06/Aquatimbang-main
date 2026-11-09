@@ -1,6 +1,8 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
+import { LearnedOutliers, PriceCheckNote, usePriceCheck } from "./components/PriceInsights.jsx";
+import MarketInsights from "./components/MarketInsights.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
@@ -415,7 +417,7 @@ useEffect(() => {
     },
     {
       label: "FORECASTING",
-      items: [{ name: "Price Forecast", icon: "∿" }],
+      items: [{ name: "Price Forecast", icon: "∿" }, { name: "Market Insights", icon: "✦" }],
     },
     {
       label: "REPORTS & AUDIT",
@@ -477,6 +479,8 @@ useEffect(() => {
         return <PriceComparison priceRecords={priceRecords} loading={pricesLoading} error={pricesError} />;
       case "Price Anomalies":
         return <PriceAnomalies priceRecords={priceRecords} suggestions={suggestions} />;
+      case "Market Insights":
+        return <MarketInsights />;
       case "Price Forecast":
         return (
           <Suspense fallback={<div className="panel" style={{ padding: 24 }}>Loading forecast…</div>}>
@@ -1220,6 +1224,11 @@ function PriceEntry({
     source: "",
   });
 
+  // Learned check: is this price unusual for this fish and municipality?
+  const priceCheck = usePriceCheck({
+    speciesId: form.species, municipalityId: form.municipality, price: form.price, date: form.date,
+  });
+
   // Markets of the chosen municipality.
   const marketsHere = markets.filter(
     (market) => String(market.municipality) === String(form.municipality) && market.is_active !== false
@@ -1476,6 +1485,14 @@ function PriceEntry({
     ) {
       notify("Enter a valid price per kilogram.");
       return;
+    }
+
+    // Unusual for this fish and municipality: ask before saving.
+    if (priceCheck && (priceCheck.level === "unusual" || priceCheck.level === "very_unusual")) {
+      const ok = await askConfirm(`${priceCheck.message}\n\nSave this price anyway?`, {
+        title: "Unusual price", confirmLabel: "Save anyway", cancelLabel: "Go back and check",
+      });
+      if (!ok) return;
     }
 
     // Prevent duplicate records for the same fish,
@@ -1856,6 +1873,7 @@ function PriceEntry({
                 }
               />
             </div>
+            <PriceCheckNote check={priceCheck} />
           </div>
 
           {/* SOURCE: a market from Municipality & Market, or typed in */}
@@ -3449,6 +3467,8 @@ function PriceAnomalies({ priceRecords, suggestions }) {
           {(from || to) && <button className="secondary-btn" onClick={() => { setFrom(""); setTo(""); }}>All dates</button>}
         </div>
       </div>
+
+      <LearnedOutliers />
 
       <div className="panel">
         <div className="panel-header">

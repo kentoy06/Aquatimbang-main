@@ -14,6 +14,9 @@ from .views import (
     health_check,
     public_summary,
     public_fish_profile,
+    price_check,
+    price_outliers,
+    market_insights,
     my_profile,
     my_photo,
     request_password_reset,
@@ -306,6 +309,11 @@ urlpatterns = [
         public_summary,
         name="public-summary"
     ),
+
+    # Data mining: learned price checks, outliers and market insights.
+    path("insights/price-check/", price_check, name="price-check"),
+    path("insights/outliers/", price_outliers, name="price-outliers"),
+    path("insights/rules/", market_insights, name="market-insights"),
 
     # Public fish profile for the landing page (published prices only).
     path(
