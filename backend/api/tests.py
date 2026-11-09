@@ -2294,3 +2294,40 @@ class PriceInsightsTests(TestCase):
         self.assertEqual(check["level"], "normal")
         log = ActivityLog.objects.get(target_type="InsightSetting")
         self.assertEqual(log.details["reason"], "Prices swing a lot here")
+
+
+class CommunityAverageTests(TestCase):
+    """Community Average: last 30 days, reviewed + adopted only, adopted shown separately."""
+
+    def test_recent_reviewed_and_adopted_only(self):
+        from .models import VendorPriceSuggestion
+        role = Role.objects.get_or_create(name="Fish Vendor")[0]
+        place = Municipality.objects.create(name="Talisay", province="Cebu")
+        fish = FishSpecies.objects.create(name="Tulingan")
+        vendor = User.objects.create_user("ca_vendor", "ca@example.com", "TestPass123!")
+        UserProfile.objects.create(user=vendor, role=role, municipality=place, account_status="approved", is_active=True)
+
+        def suggest(price, status, days_ago=0):
+            s = VendorPriceSuggestion.objects.create(vendor=vendor, fish_species=fish, municipality=place,
+                                                     suggested_price=Decimal(price), status=status,
+                                                     reviewed_at=timezone.now() if status != "pending" else None)
+            VendorPriceSuggestion.objects.filter(pk=s.pk).update(created_at=timezone.now() - datetime.timedelta(days=days_ago))
+
+        suggest("190", "adopted")
+        suggest("200", "adopted", 3)
+        suggest("180", "reviewed", 5)
+        suggest("500", "pending")           # not reviewed yet: ignored
+        suggest("100", "rejected")          # rejected: ignored
+        suggest("300", "adopted", 45)       # too old: ignored
+
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=vendor)[0].key}")
+        rows = client.get("/api/vendor-suggestions/community-average/").data
+        self.assertEqual(len(rows), 1)
+        row = rows[0]
+        self.assertEqual(row["submission_count"], 3)
+        self.assertEqual(row["adopted_count"], 2)
+        self.assertEqual(row["reviewed_count"], 1)
+        self.assertEqual(float(row["average_price"]), 190.0)
+        self.assertEqual(float(row["adopted_average"]), 195.0)
+        self.assertIsNotNone(row["latest_adopted_at"])
