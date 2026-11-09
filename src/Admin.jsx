@@ -2031,7 +2031,8 @@ const submitReview = async () => {
           </select>
         </div>
 
-        <table>
+        <div className="users-table-wrap">
+        <table className="users-table">
           <thead>
             <tr>
               <th>USER</th>
@@ -2112,6 +2113,7 @@ const submitReview = async () => {
             )}
           </tbody>
         </table>
+        </div>
       </div>
     </>
   );

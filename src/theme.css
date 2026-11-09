@@ -1661,3 +1661,19 @@ table th {
 .presence.off { align-items: baseline; flex-wrap: wrap; }
 .presence-dot { width: 9px; height: 9px; border-radius: 50%; background: #98a2b3; flex: none; align-self: center; }
 .presence.on .presence-dot { background: #12b76a; box-shadow: 0 0 0 3px rgba(18, 183, 106, .18); }
+
+/* User Management table: one row of action buttons, scroll sideways on narrow screens. */
+.users-table-wrap { overflow-x: auto; }
+.users-table { min-width: 1180px; }
+.users-table td { vertical-align: middle; }
+.users-table td:nth-child(2) { min-width: 130px; max-width: 220px; overflow-wrap: break-word; }
+.users-table td:nth-child(5) { min-width: 170px; }
+.users-table .presence small { white-space: nowrap; }
+.content .users-table .action-icons.inline-icons { flex-wrap: nowrap; gap: 6px; }
+.content .action-icons.user-actions { flex-wrap: nowrap; max-width: none; gap: 6px; }
+.content .action-icons.user-actions button { width: 32px; height: 32px; font-size: 13.5px; }
+.users-table .presence { white-space: normal; }
+.users-table .presence small { margin-left: 0; flex-basis: 100%; padding-left: 16px; }
+.users-table .action-buttons { display: flex; flex-wrap: nowrap; align-items: center; gap: 6px; }
+.users-table .action-buttons > button { padding: 6px 12px; font-size: 12.5px; white-space: nowrap; }
+.content .users-table .action-icons.inline-icons button { width: 32px; height: 32px; font-size: 13.5px; }
