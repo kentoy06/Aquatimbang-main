@@ -1009,11 +1009,11 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
   return (
     <>
       <div className="page-title"><div><h2>{t("Community Average")}</h2>
-        <p>Actual LGU-reviewed vendor suggestions, grouped by municipality and fish species. No simulated prices.</p>
+        <p>Prices suggested by vendors in the last 30 days that the LGU reviewed or adopted, grouped by municipality and fish. Vendor names are never shown.</p>
       </div></div>
       <div className="notice"><div className="notice-icon">!</div><div>
-        <strong>Community suggestions are not official LGU prices</strong>
-        <p>Only reviewed or adopted suggestions are included. Official prices come from separately published LGU records.</p>
+        <strong>Community price — not the official LGU price</strong>
+        <p>Only suggestions from the last 30 days that the LGU reviewed or adopted are counted. <b>Adopted</b> means the LGU found the price fair. The official price is only the one the LGU publishes.</p>
       </div></div>
       <PriceMunicipalitySelector records={publishedPrices} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
       <div className="panel" style={{ padding: 18, marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -1029,9 +1029,9 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
        <div className="panel" style={{ overflowX: "auto" }}>
         <table><thead><tr>
           <th>MUNICIPALITY</th><th>SPECIES</th><th>LATEST OFFICIAL PRICE / KG</th>
-          <th>COMMUNITY AVERAGE / KG</th><th>DIFFERENCE</th><th>REVIEWED SUBMISSIONS</th>
+          <th>COMMUNITY AVERAGE / KG</th><th>DIFFERENCE</th><th>ADOPTED BY LGU</th><th>REVIEWED ONLY</th>
         </tr></thead><tbody>
-          {rows.length === 0 ? <tr><td colSpan={6}>No reviewed vendor submissions available for these filters.</td></tr> :
+          {rows.length === 0 ? <tr><td colSpan={7}>No reviewed or adopted vendor suggestions in the last 30 days for these filters.</td></tr> :
             rows.map((row) => {
               const official = latestOfficial(row);
               const officialPrice = official ? Number(official.price_per_kg) : null;
@@ -1043,7 +1043,17 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
                 <td>{peso(average)}</td>
                 <td className={difference === null ? "" : difference > 0 ? "up" : difference < 0 ? "down" : ""}>
                   {difference === null ? "—" : `${difference > 0 ? "+" : difference < 0 ? "−" : ""}${peso(Math.abs(difference))}`}
-                </td><td>{row.submission_count}</td>
+                </td>
+                <td>
+                  {row.adopted_count > 0 ? (
+                    <div className="adopted-cell">
+                      <span className="adopted-badge">✔ Adopted by LGU</span>
+                      <span>{row.adopted_count} {row.adopted_count === 1 ? "price" : "prices"}, average {peso(row.adopted_average)}</span>
+                      {row.latest_adopted_at && <small>Latest: {new Date(row.latest_adopted_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</small>}
+                    </div>
+                  ) : <span className="muted-text">None yet</span>}
+                </td>
+                <td>{row.reviewed_count ?? row.submission_count}</td>
               </tr>;
             })}
         </tbody></table>

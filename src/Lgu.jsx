@@ -2820,22 +2820,20 @@ function PriceSuggestions({ notify, onUsePrice }) {
     ...new Set(records.map((s) => s.species).filter(Boolean)),
   ].sort((a, b) => a.localeCompare(b));
 
+  // Same rule as the vendors' Community Average: suggestions from the last
+  // 30 days that the LGU reviewed or adopted.
+  const communityCutoff = Date.now() - 30 * 24 * 60 * 60 * 1000;
+  const communityRows = (species) => records.filter(
+    (s) =>
+      s.species === species &&
+      (s.status === "Reviewed" || s.status === "Adopted") &&
+      Number(s.suggestedPrice) > 0 &&
+      (!s.date || new Date(s.date).getTime() >= communityCutoff)
+  );
   const computedAverage = (species) => {
-    const rows = records.filter(
-      (s) =>
-        s.species === species &&
-        s.status !== "Rejected"
-    );
-
+    const rows = communityRows(species);
     if (!rows.length) return null;
-
-    return (
-      rows.reduce(
-        (total, row) =>
-          total + Number(row.suggestedPrice || 0),
-        0
-      ) / rows.length
-    );
+    return rows.reduce((total, row) => total + Number(row.suggestedPrice || 0), 0) / rows.length;
   };
 
   const statusClass = (status) => {
@@ -2987,7 +2985,7 @@ function PriceSuggestions({ notify, onUsePrice }) {
           <div>
             <h3>Computed Average by Species</h3>
             <p>
-              Based on actual non-rejected vendor submissions
+              Reviewed and adopted suggestions from the last 30 days (the same average vendors see)
             </p>
           </div>
         </div>
@@ -2996,19 +2994,17 @@ function PriceSuggestions({ notify, onUsePrice }) {
           <thead>
             <tr>
               <th>SPECIES</th>
-              <th>COMPUTED AVERAGE</th>
-              <th>SUBMISSIONS</th>
+              <th>COMMUNITY AVERAGE</th>
+              <th>ADOPTED</th>
+              <th>REVIEWED ONLY</th>
             </tr>
           </thead>
 
           <tbody>
             {speciesNames.map((species) => {
               const average = computedAverage(species);
-              const count = records.filter(
-                (s) =>
-                  s.species === species &&
-                  s.status !== "Rejected"
-              ).length;
+              const rows = communityRows(species);
+              const adopted = rows.filter((s) => s.status === "Adopted").length;
 
               return (
                 <tr key={species}>
@@ -3020,7 +3016,8 @@ function PriceSuggestions({ notify, onUsePrice }) {
                       ? peso(average)
                       : "—"}
                   </td>
-                  <td>{count}</td>
+                  <td>{adopted}</td>
+                  <td>{rows.length - adopted}</td>
                 </tr>
               );
             })}

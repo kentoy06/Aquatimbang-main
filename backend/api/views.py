@@ -2494,14 +2494,34 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
 
     @action(detail=False, methods=["get"], url_path="community-average")
     def community_average(self, request):
-        """Aggregate LGU-reviewed vendor suggestions without exposing vendor identities."""
+        """
+        Average of LGU-reviewed and adopted vendor suggestions per fish and
+        municipality, from the last ?days= (default 30). Vendor names are
+        never included.
+        """
         self.get_role()  # Require an approved AquaTimbang account.
-        from django.db.models import Avg, Count
+        from datetime import timedelta
+        from django.db.models import Avg, Count, Max, Q
+        try:
+            days = max(7, min(365, int(request.query_params.get("days", 30))))
+        except ValueError:
+            days = 30
+        adopted = Q(status=VendorPriceSuggestion.STATUS_ADOPTED)
         rows = (
             VendorPriceSuggestion.objects
-            .filter(status__in=["reviewed", "adopted"], suggested_price__gt=0)
+            .filter(
+                status__in=[VendorPriceSuggestion.STATUS_REVIEWED, VendorPriceSuggestion.STATUS_ADOPTED],
+                suggested_price__gt=0,
+                created_at__gte=timezone.now() - timedelta(days=days),
+            )
             .values("municipality_id", "municipality__name", "fish_species_id", "fish_species__name")
-            .annotate(average_price=Avg("suggested_price"), submission_count=Count("id"))
+            .annotate(
+                average_price=Avg("suggested_price"),
+                submission_count=Count("id"),
+                adopted_count=Count("id", filter=adopted),
+                adopted_average=Avg("suggested_price", filter=adopted),
+                latest_adopted_at=Max("reviewed_at", filter=adopted),
+            )
             .order_by("municipality__name", "fish_species__name")
         )
         return Response([
@@ -2512,6 +2532,11 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
                 "fish_name": row["fish_species__name"],
                 "average_price": round(row["average_price"], 2),
                 "submission_count": row["submission_count"],
+                "adopted_count": row["adopted_count"],
+                "reviewed_count": row["submission_count"] - row["adopted_count"],
+                "adopted_average": round(row["adopted_average"], 2) if row["adopted_average"] is not None else None,
+                "latest_adopted_at": row["latest_adopted_at"],
+                "days": days,
             }
             for row in rows
         ])
