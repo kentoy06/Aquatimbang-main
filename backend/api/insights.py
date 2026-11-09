@@ -111,8 +111,13 @@ def check_price(species, municipality, price, day, params=None):
     pct = result["percent_from_usual"]
     direction = "higher" if pct > 0 else "lower"
     usual = f"₱{normal['low']:,.2f}–₱{normal['high']:,.2f}"
-    if result["level"] == "normal":
+    if result["level"] == "normal" and normal["low"] <= float(price) <= normal["high"]:
         message = f"Within the usual range for {species.name} in {municipality.name} ({usual}/kg)."
+    elif result["level"] == "normal":
+        message = (
+            f"Slightly {direction} than usual for {species.name} in {municipality.name} "
+            f"({abs(pct):.0f}% from the median ₱{normal['median']:,.2f}; usually {usual}/kg), but not unusual."
+        )
     else:
         message = (
             f"₱{float(price):,.2f} is {abs(pct):.0f}% {direction} than the usual {species.name} price in "

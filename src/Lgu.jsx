@@ -347,6 +347,8 @@ useEffect(() => {
   // Restore the last visited LGU page after refreshing.
 // Phones: the menu slides in from the left.
 const [menuOpen, setMenuOpen] = useState(false);
+// A price handed from an adopted vendor suggestion to Price Entry.
+const [priceDraft, setPriceDraft] = useState(null);
 const [activePage, setActivePage] = useState(() => {
   return sessionStorage.getItem("lguActivePage") || "Dashboard";
 });
@@ -443,6 +445,8 @@ useEffect(() => {
         return (
           <PriceEntry
             notify={notify}
+            draft={priceDraft}
+            onDraftUsed={() => setPriceDraft(null)}
             // Real Django price records.
             priceRecords={priceRecords}
             setPriceRecords={setPriceRecords}
@@ -471,7 +475,12 @@ useEffect(() => {
       case "Fish Scanner Photos":
         return <FishScanReview notify={notify} />;
       case "Price Suggestions":
-        return <PriceSuggestions notify={notify} />;
+        return (
+          <PriceSuggestions
+            notify={notify}
+            onUsePrice={(draft) => { setPriceDraft(draft); setActivePage("Price Entry"); }}
+          />
+        );
       case "Official Reference Prices":
         return <OfficialReferencePrices priceRecords={priceRecords} loading={pricesLoading} error={pricesError} goTo={setActivePage} />;
       case "Price Trends":
@@ -1196,7 +1205,12 @@ function PriceEntry({
   notify,
   refreshPrices,
   setPriceRecords,
+  draft,
+  onDraftUsed,
 }) {
+  // Filled in from an adopted vendor suggestion (shown as a note).
+  const [fromSuggestion] = useState(draft);
+  useEffect(() => { if (draft) onDraftUsed?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
   // Stores fish species retrieved from Django.
   // Markets for the Source / Market dropdown (kept by the Administrator).
   const [markets, setMarkets] = useState([]);
@@ -1221,9 +1235,9 @@ function PriceEntry({
   // Form used when creating a price record.
   const [form, setForm] = useState({
     date: today,
-    municipality: "",
-    species: "",
-    price: "",
+    municipality: draft?.municipality ? String(draft.municipality) : "",
+    species: draft?.species ? String(draft.species) : "",
+    price: draft?.price ? String(draft.price) : "",
     source: "",
   });
 
@@ -1778,6 +1792,14 @@ function PriceEntry({
               <p>Encode a price for a single species</p>
             </div>
           </div>
+
+          {fromSuggestion && (
+            <div className="draft-note" role="status">
+              Filled in from {fromSuggestion.vendor ? `${fromSuggestion.vendor}'s` : "a vendor's"} adopted suggestion
+              ({fromSuggestion.speciesName}, {peso(fromSuggestion.price)}/kg). Check the details and the market, then save.
+              It still goes through the usual checks and review.
+            </div>
+          )}
 
           {/* DATE */}
           <div className="form-group">
@@ -2742,7 +2764,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
    ================================================================ */
 
 
-function PriceSuggestions({ notify }) {
+function PriceSuggestions({ notify, onUsePrice }) {
   const [speciesFilter, setSpeciesFilter] = useState("All Species");
   const [statusFilter, setStatusFilter] = useState("All Statuses");
   const [search, setSearch] = useState("");
@@ -2847,9 +2869,11 @@ function PriceSuggestions({ notify }) {
 
 
       notify?.(`Suggestion ${label.toLowerCase()} successfully.`);
+      return true;
     } catch (err) {
       setError(err.message);
       notify?.(`Unable to save review: ${err.message}`);
+      return false;
     } finally {
       setProcessingId(null);
     }
@@ -2907,11 +2931,30 @@ function PriceSuggestions({ notify }) {
 
     if (feedback === null) return;
 
-    await saveReview(
+    const saved = await saveReview(
       suggestion,
       "adopted",
       feedback.trim()
     );
+    if (saved) await offerOfficialPrice(suggestion);
+  };
+
+  // Adopting does not change the official price by itself; offer to
+  // open Price Entry filled in with this suggestion.
+  const offerOfficialPrice = async (suggestion) => {
+    const place = suggestion.municipality ? ` in ${suggestion.municipality}` : "";
+    const use = await askConfirm(
+      `Use ${peso(suggestion.suggestedPrice)} as the official price for ${suggestion.species}${place}?\n\nPrice Entry will open filled in. You still check it and save it, and it goes through the usual checks and review.`,
+      { title: "Set the official price?", confirmLabel: "Open Price Entry", cancelLabel: "No, just adopt" }
+    );
+    if (!use) return;
+    onUsePrice?.({
+      species: suggestion.fishSpeciesId,
+      municipality: suggestion.municipalityId,
+      price: suggestion.suggestedPrice,
+      speciesName: suggestion.species,
+      vendor: suggestion.submittedBy,
+    });
   };
 
   return (
@@ -3151,6 +3194,15 @@ function PriceSuggestions({ notify }) {
                             ✕
                           </button>
                         </div>
+                      ) : suggestion.status === "Adopted" ? (
+                        <button
+                          type="button"
+                          className="use-price-btn"
+                          title="Open Price Entry filled in with this price"
+                          onClick={() => offerOfficialPrice(suggestion)}
+                        >
+                          Use this price
+                        </button>
                       ) : (
                         <span className="muted-text">
                           {suggestion.lguFeedback ||
