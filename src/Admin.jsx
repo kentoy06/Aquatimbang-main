@@ -6,6 +6,7 @@ import MarketInsights from "./components/MarketInsights.jsx";
 import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
+import NotificationList from "./components/NotificationList.jsx";
 import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Admin.css";
@@ -3643,48 +3644,8 @@ function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
    NOTIFICATIONS
    ================================================================ */
 
-function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goTo }) {
-  const dismiss = (id) => setDismissedNotifs((prev) => [...prev, id]);
-  const restore = () => setDismissedNotifs([]);
-
-  const iconFor = (type) => (type === "danger" ? "⚠" : type === "warning" ? "⏳" : "ℹ");
-  const bgFor = (type) => (type === "danger" ? "purple-bg" : type === "warning" ? "blue-bg" : "green-bg");
-
-  const visible = notifications.filter((n) => !dismissedNotifs.includes(n.id));
-
-  return (
-    <>
-      <div className="page-title">
-        <div>
-          <h2>Notifications</h2>
-          <p>System alerts that need administrator attention.</p>
-        </div>
-        {dismissedNotifs.length > 0 && (
-          <button className="secondary-btn" onClick={restore}>Restore Dismissed</button>
-        )}
-      </div>
-
-      <div className="panel">
-        {visible.length === 0 ? (
-          <p className="empty-row">You're all caught up — no active notifications.</p>
-        ) : (
-          visible.map((n) => (
-            <div className="activity" key={n.id}>
-              <div className={`activity-icon ${bgFor(n.type)}`}>{iconFor(n.type)}</div>
-              <div style={{ flex: 1 }}>
-                <strong>{n.title}</strong>
-                <p>{n.detail}</p>
-              </div>
-              <div className="action-icons" style={{ alignSelf: "center" }}>
-                <button title="View" onClick={() => goTo(n.page)}>👁</button>
-                <button title="Dismiss" onClick={() => dismiss(n.id)}>✕</button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </>
-  );
+function Notifications(props) {
+  return <NotificationList {...props} title="Notifications" subtitle="System alerts that need administrator attention." />;
 }
 
 /* ================================================================

@@ -1,6 +1,7 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
 import React, { useEffect, useState, lazy, Suspense } from "react";
+import NotificationList from "./components/NotificationList.jsx";
 import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Vendor.css";
@@ -498,7 +499,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
   let id = 1;
 
   announcements.filter((a) => a.is_active).forEach((a) => {
-    notifs.push({ id: `announcement-${a.id}`, type: "info", page: "Notifications", title: `📢 ${a.title}`, detail: `${a.message} (${new Date(a.created_at).toLocaleDateString("en-PH", { dateStyle: "medium" })})` });
+    notifs.push({ id: `announcement-${a.id}`, type: "info", title: `📢 ${a.title}`, detail: a.message, at: a.created_at, announcement: a });
   });
 
   mySuggestions.forEach((s) => {
@@ -507,6 +508,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
         id: id++,
         type: s.status === "Rejected" ? "danger" : "info",
         page: "My Suggested Prices",
+        at: s.reviewedAt || s.createdAt,
         title: `Your ${s.species} suggestion was marked "${s.status}"`,
         detail: s.lguFeedback || "No additional feedback from the LGU officer.",
       });
@@ -516,7 +518,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
   const latest = publishedPrices.reduce((max, r) => (r.recorded_date > max ? r.recorded_date : max), "");
   if (latest) {
     notifs.push({
-      id: id++, type: "info", page: "Current Fish Prices",
+      id: id++, type: "info", page: "Current Fish Prices", at: latest,
       title: "Official prices are published",
       detail: `Latest LGU-validated prices are dated ${latest}.`,
     });
@@ -1351,46 +1353,9 @@ function ExportReportsPage({ title, mySuggestions = [], suggestionsLoading, sugg
    NOTIFICATIONS
    ================================================================ */
 
-function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goTo }) {
+function Notifications(props) {
   const t = useT();
-  const dismiss = (id) => setDismissedNotifs((prev) => [...prev, id]);
-  const visible = notifications.filter((n) => !dismissedNotifs.includes(n.id));
-  const iconFor = (type) => (type === "danger" ? "⚠" : "ℹ");
-  const bgFor = (type) => (type === "danger" ? "purple-bg" : "blue-bg");
-
-  return (
-    <>
-      <div className="page-title">
-        <div>
-          <h2>{t("Notifications")}</h2>
-          <p>{t("Updates about your suggestions and today's official prices.")}</p>
-        </div>
-        {dismissedNotifs.length > 0 && (
-          <button className="secondary-btn" onClick={() => setDismissedNotifs([])}>Restore Dismissed</button>
-        )}
-      </div>
-
-      <div className="panel">
-        {visible.length === 0 ? (
-          <p className="empty-row">{t("You're all caught up.")}</p>
-        ) : (
-          visible.map((n) => (
-            <div className="activity" key={n.id}>
-              <div className={`activity-icon ${bgFor(n.type)}`}>{iconFor(n.type)}</div>
-              <div style={{ flex: 1 }}>
-                <strong>{n.title}</strong>
-                <p>{n.detail}</p>
-              </div>
-              <div className="action-icons" style={{ alignSelf: "center" }}>
-                <button title="View" onClick={() => goTo(n.page)}>👁</button>
-                <button title="Dismiss" onClick={() => dismiss(n.id)}>✕</button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </>
-  );
+  return <NotificationList {...props} t={t} title={t("Notifications")} subtitle={t("Updates about your suggestions and today's official prices.")} />;
 }
 
 /* ================================================================

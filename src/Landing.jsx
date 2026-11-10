@@ -155,6 +155,9 @@ function Landing({ onGetStarted, onRegister }) {
         </div>
 
         <div className="hero-cards">
+          {(summary?.featured_prices || []).length > 0 && (
+            <span className="hero-cards-label">Latest official LGU prices</span>
+          )}
           {(summary?.featured_prices || []).map((item) => (
             <div className="hero-price-card" key={`${item.fish_name}-${item.municipality_name}`}>
               <span>{item.fish_name} · {item.municipality_name}</span>
