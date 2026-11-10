@@ -1,7 +1,7 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
 import React, { useEffect, useState, lazy, Suspense } from "react";
-import NotificationList from "./components/NotificationList.jsx";
+import NotificationList, { useNotificationState } from "./components/NotificationList.jsx";
 import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Vendor.css";
@@ -209,7 +209,6 @@ useEffect(() => {
   };
 }, []);
 
-  const [dismissedNotifs, setDismissedNotifs] = useState([]);
 
   const notify = (message) => {
     setToast(message);
@@ -225,7 +224,8 @@ useEffect(() => {
 
   const { announcements } = useAnnouncements(0, { live: true });
   const notifications = buildVendorNotifications(mySuggestions, publishedPrices, announcements);
-  const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
+  // Seen / dismissed notifications are remembered per user on this device.
+  const { dismissed: dismissedNotifs, setDismissed: setDismissedNotifs, seen: seenNotifs, markSeen: markNotifsSeen, unread: unread } = useNotificationState(notifications);
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
 
@@ -314,7 +314,7 @@ useEffect(() => {
       case "Messages":
         return <Messages />;
       case "Notifications":
-        return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} goTo={setActivePage} />;
+        return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} seen={seenNotifs} markSeen={markNotifsSeen} goTo={setActivePage} />;
       case "My Profile":
         return (
           <AccountProfile account={account} notify={notify} description="Manage your vendor details and see your recent activity.">

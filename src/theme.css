@@ -1754,3 +1754,16 @@ table th {
 
 /* Landing: label above the two featured price cards */
 .hero-cards-label { display: block; color: rgba(255, 255, 255, .85); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0, 0, 0, .35); }
+.notif-new { margin-left: 8px; background: #fff1e6; color: var(--orange-dark); border-radius: 999px; padding: 1px 8px; font-size: 11px; font-weight: 800; vertical-align: middle; }
+.activity.notif-unread { background: #f6fbfd; }
+
+/* Registration upload boxes: View and remove */
+.file-field-row { display: flex; align-items: stretch; gap: 8px; }
+.file-field-row .file-field { flex: 1; min-width: 0; }
+.file-field-row .file-field-text strong { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; display: block; }
+.file-field-actions { display: flex; flex-direction: column; justify-content: center; gap: 6px; }
+.file-field-view, .file-field-remove { border-radius: 999px; font-weight: 700; font-size: 12.5px; cursor: pointer; padding: 6px 12px; background: #fff; }
+.file-field-view { border: 1px solid #0e7c86; color: #0e7c86; }
+.file-field-view:hover { background: #ecf7f8; }
+.file-field-remove { border: 1px solid #f3b4ae; color: #b42318; }
+.file-field-remove:hover { background: #fef3f2; }

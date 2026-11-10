@@ -2,6 +2,43 @@ import React, { useEffect, useState } from "react";
 
 const plain = (text) => text;
 
+// A stable key for a notification (ids like 1, 2, 3 change as the list changes).
+export const notifKey = (n) => `${n.id}|${n.title}|${n.at || ""}`;
+
+function storageKey(kind) {
+  let user = "";
+  try { user = JSON.parse(localStorage.getItem("user") || "{}").username || ""; } catch { /* ignore */ }
+  return `aquatimbang:${kind}:${user}`;
+}
+function readList(kind) {
+  try { return JSON.parse(localStorage.getItem(storageKey(kind)) || "[]"); } catch { return []; }
+}
+function writeList(kind, list) {
+  try { localStorage.setItem(storageKey(kind), JSON.stringify(list.slice(-500))); } catch { /* storage unavailable */ }
+}
+
+/**
+ * Which notifications this user has seen and dismissed, remembered on this
+ * device. The badge counts only notifications that are not seen yet.
+ */
+export function useNotificationState(notifications) {
+  const [dismissed, setDismissedState] = useState(() => readList("dismissedNotifs"));
+  const [seen, setSeenState] = useState(() => new Set(readList("seenNotifs")));
+  const setDismissed = (update) => setDismissedState((prev) => {
+    const next = typeof update === "function" ? update(prev) : update;
+    writeList("dismissedNotifs", next);
+    return next;
+  });
+  const markSeen = (keys) => setSeenState((prev) => {
+    if (keys.every((k) => prev.has(k))) return prev;
+    const next = new Set([...prev, ...keys]);
+    writeList("seenNotifs", [...next]);
+    return next;
+  });
+  const unread = notifications.filter((n) => !dismissed.includes(notifKey(n)) && !seen.has(notifKey(n)));
+  return { dismissed, setDismissed, seen, markSeen, unread };
+}
+
 // "Today", "Yesterday" or "Earlier" for a date (missing dates count as today:
 // they are things that need attention now, like items waiting for review).
 export function dayGroup(iso) {
@@ -42,10 +79,17 @@ const when = (iso) => {
  *   announcement: the full announcement, opened by the eye button
  *   page:         where the eye button goes for other notifications
  */
-export default function NotificationList({ notifications, dismissedNotifs, setDismissedNotifs, goTo, title, subtitle, t = plain }) {
+export default function NotificationList({ notifications, dismissedNotifs, setDismissedNotifs, seen, markSeen, goTo, title, subtitle, t = plain }) {
   const [open, setOpen] = useState(null);
-  const dismiss = (id) => setDismissedNotifs((prev) => [...prev, id]);
-  const visible = notifications.filter((n) => !dismissedNotifs.includes(n.id));
+  const dismiss = (n) => setDismissedNotifs((prev) => [...prev, notifKey(n)]);
+  const visible = notifications.filter((n) => !dismissedNotifs.includes(notifKey(n)));
+  // Remember what was new when the page opened, then clear the badge.
+  const [fresh] = useState(() => new Set(visible.filter((n) => seen && !seen.has(notifKey(n))).map(notifKey)));
+  const visibleKeys = visible.map(notifKey).join("\n");
+  useEffect(() => {
+    if (markSeen && visibleKeys) markSeen(visibleKeys.split("\n"));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visibleKeys]);
   const groups = groupByDay(visible, (n) => n.at);
   const iconFor = (type) => (type === "danger" ? "⚠" : type === "warning" ? "⏳" : "ℹ");
   const bgFor = (type) => (type === "danger" ? "purple-bg" : "blue-bg");
@@ -82,10 +126,10 @@ export default function NotificationList({ notifications, dismissedNotifs, setDi
             <section key={group.label} className="notif-group">
               <h4 className="notif-group-title">{t(group.label)}</h4>
               {group.items.map((n) => (
-                <div className="activity" key={n.id}>
+                <div className={`activity${fresh.has(notifKey(n)) ? " notif-unread" : ""}`} key={notifKey(n)}>
                   <div className={`activity-icon ${bgFor(n.type)}`}>{iconFor(n.type)}</div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <strong>{n.title}</strong>
+                    <strong>{n.title}</strong>{fresh.has(notifKey(n)) && <span className="notif-new">{t("New")}</span>}
                     <p className="notif-detail">{n.detail}</p>
                     {n.at && <small className="notif-when">{when(n.at)}</small>}
                   </div>
@@ -93,7 +137,7 @@ export default function NotificationList({ notifications, dismissedNotifs, setDi
                     {(n.announcement || (n.page && n.page !== "Notifications")) && (
                       <button title={n.announcement ? t("Read announcement") : t("Open")} onClick={() => view(n)}>👁</button>
                     )}
-                    <button title={t("Dismiss")} onClick={() => dismiss(n.id)}>✕</button>
+                    <button title={t("Dismiss")} onClick={() => dismiss(n)}>✕</button>
                   </div>
                 </div>
               ))}

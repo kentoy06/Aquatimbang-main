@@ -1,6 +1,7 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import PasswordInput from "./components/PasswordInput.jsx";
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import "./App.css";
 import "./Login.css";
 import { API_BASE_URL } from "./api/config.js";
@@ -105,6 +106,12 @@ function Register({ onBack, onGoToLogin }) {
 
   // Check a chosen file, shrinking large photos before they are uploaded.
   const pickFile = async (key, file, image) => {
+    if (!file) {
+      // Removed with the ✕ button.
+      setFileErrors((previous) => ({ ...previous, [key]: "" }));
+      update(key, null);
+      return;
+    }
     const ready = image ? await compressImage(file) : file;
     const problem = checkUpload(ready, { image });
     setFileErrors((previous) => ({ ...previous, [key]: problem }));
@@ -666,21 +673,35 @@ if (role === "LGU Officer") {
   );
 }
 
-// File picker styled as an upload box that shows the chosen file name.
+// File picker styled as an upload box that shows the chosen file name,
+// with View (check it is the right file) and ✕ (remove it) once chosen.
 function FileField({ id, label, hint, accept, file, onChange, error = "", optional = false, camera = "", cameraTitle }) {
+  const [previewUrl, setPreviewUrl] = useState("");
+  const [inputKey, setInputKey] = useState(0);
+  useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
+  const isImage = file?.type?.startsWith("image/");
+  const remove = () => { setInputKey((k) => k + 1); onChange(null); };
   return (
     <div className="form-group">
       <span className="file-field-label">
         {label} {optional && <span className="optional">(optional)</span>}
       </span>
-      <label htmlFor={id} className={`file-field ${file ? "file-field-filled" : ""}`}>
-        <span className="file-field-icon">{file ? "✓" : "⇪"}</span>
-        <span className="file-field-text">
-          <strong>{file ? file.name : "Click to upload a file"}</strong>
-          <small>{file ? "Click to choose a different file" : hint}</small>
-        </span>
-        <input id={id} type="file" accept={accept} onChange={(e) => onChange(e.target.files?.[0] || null)} />
-      </label>
+      <div className="file-field-row">
+        <label htmlFor={id} className={`file-field ${file ? "file-field-filled" : ""}`}>
+          <span className="file-field-icon">{file ? "✓" : "⇪"}</span>
+          <span className="file-field-text">
+            <strong>{file ? file.name : "Click to upload a file"}</strong>
+            <small>{file ? "Click to choose a different file" : hint}</small>
+          </span>
+          <input key={inputKey} id={id} type="file" accept={accept} onChange={(e) => onChange(e.target.files?.[0] || null)} />
+        </label>
+        {file && (
+          <div className="file-field-actions">
+            <button type="button" className="file-field-view" onClick={() => setPreviewUrl(URL.createObjectURL(file))}>View</button>
+            <button type="button" className="file-field-remove" onClick={remove} aria-label={`Remove ${file.name}`} title="Remove this file">✕</button>
+          </div>
+        )}
+      </div>
       {camera && (
         <div className="file-field-camera">
           <span>or</span>
@@ -688,6 +709,18 @@ function FileField({ id, label, hint, accept, file, onChange, error = "", option
         </div>
       )}
       {error && <small className="field-error" role="alert">{error}</small>}
+      {previewUrl && createPortal(
+        <div className="doc-preview-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setPreviewUrl(""); }}>
+          <div className="doc-preview" role="dialog" aria-modal="true" aria-label={file?.name || label}>
+            <div className="doc-preview-head">
+              <strong>{file?.name || label}</strong>
+              <button type="button" className="secondary-btn" onClick={() => setPreviewUrl("")}>Close</button>
+            </div>
+            {isImage ? <img src={previewUrl} alt={label} /> : <iframe src={previewUrl} title={label} />}
+          </div>
+        </div>,
+        document.body,
+      )}
     </div>
   );
 }
