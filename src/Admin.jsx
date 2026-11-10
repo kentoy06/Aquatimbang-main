@@ -1858,6 +1858,8 @@ const submitReview = async () => {
               <button className="modal-close" onClick={() => setViewing(null)}>✕</button>
             </div>
 
+            <div className="pm-body">
+            <aside className="pm-side">
             <div className="profile-head">
               <ProfilePhoto account={viewing} fallback={initials(viewing.name)} />
               <div>
@@ -1871,6 +1873,8 @@ const submitReview = async () => {
               </div>
             </div>
 
+            </aside>
+            <div className="pm-main">
             <div className="profile-grid">
               <div className="profile-field">
                 <span>Username</span>
@@ -2030,9 +2034,18 @@ const submitReview = async () => {
               )}
             </div>
 
-            <div className="button-row">
-              {viewing.status !== "Pending" && viewing.status !== "Rejected" && (
-                <button className="secondary-btn" onClick={() => setFormAccount(viewing)}>✎ Edit User</button>
+            </div>
+            </div>
+
+            <div className="button-row pm-actions">
+              {viewing.status !== "Pending" && viewing.status !== "Rejected" && viewing.id !== currentUserId && (
+                <>
+                  <button className="secondary-btn" onClick={() => setFormAccount(viewing)}>✎ Edit User</button>
+                  <button className="secondary-btn" onClick={() => resetPassword(viewing)}>🔑 Reset Password</button>
+                  <button className="secondary-btn" onClick={() => { toggleActive(viewing); setViewing(null); }}>
+                    {viewing.status === "Active" ? "⏸ Deactivate" : "▶ Activate"}
+                  </button>
+                </>
               )}
               <button className="primary-btn" onClick={() => setViewing(null)}>Close</button>
             </div>

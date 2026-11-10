@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { apiUrl, authHeaders } from "../api/config.js";
 import { timeAgo } from "./Presence.jsx";
+import { useProtectedImage } from "../api/images.js";
 
 const THREAD_POLL_MS = 4000;
 const LIST_POLL_MS = 10000;
@@ -50,12 +51,40 @@ export function useUnreadMessages(enabled = true) {
   return count;
 }
 
-function Avatar({ person }) {
+function Avatar({ person, size = 40 }) {
+  const photo = useProtectedImage(person.has_photo ? `/messages/people/${person.id}/photo/?v=${encodeURIComponent(person.photo_version || "")}` : "");
   return (
-    <span className="msg-avatar">
-      {initials(person.name)}
+    <span className="msg-avatar" style={{ width: size, height: size, fontSize: Math.round(size / 3) }}>
+      {photo ? <img src={photo} alt="" /> : initials(person.name)}
       <span className={`msg-avatar-dot ${person.is_online ? "on" : ""}`} aria-hidden="true" />
     </span>
+  );
+}
+
+// Who you are talking to: photo, role, municipality and where they work.
+function ProfileCard({ person, onClose }) {
+  useEffect(() => {
+    const onKey = (e) => { if (e.key === "Escape") onClose(); };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [onClose]);
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="modal msg-profile" role="dialog" aria-modal="true" aria-labelledby="msg-profile-name">
+        <button type="button" className="modal-close msg-profile-close" onClick={onClose} aria-label="Close">✕</button>
+        <Avatar person={person} size={96} />
+        <h3 id="msg-profile-name">{person.name}</h3>
+        <span className="msg-profile-role">{person.role}</span>
+        <dl className="msg-profile-facts">
+          <div><dt>Municipality</dt><dd>{person.municipality || "—"}</dd></div>
+          {Object.entries(person.about || {}).map(([label, value]) => (
+            <div key={label}><dt>{label}</dt><dd>{value}</dd></div>
+          ))}
+          <div><dt>Status</dt><dd>{person.is_online ? <span className="msg-online">Online</span> : `Last seen ${timeAgo(person.last_seen)}`}</dd></div>
+        </dl>
+        <button type="button" className="primary-btn" onClick={onClose}>Back to chat</button>
+      </div>
+    </div>
   );
 }
 
@@ -98,6 +127,7 @@ function ContactPicker({ onPick, onClose }) {
 }
 
 function Thread({ conversation, onSent, onBack }) {
+  const [showProfile, setShowProfile] = useState(false);
   const [messages, setMessages] = useState([]);
   const [lastReadByOther, setLastReadByOther] = useState(null);
   const [canReply, setCanReply] = useState(true);
@@ -161,15 +191,18 @@ function Thread({ conversation, onSent, onBack }) {
     <section className="msg-thread">
       <header className="msg-thread-head">
         <button type="button" className="msg-back" onClick={onBack} aria-label="Back to conversations">‹</button>
-        <Avatar person={person} />
-        <div>
+        <button type="button" className="msg-who" onClick={() => setShowProfile(true)} title="View profile">
+          <Avatar person={person} />
+        </button>
+        <button type="button" className="msg-who msg-who-text" onClick={() => setShowProfile(true)} title="View profile">
           <strong>{person.name}</strong>
           <small>
             {person.role}{person.municipality ? ` · ${person.municipality}` : ""} ·{" "}
             {person.is_online ? <span className="msg-online">Online</span> : `last seen ${timeAgo(person.last_seen)}`}
           </small>
-        </div>
+        </button>
       </header>
+      {showProfile && <ProfileCard person={person} onClose={() => setShowProfile(false)} />}
 
       <div className="msg-body">
         {messages.length === 0 && !error && <p className="msg-empty">No messages yet. Say hello.</p>}
@@ -181,6 +214,7 @@ function Thread({ conversation, onSent, onBack }) {
             <React.Fragment key={m.id}>
               {showDay && <div className="msg-day"><span>{day}</span></div>}
               <div className={`msg-bubble-row ${m.from_me ? "mine" : ""}`}>
+                {!m.from_me && <span className="msg-bubble-avatar"><Avatar person={person} size={28} /></span>}
                 <div className="msg-bubble">
                   <p>{m.body}</p>
                   <time dateTime={m.created_at}>{clock(m.created_at)}</time>

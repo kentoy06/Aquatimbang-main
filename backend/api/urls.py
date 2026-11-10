@@ -42,6 +42,7 @@ from .views import (
     conversations,
     conversation_messages,
     unread_message_count,
+    message_person_photo,
     system_settings,
     weight_entries,
     delete_weight_entry,
@@ -302,6 +303,7 @@ urlpatterns = [
     # Private messages (vendor <-> LGU, LGU <-> admin, vendor <-> admin).
     path("messages/contacts/", message_contacts, name="message-contacts"),
     path("messages/unread/", unread_message_count, name="message-unread"),
+    path("messages/people/<int:user_id>/photo/", message_person_photo, name="message-person-photo"),
     path("messages/conversations/", conversations, name="conversations"),
     path("messages/conversations/<int:conversation_id>/", conversation_messages, name="conversation-messages"),
 

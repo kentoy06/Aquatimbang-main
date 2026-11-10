@@ -1818,7 +1818,50 @@ table th {
 .modal { border-radius: 20px; background-clip: padding-box; }
 
 /* User profile pop-up: a clean rounded photo */
-.profile-modal .profile-avatar { width: 64px; height: 64px; border-radius: 16px; flex: none; overflow: hidden; border: 1px solid var(--line); background: #e6f4f6; font-size: 20px; }
 .profile-modal .profile-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
 .profile-modal .profile-badges .role, .profile-modal .profile-badges .badge { white-space: nowrap; border-radius: 999px; padding: 3px 10px; line-height: 1.4; height: auto; }
 .profile-modal .profile-badges .presence { white-space: nowrap; }
+
+/* User Profile pop-up: wide rectangle. Photo and name on the left, details on
+   the right, actions along the bottom; only the details column scrolls. */
+.modal.profile-modal { max-width: 920px; width: calc(100% - 32px); padding: 0; display: flex; flex-direction: column; max-height: 90vh; overflow: hidden; }
+.profile-modal > .modal-head { padding: 20px 26px 14px; margin: 0; border-bottom: 1px solid var(--line); }
+.pm-body { display: grid; grid-template-columns: 260px 1fr; min-height: 0; flex: 1; }
+.pm-side { padding: 22px; border-right: 1px solid var(--line); background: #f8fbfd; overflow-y: auto; }
+.pm-side .profile-head { flex-direction: column; align-items: stretch; text-align: left; border: 0; margin: 0; padding: 0; gap: 14px; }
+.pm-side .profile-avatar { width: 100%; height: auto; aspect-ratio: 1 / 1; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: #e6f4f6; font-size: 42px; display: grid; place-items: center; }
+.pm-side .profile-head strong { font-size: 18px; }
+.pm-side .profile-head p { font-size: 13px; overflow-wrap: anywhere; }
+.pm-side .profile-badges { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 10px; }
+.pm-side .profile-badges .role, .pm-side .profile-badges .badge { white-space: nowrap; border-radius: 999px; padding: 3px 10px; line-height: 1.4; }
+.pm-side .presence { margin-top: 2px; }
+.pm-main { padding: 20px 24px; overflow-y: auto; min-width: 0; }
+.pm-main .profile-grid:first-child { margin-top: 0; }
+.pm-actions { padding: 14px 24px; margin: 0; border-top: 1px solid var(--line); background: #fff; flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 760px) {
+  .pm-body { grid-template-columns: 1fr; overflow-y: auto; }
+  .pm-side { border-right: 0; border-bottom: 1px solid var(--line); overflow: visible; }
+  .pm-side .profile-head { flex-direction: row; align-items: center; }
+  .pm-side .profile-avatar { width: 88px; flex: none; font-size: 26px; }
+  .pm-main { overflow: visible; }
+}
+.pm-actions > button { flex: 0 1 auto; min-width: 150px; }
+.notif-retention { margin: 10px 4px 0; font-size: 12.5px; color: #8a97a8; }
+
+/* Messages: photos and profile card */
+.msg-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; display: block; }
+.msg-who { background: none; border: 0; padding: 0; cursor: pointer; text-align: left; display: grid; gap: 1px; color: inherit; }
+.msg-who:hover strong { text-decoration: underline; }
+.msg-bubble-row { align-items: flex-end; gap: 8px; }
+.msg-bubble-avatar .msg-avatar-dot { display: none; }
+.modal.msg-profile { max-width: 360px; text-align: center; display: grid; justify-items: center; gap: 8px; padding: 28px 24px 22px; position: relative; }
+.msg-profile .msg-avatar { box-shadow: 0 6px 18px rgba(7, 26, 43, .12); }
+.msg-profile .msg-avatar-dot { width: 18px; height: 18px; border-width: 3px; }
+.msg-profile h3 { margin: 6px 0 0; color: var(--navy-900); }
+.msg-profile-role { background: #e6f4f6; color: #0e7c86; font-weight: 700; font-size: 12.5px; border-radius: 999px; padding: 3px 12px; }
+.msg-profile-close { position: absolute; top: 14px; right: 14px; }
+.msg-profile-facts { width: 100%; margin: 8px 0 6px; display: grid; gap: 6px; text-align: left; }
+.msg-profile-facts div { display: flex; justify-content: space-between; gap: 12px; padding: 9px 12px; background: #f6f9fb; border-radius: 10px; font-size: 13.5px; }
+.msg-profile-facts dt { color: #64748b; margin: 0; }
+.msg-profile-facts dd { margin: 0; font-weight: 700; color: var(--navy-900); text-align: right; }
+.msg-profile .primary-btn { width: 100%; margin-top: 4px; }
