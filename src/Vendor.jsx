@@ -1,6 +1,6 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
-import React, { useEffect, useState, lazy, Suspense } from "react";
+import React, { useRef, useEffect, useState, lazy, Suspense } from "react";
 import NotificationList, { useNotificationState } from "./components/NotificationList.jsx";
 import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
@@ -226,6 +226,16 @@ useEffect(() => {
   const notifications = buildVendorNotifications(mySuggestions, publishedPrices, announcements);
   // Seen / dismissed notifications are remembered per user on this device.
   const { dismissed: dismissedNotifs, setDismissed: setDismissedNotifs, seen: seenNotifs, markSeen: markNotifsSeen, unread: unread } = useNotificationState(notifications);
+  // The bell opens Notifications; pressing it again goes back to the page you were on.
+  const pageBeforeNotifications = useRef("Dashboard");
+  const toggleNotifications = () => {
+    if (activePage === "Notifications") {
+      setActivePage(pageBeforeNotifications.current || "Dashboard");
+    } else {
+      pageBeforeNotifications.current = activePage;
+      setActivePage("Notifications");
+    }
+  };
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
 
@@ -396,7 +406,7 @@ useEffect(() => {
                 {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
               </select>
             </label>
-            <NotificationBell count={unread.length} onClick={() => setActivePage("Notifications")} label={t("Notifications")} />
+            <NotificationBell count={unread.length} onClick={toggleNotifications} label={t("Notifications")} />
             <div className="top-profile">
               <UserAvatar profile={account.profile} initials={identity.initials} small />
               <div>
@@ -431,19 +441,22 @@ function FishInfoModal({ fish, latest, onClose, onCompute }) {
   const t = useT();
   return (
     <div className="modal-backdrop" onClick={onClose}>
-      <div className="modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="fish-info-title">
-        <div className="modal-head">
+      <div className="modal fish-info-modal" onClick={(e) => e.stopPropagation()} role="dialog" aria-modal="true" aria-labelledby="fish-info-title">
+        <div className="modal-head fish-info-head">
           <h3 id="fish-info-title">{fish.name || t("Fish Details")}</h3>
           <button className="modal-close" onClick={onClose} aria-label={t("Close")}>✕</button>
         </div>
-        {fish.has_photo ? <FishPicture fish={fish} /> : <div className="fish-picture fish-picture-empty">{t("No photo of this fish yet.")}</div>}
-        {fish.scientific_name && <p style={{ margin: "0 0 6px" }}><span className="muted-text">{t("Scientific name")}:</span> <em>{fish.scientific_name}</em></p>}
-        <p style={{ margin: "0 0 12px", color: "#475467" }}>{fish.description || t("No description yet.")}</p>
-        <div className="locked-field">
-          {t("Latest official price")}: <strong style={{ marginLeft: 6 }}>{latest ? `${peso(latest.price_per_kg)} / kg` : t("Not available")}</strong>
-          {latest && <small style={{ marginLeft: 8, color: "#64748b" }}>{latest.municipality_name} · {latest.recorded_date}</small>}
+        <div className="fish-info-body">
+          {fish.has_photo ? <FishPicture fish={fish} /> : <div className="fish-picture fish-picture-empty">{t("No photo of this fish yet.")}</div>}
+          {fish.scientific_name && <p className="fish-info-sci"><span className="muted-text">{t("Scientific name")}:</span> <em>{fish.scientific_name}</em></p>}
+          <p className="fish-info-desc">{fish.description || t("No description yet.")}</p>
+          <div className="fish-info-price">
+            <span>{t("Latest official price")}</span>
+            <strong>{latest ? <>{peso(latest.price_per_kg)}<small> / kg</small></> : t("Not available")}</strong>
+            {latest && <small>{latest.municipality_name} · {latest.recorded_date}</small>}
+          </div>
         </div>
-        <div className="button-row" style={{ marginTop: 16 }}>
+        <div className="button-row fish-info-actions">
           <button className="secondary-btn" onClick={onClose}>{t("Close")}</button>
           <button className="primary-btn" onClick={onCompute}>{t("Compute Price")}</button>
         </div>
