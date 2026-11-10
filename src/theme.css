@@ -1784,3 +1784,27 @@ table th {
 .fish-info-price strong small { font-size: 13px; color: #64748b; font-weight: 600; }
 .fish-info-price > small { grid-column: 1 / -1; color: #64748b; font-size: 12.5px; }
 .fish-info-actions { padding: 14px 22px 18px; margin: 0; border-top: 1px solid var(--line); background: #fff; }
+
+/* Phones (iPhone Safari): 100vh includes the part hidden behind the browser
+   bars, which pushed Logout off-screen. Use the visible height and let the
+   menu scroll to the very bottom. */
+.sidebar {
+  height: 100vh;
+  height: 100dvh;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+}
+.sidebar > * { flex-shrink: 0; }
+.sidebar-bottom { padding-bottom: calc(16px + env(safe-area-inset-bottom, 0px)); }
+
+/* Reviewer: everything the applicant entered */
+.applicant-details { margin: 4px 0 14px; }
+.applicant-details .profile-grid { margin-top: 6px; }
+.applicant-details .profile-field strong { overflow-wrap: anywhere; }
+
+/* Language choice on the login and register pages */
+.lang-picker { display: inline-flex; align-items: center; gap: 6px; border: 1px solid #d3dee8; border-radius: 999px; padding: 4px 10px; background: #fff; font-size: 13px; color: var(--navy-900); }
+.lang-picker select { border: 0; background: transparent; font: inherit; color: inherit; padding: 2px 2px; cursor: pointer; }
+.lang-picker select:focus { outline: none; }
+.auth-lang { align-self: flex-end; margin-bottom: 10px; }

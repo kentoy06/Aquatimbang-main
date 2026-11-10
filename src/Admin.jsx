@@ -383,6 +383,17 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
 }
 
 
+// "March 4, 1990 (36 years old)" for the reviewer.
+function formatBirthDate(iso) {
+  if (!iso) return "Not provided";
+  const born = new Date(`${iso}T00:00:00`);
+  const now = new Date();
+  let age = now.getFullYear() - born.getFullYear();
+  if (now < new Date(now.getFullYear(), born.getMonth(), born.getDate())) age -= 1;
+  return `${born.toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })} (${age} years old)`;
+}
+const capitalize = (text) => (text ? text.charAt(0).toUpperCase() + text.slice(1) : "");
+
 /* ================================================================
    ROOT ADMIN COMPONENT
    ================================================================ */
@@ -1870,6 +1881,14 @@ const submitReview = async () => {
                 <strong>{viewing.contact}</strong>
               </div>
               <div className="profile-field">
+                <span>Date of Birth</span>
+                <strong>{formatBirthDate(viewing.verification?.personal?.date_of_birth)}</strong>
+              </div>
+              <div className="profile-field">
+                <span>Sex</span>
+                <strong>{capitalize(viewing.verification?.personal?.sex) || "Not provided"}</strong>
+              </div>
+              <div className="profile-field">
                 <span>Municipality</span>
                 <strong>{viewing.municipality}</strong>
               </div>
@@ -1916,6 +1935,7 @@ const submitReview = async () => {
 
     <div className="mini-head">Reason, Stall and Fish Sold</div>
     <ApplicantSummary
+      showDetails={false}
       account={viewing}
       onOpenPhoto={() => openVerificationDocument(viewing.id, "profile-photo")}
       onOpenStall={() => openVerificationDocument(viewing.id, "vendor-stall")}
