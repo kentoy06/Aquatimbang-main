@@ -28,7 +28,53 @@ export const criteriaFor = (role) => APPROVAL_CRITERIA[role] || APPROVAL_CRITERI
 
 // Applicant photo and reason, then (for vendors) the stall photo and the
 // fish they sell as two separate blocks.
-export function ApplicantSummary({ account, onOpenPhoto, onOpenStall }) {
+// Everything the applicant typed on the registration form, for the reviewer.
+const LABELS = {
+  market_name: "Public market", stall_number: "Stall number", permit_number: "Vendor permit number",
+  department: "Department / Office", position: "Official position", employee_id: "Employee ID", official_email: "Work email",
+};
+function birthText(iso) {
+  if (!iso) return "";
+  const born = new Date(`${iso}T00:00:00`);
+  const now = new Date();
+  let age = now.getFullYear() - born.getFullYear();
+  if (now < new Date(now.getFullYear(), born.getMonth(), born.getDate())) age -= 1;
+  return `${born.toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })} (${age} years old)`;
+}
+export function ApplicantDetails({ account }) {
+  const verification = account.verification || {};
+  const personal = verification.personal || {};
+  const details = verification.details || {};
+  const fullName = account.name || [account.first_name, account.last_name].filter(Boolean).join(" ");
+  const registered = account.registered_at || account.registeredAt;
+  const rows = [
+    ["Full name", fullName],
+    ["Username", account.username],
+    ["Registered as", account.role],
+    ["Municipality", account.municipality],
+    ["Email", personal.email || account.email],
+    ["Contact number", personal.contact_number || account.contact_number || account.contact],
+    ["Date of birth", birthText(personal.date_of_birth)],
+    ["Sex", personal.sex ? personal.sex.charAt(0).toUpperCase() + personal.sex.slice(1) : ""],
+    ...Object.entries(details).map(([key, value]) => [LABELS[key] || key.replaceAll("_", " "), value]),
+    ["Registered on", registered ? new Date(registered).toLocaleString("en-PH", { dateStyle: "medium", timeStyle: "short" }) : account.registeredDate],
+  ];
+  return (
+    <div className="applicant-details">
+      <span className="applicant-label">Everything they entered</span>
+      <div className="profile-grid">
+        {rows.map(([label, value]) => (
+          <div className="profile-field" key={label}>
+            <span>{label}</span>
+            <strong className={value ? "" : "muted-text"}>{value || "Not provided"}</strong>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+export function ApplicantSummary({ account, onOpenPhoto, onOpenStall, showDetails = true }) {
   const verification = account.verification || {};
   const hasPhoto = Boolean(verification.documents?.profile_photo);
   const hasStall = Boolean(verification.documents?.stall_photo);
@@ -39,6 +85,7 @@ export function ApplicantSummary({ account, onOpenPhoto, onOpenStall }) {
 
   return (
     <>
+      {showDetails && <ApplicantDetails account={account} />}
       <div className="applicant-summary">
         <button
           type="button"

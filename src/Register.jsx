@@ -1,6 +1,8 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import PasswordInput from "./components/PasswordInput.jsx";
 import React, { useEffect, useState } from "react";
+import LanguagePicker from "./components/LanguagePicker.jsx";
+import { useT } from "./i18n/vendor.js";
 import { createPortal } from "react-dom";
 import "./App.css";
 import "./Login.css";
@@ -12,6 +14,7 @@ import { TakePhotoButton } from "./components/CameraCapture.jsx";
 const OTHER_MARKET = "__other__";
 
 function Register({ onBack, onGoToLogin }) {
+  const t = useT();
   const [role, setRole] = useState("Fish Vendor");
   const [form, setForm] = useState({
   // Basic account information
@@ -87,9 +90,7 @@ function Register({ onBack, onGoToLogin }) {
         }
 
       } catch (err) {
-        setError(
-          "Unable to load registration options. Please check your connection."
-        );
+        setError(t("Unable to load registration options. Please check your connection."));
       } finally {
         setLoadingOptions(false);
       }
@@ -140,23 +141,23 @@ function Register({ onBack, onGoToLogin }) {
     !form.dob ||
     !form.sex
   ) {
-    setError("Please fill in every field.");
+    setError(t("Please fill in every field."));
     return;
   }
 
   // Match Django's minimum password length.
   if (form.password.length < 8) {
-    setError("Password must be at least 8 characters.");
+    setError(t("Password must be at least 8 characters."));
     return;
   }
 
   if (form.password !== form.confirmPassword) {
-    setError("Passwords don't match.");
+    setError(t("Passwords don't match."));
     return;
   }
 
   if (!form.agree) {
-    setError("Please agree to the Privacy Policy and Terms to continue.");
+    setError(t("Please agree to the Privacy Policy and Terms to continue."));
     return;
   }
 
@@ -168,7 +169,7 @@ function Register({ onBack, onGoToLogin }) {
   );
 
   if (!selectedRole) {
-    setError("Selected role is unavailable. Please refresh the page.");
+    setError(t("Selected role is unavailable. Please refresh the page."));
     return;
   }
 
@@ -178,17 +179,17 @@ function Register({ onBack, onGoToLogin }) {
   );
 
   if (!selectedMunicipality) {
-    setError("Please select a valid municipality.");
+    setError(t("Please select a valid municipality."));
     return;
   }
 
   if (!form.profile_photo) {
-    setError("Please upload a clear photo of your face.");
+    setError(t("Please upload a clear photo of your face."));
     return;
   }
 
   if (role === "Fish Vendor" && form.registration_reason.trim().length < 15) {
-    setError("Please tell us why you are registering (at least 15 characters).");
+    setError(t("Please tell us why you are registering (at least 15 characters)."));
     return;
   }
 
@@ -197,22 +198,22 @@ function Register({ onBack, onGoToLogin }) {
 
   // Required verification details for the selected role.
   if (role === "Fish Vendor" && (!form.market_name.trim() || !form.stall_number.trim())) {
-    setError("Please enter your public market name and stall number.");
+    setError(t("Please enter your public market name and stall number."));
     return;
   }
 
   if (role === "Fish Vendor" && form.species_sold.length === 0) {
-    setError("Please select at least one fish species that you sell.");
+    setError(t("Please select at least one fish species that you sell."));
     return;
   }
 
   if (role === "Fish Vendor" && !form.stall_photo) {
-    setError("Please upload a photo of your market stall.");
+    setError(t("Please upload a photo of your market stall."));
     return;
   }
 
   if (role === "LGU Officer" && (!form.department.trim() || !form.position.trim() || !form.authorization_document)) {
-    setError("Please enter your department, position, and upload your proof of employment.");
+    setError(t("Please enter your department, position, and upload your proof of employment."));
     return;
   }
 
@@ -290,9 +291,7 @@ if (role === "LGU Officer") {
     setSubmitted(true);
 
   } catch (err) {
-    setError(
-      "Unable to connect to the server. Please try again."
-      );
+    setError(t("Unable to connect to the server. Please try again."));
     }
   };
 
@@ -301,15 +300,16 @@ if (role === "LGU Officer") {
       <div className="login-page">
         <div className="login-card register-confirm-card">
           <div className="register-confirm-icon">✔</div>
-          <h3>Registration submitted</h3>
+          <h3>{t("Registration submitted")}</h3>
           <p>
-            Thanks, {form.first_name.trim()}! Your {role} account is pending
-            approval from {role === "Fish Vendor" ? "an LGU Officer of your municipality" : "an Administrator"}.
-            You'll be able to log in once it's reviewed and approved.
+            {t(role === "Fish Vendor"
+              ? "Thanks, {name}! Your Fish Vendor account is pending approval from an LGU Officer of your municipality. You'll be able to log in once it's reviewed and approved."
+              : "Thanks, {name}! Your LGU Officer account is pending approval from an Administrator. You'll be able to log in once it's reviewed and approved.",
+            { name: form.first_name.trim() })}
           </p>
           <div className="button-row" style={{ marginTop: 22 }}>
-            <button className="secondary-btn" onClick={onBack}>← Back to Home</button>
-            <button className="primary-btn" onClick={onGoToLogin}>Go to Login</button>
+            <button className="secondary-btn" onClick={onBack}>{t("← Back to Home")}</button>
+            <button className="primary-btn" onClick={onGoToLogin}>{t("Go to Login")}</button>
           </div>
         </div>
       </div>
@@ -322,28 +322,26 @@ if (role === "LGU Officer") {
 
         {/* LEFT PANEL */}
         <div className="login-left">
-          <button className="login-back-btn" onClick={onBack}>← Back to Home</button>
+          <button className="login-back-btn" onClick={onBack}>{t("← Back to Home")}</button>
 
           <div className="login-brand login-brand-spaced">
             <div className="brand-icon brand-icon-logo"><BrandMark /></div>
             <div>
               <h2>AquaTimbang</h2>
-              <span>Fish Price Transparency</span>
+              <span>{t("Fish Price Transparency")}</span>
             </div>
           </div>
 
-          <h1>Join as a<br />registered user.</h1>
+          <h1>{t("Join as a")}<br />{t("registered user.")}</h1>
 
           <p>
-            Registering lets you access AquaTimbang as a Fish Vendor or LGU
-            Officer. New accounts are monitored and reviewed by an
-            Administrator before they're activated.
+            {t("Registering lets you access AquaTimbang as a Fish Vendor or LGU Officer. New accounts are monitored and reviewed by an Administrator before they're activated.")}
           </p>
 
           <div className="login-points">
-            <div className="login-point"><span>✔</span> Free to register</div>
-            <div className="login-point"><span>✔</span> Reviewed by an Administrator</div>
-            <div className="login-point"><span>✔</span> Track your own activity once approved</div>
+            <div className="login-point"><span>✔</span>{" "}{t("Free to register")}</div>
+            <div className="login-point"><span>✔</span>{" "}{t("Reviewed by an Administrator")}</div>
+            <div className="login-point"><span>✔</span>{" "}{t("Track your own activity once approved")}</div>
           </div>
 
           <div className="login-fish">🐟</div>
@@ -351,42 +349,43 @@ if (role === "LGU Officer") {
 
         {/* RIGHT PANEL */}
         <div className="login-right">
+          <LanguagePicker className="auth-lang" />
 
           <div className="auth-tabs">
-            <button className="auth-tab" onClick={onGoToLogin}>Login</button>
-            <button className="auth-tab auth-tab-active">Register</button>
+            <button className="auth-tab" onClick={onGoToLogin}>{t("Login")}</button>
+            <button className="auth-tab auth-tab-active">{t("Register")}</button>
           </div>
 
           <div className="login-head">
-            <h3>Create your account</h3>
-            <p>Select your role and fill in your details below.</p>
+            <h3>{t("Create your account")}</h3>
+            <p>{t("Select your role and fill in your details below.")}</p>
           </div>
 
           <div className="admin-watch-note">
             <span>🛈</span>
-            <p>Every registration is reviewed by an Administrator before your account is activated.</p>
+            <p>{t("Every registration is reviewed by an Administrator before your account is activated.")}</p>
           </div>
 
-          <div className="role-toggle-label">I am registering as:</div>
+          <div className="role-toggle-label">{t("I am registering as:")}</div>
           <div className="role-toggle">
             <button
               type="button"
               className={`role-toggle-btn ${role === "Fish Vendor" ? "role-toggle-btn-active" : ""}`}
               onClick={() => setRole("Fish Vendor")}
             >
-              🐟 Fish Vendor
+              {t("🐟 Fish Vendor")}
             </button>
             <button
               type="button"
               className={`role-toggle-btn ${role === "LGU Officer" ? "role-toggle-btn-active" : ""}`}
               onClick={() => setRole("LGU Officer")}
             >
-              ✔ LGU Officer
+              {t("✔ LGU Officer")}
             </button>
           </div>
 
           <div className="registering-as-note">
-            You are registering as a <strong>{role}</strong>.
+            {t("You are registering as a")}{" "}<strong>{t(role)}</strong>.
             {role === "LGU Officer" && (
               <> LGU Officer requests require identity verification by the
               Administrator and may take longer to approve.</>
@@ -397,31 +396,31 @@ if (role === "LGU Officer") {
 
             {/* PERSONAL INFORMATION */}
             <section className="register-section">
-              <h4 className="register-section-title">Personal Information</h4>
+              <h4 className="register-section-title">{t("Personal Information")}</h4>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="reg-first-name">First Name</label>
-                  <input id="reg-first-name" value={form.first_name} placeholder="e.g. Juan" autoComplete="given-name" onChange={(e) => update("first_name", e.target.value)} />
+                  <label htmlFor="reg-first-name">{t("First Name")}</label>
+                  <input id="reg-first-name" value={form.first_name} placeholder={t("e.g. Juan")} autoComplete="given-name" onChange={(e) => update("first_name", e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="reg-last-name">Last Name</label>
-                  <input id="reg-last-name" value={form.last_name} placeholder="e.g. Dela Cruz" autoComplete="family-name" onChange={(e) => update("last_name", e.target.value)} />
+                  <label htmlFor="reg-last-name">{t("Last Name")}</label>
+                  <input id="reg-last-name" value={form.last_name} placeholder={t("e.g. Dela Cruz")} autoComplete="family-name" onChange={(e) => update("last_name", e.target.value)} />
                 </div>
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="reg-dob">Date of Birth</label>
+                  <label htmlFor="reg-dob">{t("Date of Birth")}</label>
                   <input id="reg-dob" type="date" value={form.dob} autoComplete="bday" onChange={(e) => update("dob", e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="reg-sex">Sex</label>
+                  <label htmlFor="reg-sex">{t("Sex")}</label>
                   <select id="reg-sex" value={form.sex} onChange={(e) => update("sex", e.target.value)}>
-                    <option value="">Select</option>
-                    <option>Male</option>
-                    <option>Female</option>
-                    <option>Prefer not to say</option>
+                    <option value="">{t("Select")}</option>
+                    <option>{t("Male")}</option>
+                    <option>{t("Female")}</option>
+                    <option>{t("Prefer not to say")}</option>
                   </select>
                 </div>
               </div>
@@ -429,42 +428,42 @@ if (role === "LGU Officer") {
 
             {/* ACCOUNT DETAILS */}
             <section className="register-section">
-              <h4 className="register-section-title">Account Details</h4>
+              <h4 className="register-section-title">{t("Account Details")}</h4>
 
               <div className="form-group">
-                <label htmlFor="reg-username">Username</label>
-                <input id="reg-username" value={form.username} placeholder="Choose a username" autoComplete="username" onChange={(e) => update("username", e.target.value)} />
+                <label htmlFor="reg-username">{t("Username")}</label>
+                <input id="reg-username" value={form.username} placeholder={t("Choose a username")} autoComplete="username" onChange={(e) => update("username", e.target.value)} />
               </div>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="reg-password">Password</label>
-                  <PasswordInput id="reg-password" value={form.password} placeholder="At least 8 characters" autoComplete="new-password" onChange={(e) => update("password", e.target.value)} />
+                  <label htmlFor="reg-password">{t("Password")}</label>
+                  <PasswordInput id="reg-password" value={form.password} placeholder={t("At least 8 characters")} autoComplete="new-password" onChange={(e) => update("password", e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="reg-confirm">Confirm Password</label>
-                  <PasswordInput id="reg-confirm" value={form.confirmPassword} placeholder="Re-enter your password" autoComplete="new-password" onChange={(e) => update("confirmPassword", e.target.value)} />
+                  <label htmlFor="reg-confirm">{t("Confirm Password")}</label>
+                  <PasswordInput id="reg-confirm" value={form.confirmPassword} placeholder={t("Re-enter your password")} autoComplete="new-password" onChange={(e) => update("confirmPassword", e.target.value)} />
                 </div>
               </div>
             </section>
 
             {/* CONTACT & LOCATION */}
             <section className="register-section">
-              <h4 className="register-section-title">Contact &amp; Location</h4>
+              <h4 className="register-section-title">{t("Contact & Location")}</h4>
 
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="reg-email">Email Address</label>
-                  <input id="reg-email" type="email" value={form.email} placeholder="you@email.com" autoComplete="email" onChange={(e) => update("email", e.target.value)} />
+                  <label htmlFor="reg-email">{t("Email Address")}</label>
+                  <input id="reg-email" type="email" value={form.email} placeholder={t("you@email.com")} autoComplete="email" onChange={(e) => update("email", e.target.value)} />
                 </div>
                 <div className="form-group">
-                  <label htmlFor="reg-contact">Contact Number</label>
-                  <input id="reg-contact" type="tel" value={form.contact} placeholder="e.g. 0917 555 0198" autoComplete="tel" onChange={(e) => update("contact", e.target.value)} />
+                  <label htmlFor="reg-contact">{t("Contact Number")}</label>
+                  <input id="reg-contact" type="tel" value={form.contact} placeholder={t("e.g. 0917 555 0198")} autoComplete="tel" onChange={(e) => update("contact", e.target.value)} />
                 </div>
               </div>
 
               <div className="form-group">
-                <label htmlFor="reg-municipality">Municipality</label>
+                <label htmlFor="reg-municipality">{t("Municipality")}</label>
                 <select
                   id="reg-municipality"
                   value={form.municipality}
@@ -477,9 +476,9 @@ if (role === "LGU Officer") {
                   disabled={loadingOptions || municipalities.length === 0}
                 >
                   {loadingOptions ? (
-                    <option value="">Loading municipalities...</option>
+                    <option value="">{t("Loading municipalities...")}</option>
                   ) : municipalities.length === 0 ? (
-                    <option value="">No municipalities available</option>
+                    <option value="">{t("No municipalities available")}</option>
                   ) : (
                     municipalities.map((municipality) => (
                       <option key={municipality.id} value={String(municipality.id)}>
@@ -493,7 +492,7 @@ if (role === "LGU Officer") {
 
             {/* PHOTO & PURPOSE */}
             <section className="register-section">
-              <h4 className="register-section-title">Photo &amp; Purpose</h4>
+              <h4 className="register-section-title">{t("Photo & Purpose")}</h4>
 
               <FileField
                 id="reg-profile-photo"
@@ -508,25 +507,25 @@ if (role === "LGU Officer") {
               />
 
               {role === "Fish Vendor" && <div className="form-group">
-                <label htmlFor="reg-reason">Why are you registering?</label>
+                <label htmlFor="reg-reason">{t("Why are you registering?")}</label>
                 <textarea
                   id="reg-reason"
                   rows={3}
                   maxLength={500}
                   value={form.registration_reason}
-                  placeholder="e.g. I sell bangus and tilapia at Carbon Market and want to check the official prices before selling."
+                  placeholder={t("e.g. I sell bangus and tilapia at Carbon Market and want to check the official prices before selling.")}
                   onChange={(e) => update("registration_reason", e.target.value)}
                 />
-                <small className="field-help">{form.registration_reason.trim().length}/500 · The LGU officer reads this before approving your account.</small>
+                <small className="field-help">{form.registration_reason.trim().length}/500 · {t("The LGU officer reads this before approving your account.")}</small>
               </div>}
             </section>
 
             {/* FISH YOU SELL (vendors only) */}
             {role === "Fish Vendor" && (
               <section className="register-section">
-                <h4 className="register-section-title">Fish You Sell</h4>
+                <h4 className="register-section-title">{t("Fish You Sell")}</h4>
                 <p className="register-section-desc">
-                  Choose every fish you usually sell. Their prices will appear first on your dashboard.
+                  {t("Choose every fish you usually sell. Their prices will appear first on your dashboard.")}
                 </p>
                 {fishSpecies.length === 0 ? (
                   <small className="field-help">{loadingOptions ? "Loading fish species…" : "No fish species are registered yet."}</small>
@@ -539,14 +538,14 @@ if (role === "LGU Officer") {
             {/* FISH VENDOR VERIFICATION */}
             {role === "Fish Vendor" && (
               <section className="register-section register-section-verify">
-                <h4 className="register-section-title">Fish Vendor Verification</h4>
+                <h4 className="register-section-title">{t("Fish Vendor Verification")}</h4>
                 <p className="register-section-desc">
-                  Tell us where you sell and show your stall so a reviewer can confirm you are a fish vendor.
+                  {t("Tell us where you sell and show your stall so a reviewer can confirm you are a fish vendor.")}
                 </p>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="reg-market">Public Market Name</label>
+                    <label htmlFor="reg-market">{t("Public Market Name")}</label>
                     {marketsHere.length > 0 && (
                       <select
                         id="reg-market"
@@ -556,32 +555,32 @@ if (role === "LGU Officer") {
                           update("market_name", e.target.value === OTHER_MARKET ? "" : e.target.value);
                         }}
                       >
-                        <option value="">Select your market</option>
+                        <option value="">{t("Select your market")}</option>
                         {marketsHere.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
-                        <option value={OTHER_MARKET}>Other (not listed)</option>
+                        <option value={OTHER_MARKET}>{t("Other (not listed)")}</option>
                       </select>
                     )}
                     {(marketsHere.length === 0 || marketChoice === OTHER_MARKET) && (
                       <input
                         id={marketsHere.length ? "reg-market-other" : "reg-market"}
                         type="text"
-                        placeholder="e.g. Carbon Market"
+                        placeholder={t("e.g. Carbon Market")}
                         value={form.market_name}
                         onChange={(e) => update("market_name", e.target.value)}
                         style={marketsHere.length ? { marginTop: 8 } : undefined}
-                        aria-label="Market name"
+                        aria-label={t("Market name")}
                       />
                     )}
                   </div>
                   <div className="form-group">
-                    <label htmlFor="reg-stall">Stall Number</label>
-                    <input id="reg-stall" type="text" placeholder="e.g. A-15" value={form.stall_number} onChange={(e) => update("stall_number", e.target.value)} />
+                    <label htmlFor="reg-stall">{t("Stall Number")}</label>
+                    <input id="reg-stall" type="text" placeholder={t("e.g. A-15")} value={form.stall_number} onChange={(e) => update("stall_number", e.target.value)} />
                   </div>
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="reg-permit-number">Vendor Permit Number <span className="optional">(optional)</span></label>
-                  <input id="reg-permit-number" type="text" placeholder="Enter your vendor permit number" value={form.permit_number} onChange={(e) => update("permit_number", e.target.value)} />
+                  <label htmlFor="reg-permit-number">{t("Vendor Permit Number")}{" "}<span className="optional">{t("(optional)")}</span></label>
+                  <input id="reg-permit-number" type="text" placeholder={t("Enter your vendor permit number")} value={form.permit_number} onChange={(e) => update("permit_number", e.target.value)} />
                 </div>
 
                 <FileField
@@ -612,31 +611,30 @@ if (role === "LGU Officer") {
             {/* LGU OFFICER VERIFICATION */}
             {role === "LGU Officer" && (
               <section className="register-section register-section-verify">
-                <h4 className="register-section-title">LGU Officer Verification</h4>
+                <h4 className="register-section-title">{t("LGU Officer Verification")}</h4>
                 <p className="register-section-desc">
-                  Provide your official employment details. Your account stays pending until an
-                  Administrator has reviewed your credentials.
+                  {t("Provide your official employment details. Your account stays pending until an Administrator has reviewed your credentials.")}
                 </p>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="reg-department">Department / Office</label>
-                    <input id="reg-department" type="text" placeholder="e.g. Agriculture Office" value={form.department} onChange={(e) => update("department", e.target.value)} />
+                    <label htmlFor="reg-department">{t("Department / Office")}</label>
+                    <input id="reg-department" type="text" placeholder={t("e.g. Agriculture Office")} value={form.department} onChange={(e) => update("department", e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="reg-position">Official Position</label>
-                    <input id="reg-position" type="text" placeholder="e.g. Fisheries Officer" value={form.position} onChange={(e) => update("position", e.target.value)} />
+                    <label htmlFor="reg-position">{t("Official Position")}</label>
+                    <input id="reg-position" type="text" placeholder={t("e.g. Fisheries Officer")} value={form.position} onChange={(e) => update("position", e.target.value)} />
                   </div>
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="reg-official-email">Work Email <span className="optional">(optional)</span></label>
-                    <input id="reg-official-email" type="email" placeholder="name@lgu.gov.ph" value={form.official_email} onChange={(e) => update("official_email", e.target.value)} />
+                    <label htmlFor="reg-official-email">{t("Work Email")}{" "}<span className="optional">{t("(optional)")}</span></label>
+                    <input id="reg-official-email" type="email" placeholder={t("name@lgu.gov.ph")} value={form.official_email} onChange={(e) => update("official_email", e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="reg-employee-id">Employee ID <span className="optional">(optional)</span></label>
-                    <input id="reg-employee-id" type="text" placeholder="e.g. 2024-0153" value={form.employee_id} onChange={(e) => update("employee_id", e.target.value)} />
+                    <label htmlFor="reg-employee-id">{t("Employee ID")}{" "}<span className="optional">{t("(optional)")}</span></label>
+                    <input id="reg-employee-id" type="text" placeholder={t("e.g. 2024-0153")} value={form.employee_id} onChange={(e) => update("employee_id", e.target.value)} />
                   </div>
                 </div>
 
@@ -656,15 +654,15 @@ if (role === "LGU Officer") {
 
             <label className="consent-row">
               <input type="checkbox" checked={form.agree} onChange={(e) => update("agree", e.target.checked)} />
-              <span>I agree to AquaTimbang's Privacy Policy and Terms of Use, and consent to my data being processed for account verification.</span>
+              <span>{t("I agree to AquaTimbang's Privacy Policy and Terms of Use, and consent to my data being processed for account verification.")}</span>
             </label>
 
-            <button type="submit" className="primary-btn full-btn">Create Account</button>
+            <button type="submit" className="primary-btn full-btn">{t("Create Account")}</button>
           </form>
 
           <div className="login-hint login-hint-big">
-            Already have an account?{" "}
-            <button className="login-inline-link login-inline-link-big" onClick={onGoToLogin}>Log in instead</button>
+            {t("Already have an account?")}{" "}
+            <button className="login-inline-link login-inline-link-big" onClick={onGoToLogin}>{t("Log in instead")}</button>
           </div>
         </div>
 
@@ -676,6 +674,7 @@ if (role === "LGU Officer") {
 // File picker styled as an upload box that shows the chosen file name,
 // with View (check it is the right file) and ✕ (remove it) once chosen.
 function FileField({ id, label, hint, accept, file, onChange, error = "", optional = false, camera = "", cameraTitle }) {
+  const t = useT();
   const [previewUrl, setPreviewUrl] = useState("");
   const [inputKey, setInputKey] = useState(0);
   useEffect(() => () => { if (previewUrl) URL.revokeObjectURL(previewUrl); }, [previewUrl]);
@@ -684,28 +683,28 @@ function FileField({ id, label, hint, accept, file, onChange, error = "", option
   return (
     <div className="form-group">
       <span className="file-field-label">
-        {label} {optional && <span className="optional">(optional)</span>}
+        {t(label)} {optional && <span className="optional">{t("(optional)")}</span>}
       </span>
       <div className="file-field-row">
         <label htmlFor={id} className={`file-field ${file ? "file-field-filled" : ""}`}>
           <span className="file-field-icon">{file ? "✓" : "⇪"}</span>
           <span className="file-field-text">
-            <strong>{file ? file.name : "Click to upload a file"}</strong>
-            <small>{file ? "Click to choose a different file" : hint}</small>
+            <strong>{file ? file.name : t("Click to upload a file")}</strong>
+            <small>{file ? t("Click to choose a different file") : t(hint)}</small>
           </span>
           <input key={inputKey} id={id} type="file" accept={accept} onChange={(e) => onChange(e.target.files?.[0] || null)} />
         </label>
         {file && (
           <div className="file-field-actions">
-            <button type="button" className="file-field-view" onClick={() => setPreviewUrl(URL.createObjectURL(file))}>View</button>
-            <button type="button" className="file-field-remove" onClick={remove} aria-label={`Remove ${file.name}`} title="Remove this file">✕</button>
+            <button type="button" className="file-field-view" onClick={() => setPreviewUrl(URL.createObjectURL(file))}>{t("View")}</button>
+            <button type="button" className="file-field-remove" onClick={remove} aria-label={`Remove ${file.name}`} title={t("Remove this file")}>✕</button>
           </div>
         )}
       </div>
       {camera && (
         <div className="file-field-camera">
-          <span>or</span>
-          <TakePhotoButton onFile={onChange} facing={camera} cameraTitle={cameraTitle} />
+          <span>{t("or")}</span>
+          <TakePhotoButton onFile={onChange} facing={camera} cameraTitle={cameraTitle && t(cameraTitle)} />
         </div>
       )}
       {error && <small className="field-error" role="alert">{error}</small>}
@@ -714,7 +713,7 @@ function FileField({ id, label, hint, accept, file, onChange, error = "", option
           <div className="doc-preview" role="dialog" aria-modal="true" aria-label={file?.name || label}>
             <div className="doc-preview-head">
               <strong>{file?.name || label}</strong>
-              <button type="button" className="secondary-btn" onClick={() => setPreviewUrl("")}>Close</button>
+              <button type="button" className="secondary-btn" onClick={() => setPreviewUrl("")}>{t("Close")}</button>
             </div>
             {isImage ? <img src={previewUrl} alt={label} /> : <iframe src={previewUrl} title={label} />}
           </div>

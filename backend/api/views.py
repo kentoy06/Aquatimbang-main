@@ -2146,6 +2146,13 @@ def get_account_verification(profile):
         "documents": {"profile_photo": bool(profile.profile_photo)},
         "registration_reason": profile.registration_reason,
         "species_sold": [],
+        # Personal details from the registration form, for the reviewer.
+        "personal": {
+            "date_of_birth": profile.date_of_birth.isoformat() if profile.date_of_birth else None,
+            "sex": profile.sex,
+            "contact_number": profile.contact_number,
+            "email": profile.user.email,
+        },
     }
     if profile.role.name == "Fish Vendor":
         vendor = FishVendorVerification.objects.filter(

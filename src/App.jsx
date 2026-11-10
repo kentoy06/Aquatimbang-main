@@ -6,6 +6,8 @@ import ChooseNewPassword from "./components/ChooseNewPassword.jsx";
 
 import Landing from "./Landing.jsx";
 import Register from "./Register.jsx";
+import LanguagePicker from "./components/LanguagePicker.jsx";
+import { LanguageContext, LanguageSetterContext, useLanguageSetting, useT } from "./i18n/vendor.js";
 // Dashboard styles stay global (as before the dashboards were split into
 // separate downloads) because pages share some of their classes.
 import "./Admin.css";
@@ -33,6 +35,13 @@ function readResetLink() {
 
 
 function App() {
+  // Language for the login and register pages (also used by the vendor dashboard).
+  const [language, setLanguage] = useLanguageSetting();
+  const withLanguage = (node) => (
+    <LanguageSetterContext.Provider value={{ language, setLanguage }}>
+      <LanguageContext.Provider value={language}>{node}</LanguageContext.Provider>
+    </LanguageSetterContext.Provider>
+  );
   // Controls which page/dashboard is currently displayed.
   
 // Restore the correct dashboard when refreshing the browser.
@@ -148,7 +157,7 @@ function App() {
 
   // Display registration page.
   if (page === "register") {
-    return (
+    return withLanguage(
       <Register
         onBack={goLanding}
         onGoToLogin={goLogin}
@@ -158,7 +167,7 @@ function App() {
 
   // Display login page.
   if (page === "login") {
-    return (
+    return withLanguage(
       <Login
         onLogin={(next) => { setLoginNotice(""); setPage(next); }}
         notice={loginNotice}
@@ -183,6 +192,7 @@ function App() {
 ========================= */
 
 function Login({ onLogin, onBack, onRegister, notice = "" }) {
+  const t = useT();
   // Login form values.
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
@@ -206,7 +216,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
 
     // Make sure both fields were filled in.
     if (!username.trim() || !password.trim()) {
-      setError("Please enter your username and password.");
+      setError(t("Please enter your username and password."));
       return;
     }
 
@@ -249,13 +259,13 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
 
       // Make sure Django actually returned a token.
       if (!data.token) {
-        setError("The server did not return an authentication token.");
+        setError(t("The server did not return an authentication token."));
         return;
       }
 
       // Make sure user information exists.
       if (!data.user) {
-        setError("The server did not return user information.");
+        setError(t("The server did not return user information."));
         return;
       }
 
@@ -295,9 +305,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
       // This normally means Django is offline or unreachable.
       console.error("Login error:", error);
 
-      setError(
-        "Unable to connect to the AquaTimbang server."
-      );
+      setError(t("Unable to connect to the AquaTimbang server."));
     }
   };
 
@@ -338,7 +346,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
             className="login-back-btn"
             onClick={onBack}
           >
-            ← Back to Home
+            {t("← Back to Home")}
           </button>
 
           <div className="login-brand login-brand-spaced">
@@ -349,38 +357,36 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
 
             <div>
               <h2>AquaTimbang</h2>
-              <span>Fish Price Transparency</span>
+              <span>{t("Fish Price Transparency")}</span>
             </div>
 
           </div>
 
           <h1>
-            Fair prices,
+            {t("Fair prices,")}
             <br />
-            clearly shown.
+            {t("clearly shown.")}
           </h1>
 
           <p>
-            AquaTimbang publishes LGU-validated fish prices
-            so vendors and buyers work from the same
-            official rates.
+            {t("AquaTimbang publishes LGU-validated fish prices so vendors and buyers work from the same official rates.")}
           </p>
 
           <div className="login-points">
 
             <div className="login-point">
               <span>✔</span>
-              {" "}Prices validated by LGU officers
+              {" "}{t("Prices validated by LGU officers")}
             </div>
 
             <div className="login-point">
               <span>✔</span>
-              {" "}Instant fair price computation
+              {" "}{t("Instant fair price computation")}
             </div>
 
             <div className="login-point">
               <span>✔</span>
-              {" "}Short-term price forecasting
+              {" "}{t("Short-term price forecasting")}
             </div>
 
           </div>
@@ -397,20 +403,21 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
         ========================= */}
 
         <div className="login-right">
+          <LanguagePicker className="auth-lang" />
 
           <div className="auth-tabs">
 
             <button
               className="auth-tab auth-tab-active"
             >
-              Login
+              {t("Login")}
             </button>
 
             <button
               className="auth-tab"
               onClick={onRegister}
             >
-              Register
+              {t("Register")}
             </button>
 
           </div>
@@ -435,11 +442,11 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
               <div className="login-head">
 
                 <h3>
-                  Sign in to your account
+                  {t("Sign in to your account")}
                 </h3>
 
                 <p>
-                  Enter your username and password.
+                  {t("Enter your username and password.")}
                 </p>
 
               </div>
@@ -457,12 +464,12 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
                 <div className="form-group">
 
                   <label>
-                    Username
+                    {t("Username")}
                   </label>
 
                   <input
                     type="text"
-                    placeholder="Enter your username"
+                    placeholder={t("Enter your username")}
                     value={username}
                     onChange={(e) =>
                       setUsername(e.target.value)
@@ -477,13 +484,13 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
                 <div className="form-group">
 
                   <label>
-                    Password
+                    {t("Password")}
                   </label>
 
                   <div className="password-field">
                     <input
                       type={showPassword ? "text" : "password"}
-                      placeholder="Enter your password"
+                      placeholder={t("Enter your password")}
                       value={password}
                       onChange={(e) =>
                         setPassword(e.target.value)
@@ -527,7 +534,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
                       setForgotMode(true);
                     }}
                   >
-                    Forgot password?
+                    {t("Forgot password?")}
                   </button>
 
                 </div>
@@ -546,7 +553,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
                   type="submit"
                   className="primary-btn full-btn"
                 >
-                  Sign In
+                  {t("Sign In")}
                 </button>
 
               </form>
@@ -561,7 +568,7 @@ function Login({ onLogin, onBack, onRegister, notice = "" }) {
                   className="login-inline-link login-inline-link-big"
                   onClick={onRegister}
                 >
-                  Register instead
+                  {t("Register instead")}
                 </button>
 
               </div>
