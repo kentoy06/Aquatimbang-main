@@ -5,7 +5,7 @@ import { LearnedOutliers } from "./components/PriceInsights.jsx";
 import MarketInsights from "./components/MarketInsights.jsx";
 import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
-import React, { useState, useEffect, lazy, Suspense } from "react";
+import React, { useRef, useState, useEffect, lazy, Suspense } from "react";
 import NotificationList, { useNotificationState } from "./components/NotificationList.jsx";
 import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
@@ -639,6 +639,16 @@ useEffect(() => {
   const notifications = buildNotifications(users, priceRecords, species, municipalities, suggestions);
   // Seen / dismissed notifications are remembered per user on this device.
   const { dismissed: dismissedNotifs, setDismissed: setDismissedNotifs, seen: seenNotifs, markSeen: markNotifsSeen, unread: unreadNotifs } = useNotificationState(notifications);
+  // The bell opens Notifications; pressing it again goes back to the page you were on.
+  const pageBeforeNotifications = useRef("Dashboard");
+  const toggleNotifications = () => {
+    if (activePage === "Notifications") {
+      setActivePage(pageBeforeNotifications.current || "Dashboard");
+    } else {
+      pageBeforeNotifications.current = activePage;
+      setActivePage("Notifications");
+    }
+  };
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
 
@@ -820,7 +830,7 @@ useEffect(() => {
           </div>
 
           <div className="topbar-right">
-            <NotificationBell count={unreadNotifs.length} onClick={() => setActivePage("Notifications")} />
+            <NotificationBell count={unreadNotifs.length} onClick={toggleNotifications} />
             <div className="top-profile">
               <UserAvatar profile={account.profile} initials={adminInitials} small />
               <div>

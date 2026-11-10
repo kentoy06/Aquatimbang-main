@@ -1767,3 +1767,20 @@ table th {
 .file-field-view:hover { background: #ecf7f8; }
 .file-field-remove { border: 1px solid #f3b4ae; color: #b42318; }
 .file-field-remove:hover { background: #fef3f2; }
+
+/* Vendor: fish details pop-up. Header and buttons stay put; only the middle
+   scrolls, so the rounded corners are never cut by a scrollbar. */
+.modal.fish-info-modal { max-width: 480px; padding: 0; overflow: hidden; display: flex; flex-direction: column; max-height: 90vh; border-radius: 20px; }
+.fish-info-head { padding: 18px 22px 10px; margin: 0; }
+.fish-info-head h3 { margin: 0; }
+.fish-info-body { padding: 0 22px; overflow-y: auto; flex: 1; min-height: 0; }
+.fish-info-body .fish-picture { margin: 4px 0 12px; background: #eef6f7; }
+.fish-info-body .fish-picture img { max-height: 260px; width: 100%; object-fit: contain; }
+.fish-info-sci { margin: 0 0 4px; font-size: 13.5px; }
+.fish-info-desc { margin: 0 0 12px; color: #475467; font-size: 14px; line-height: 1.5; }
+.fish-info-price { display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 2px 12px; padding: 12px 14px; border: 1px solid var(--line); border-radius: 14px; background: #f8fbfd; margin-bottom: 4px; }
+.fish-info-price span { font-size: 13px; font-weight: 700; color: #5b7389; }
+.fish-info-price strong { font-size: 20px; color: var(--navy-900); white-space: nowrap; }
+.fish-info-price strong small { font-size: 13px; color: #64748b; font-weight: 600; }
+.fish-info-price > small { grid-column: 1 / -1; color: #64748b; font-size: 12.5px; }
+.fish-info-actions { padding: 14px 22px 18px; margin: 0; border-top: 1px solid var(--line); background: #fff; }
