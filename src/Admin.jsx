@@ -1362,7 +1362,7 @@ function ProfilePhoto({ account, fallback }) {
   const photo = useProtectedImage(hasPhoto ? `/auth/users/${account.id}/verification/profile-photo/` : "");
   return (
     <div className="table-avatar profile-avatar" style={photo ? { padding: 0, overflow: "hidden" } : undefined}>
-      {photo ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "contain", background: "#ffffff" }} /> : fallback}
+      {photo ? <img src={photo} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} /> : fallback}
     </div>
   );
 }
