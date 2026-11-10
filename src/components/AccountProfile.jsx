@@ -284,10 +284,29 @@ function RegistrationDetails({ profile }) {
   const documents = verification.documents || {};
   const isVendor = profile.role === "Fish Vendor";
   const isOfficer = profile.role === "LGU Officer";
-  const doc = (label, sent) => (
+  const [preview, setPreview] = useState(null); // { label, url, isImage }
+  const [previewError, setPreviewError] = useState("");
+  useEffect(() => () => { if (preview?.url) URL.revokeObjectURL(preview.url); }, [preview]);
+  const openDoc = async (label, type) => {
+    setPreviewError("");
+    try {
+      const r = await fetch(apiUrl(`/auth/users/${profile.id}/verification/${type}/`), { headers: authHeaders() });
+      if (!r.ok) throw new Error("Could not open this file.");
+      const blob = await r.blob();
+      setPreview({ label, url: URL.createObjectURL(blob), isImage: blob.type.startsWith("image/") });
+    } catch (e) {
+      setPreviewError(e.message);
+    }
+  };
+  const doc = (label, sent, type) => (
     <div className="profile-field">
       <span>{label}</span>
-      <strong className={sent ? "reg-doc-ok" : "reg-doc-missing"}>{sent ? "✓ Submitted" : "Not submitted"}</strong>
+      <strong className={sent ? "reg-doc-ok" : "reg-doc-missing"}>
+        {sent ? "✓ Submitted" : "Not submitted"}
+        {sent && type && (
+          <button type="button" className="reg-doc-view" onClick={() => openDoc(label, type)}>View</button>
+        )}
+      </strong>
     </div>
   );
   const field = (label, value) => (
@@ -313,8 +332,8 @@ function RegistrationDetails({ profile }) {
             {field("Public market", details.market_name)}
             {field("Stall number", details.stall_number)}
             {field("Vendor permit number", details.permit_number)}
-            {doc("Permit or certification", documents.permit)}
-            {doc("Stall photo", documents.stall_photo)}
+            {doc("Permit or certification", documents.permit, "vendor-permit")}
+            {doc("Stall photo", documents.stall_photo, "vendor-stall")}
           </>
         )}
         {isOfficer && (
@@ -323,10 +342,10 @@ function RegistrationDetails({ profile }) {
             {field("Official position", details.position)}
             {field("Employee ID", details.employee_id)}
             {field("Work email", details.official_email)}
-            {doc("Authorization letter", documents.authorization)}
+            {doc("Authorization letter", documents.authorization, "lgu-authorization")}
           </>
         )}
-        {doc("Face photo", documents.profile_photo)}
+        {doc("Face photo", documents.profile_photo, "profile-photo")}
       </div>
       {isVendor && (
         <div className="reg-reason">
@@ -337,6 +356,20 @@ function RegistrationDetails({ profile }) {
       <p style={{ marginTop: 12, color: "#64748b", fontSize: 13 }}>
         These were checked when your account was approved. To correct one, contact {isVendor ? "your LGU Officer" : "an Administrator"}.
       </p>
+      {previewError && <p className="reg-doc-error" role="alert">{previewError}</p>}
+      {preview && (
+        <div className="doc-preview-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setPreview(null); }}>
+          <div className="doc-preview" role="dialog" aria-modal="true" aria-label={preview.label}>
+            <div className="doc-preview-head">
+              <strong>{preview.label}</strong>
+              <button type="button" className="secondary-btn" onClick={() => setPreview(null)}>Close</button>
+            </div>
+            {preview.isImage
+              ? <img src={preview.url} alt={preview.label} />
+              : <iframe src={preview.url} title={preview.label} />}
+          </div>
+        </div>
+      )}
     </div>
   );
 }

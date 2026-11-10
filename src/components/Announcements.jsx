@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { groupByDay } from "./NotificationList.jsx";
 import { askConfirm } from "./ConfirmDialog.jsx";
 import { apiUrl, authHeaders, fetchAll } from "../api/config.js";
 
@@ -93,12 +94,17 @@ export function AnnouncementPopup({ announcements }) {
           </div>
         </div>
         <div className="announce-list">
-          {unseen.slice(0, 5).map((a, i) => (
-            <article key={a.id}>
-              {i > 0 && <strong>{a.title}</strong>}
-              <p>{a.message}</p>
-              <small>{formatDate(a.created_at)}{a.created_by_name ? ` · from ${a.created_by_name}` : ""}</small>
-            </article>
+          {groupByDay(unseen.slice(0, 8), (a) => a.created_at).map((group) => (
+            <section key={group.label} className="announce-group">
+              <h4 className="notif-group-title">{group.label}</h4>
+              {group.items.map((a) => (
+                <article key={a.id}>
+                  {a.id !== unseen[0].id && <strong>{a.title}</strong>}
+                  <p>{a.message}</p>
+                  <small>{formatDate(a.created_at)}{a.created_by_name ? ` · from ${a.created_by_name}` : ""}</small>
+                </article>
+              ))}
+            </section>
           ))}
         </div>
         <p className="announce-note">You can read it again anytime in Notifications.</p>

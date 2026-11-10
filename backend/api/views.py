@@ -2299,11 +2299,13 @@ def registration_options(request):
 @permission_classes([IsAuthenticated])
 def view_verification_document(request, user_id, document_type):
     """
-    Allow Administrators, and LGU Officers reviewing Fish Vendors in
-    their municipality, to view registration verification documents.
+    Allow Administrators, LGU Officers reviewing Fish Vendors in their
+    municipality, and the account owner to view registration documents.
     """
     reviewer_role = approved_role(request.user)
-    if reviewer_role == "LGU Officer":
+    if request.user.pk == user_id:
+        pass  # Anyone may view the documents they uploaded themselves.
+    elif reviewer_role == "LGU Officer":
         target = UserProfile.objects.filter(user_id=user_id).select_related("role").first()
         if (
             target is None

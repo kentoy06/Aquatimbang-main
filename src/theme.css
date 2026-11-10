@@ -1733,3 +1733,24 @@ table th {
   .msg-layout:not(.has-thread) .msg-thread { display: none; }
   .msg-back { display: block; }
 }
+
+/* My Profile: view my registration documents */
+.reg-doc-view { margin-left: 10px; padding: 3px 12px; border-radius: 999px; border: 1px solid var(--orange); background: #fff; color: var(--orange-dark); font-size: 12px; font-weight: 700; cursor: pointer; }
+.reg-doc-view:hover { background: #fff6ec; }
+.reg-doc-error { color: #b42318; font-size: 13px; }
+.doc-preview-backdrop { position: fixed; inset: 0; background: rgba(7, 26, 43, .55); display: grid; place-items: center; z-index: 1200; padding: 16px; }
+.doc-preview { background: #fff; border-radius: 16px; width: min(760px, 100%); max-height: 90vh; display: flex; flex-direction: column; overflow: hidden; }
+.doc-preview-head { display: flex; justify-content: space-between; align-items: center; padding: 12px 16px; border-bottom: 1px solid var(--line); color: var(--navy-900); }
+.doc-preview img { max-width: 100%; max-height: calc(90vh - 64px); object-fit: contain; margin: 0 auto; display: block; background: #f3f6f9; }
+.doc-preview iframe { width: 100%; height: calc(90vh - 64px); border: 0; }
+
+/* Notifications grouped by day */
+.notif-group + .notif-group { margin-top: 6px; }
+.notif-group-title { margin: 14px 18px 4px; font-size: 12px; font-weight: 800; letter-spacing: .08em; text-transform: uppercase; color: #5b7389; }
+.announce-list .notif-group-title { margin: 10px 0 6px; }
+.announce-group:first-child .notif-group-title { margin-top: 0; }
+.notif-detail { overflow-wrap: anywhere; }
+.notif-when { color: #8a97a8; font-size: 12px; }
+
+/* Landing: label above the two featured price cards */
+.hero-cards-label { display: block; color: rgba(255, 255, 255, .85); font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; text-shadow: 0 1px 3px rgba(0, 0, 0, .35); }

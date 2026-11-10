@@ -7,6 +7,7 @@ import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
+import NotificationList from "./components/NotificationList.jsx";
 import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Lgu.css";
@@ -643,8 +644,8 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk, announceme
   // Announcements from the Administrator stay here as history.
   announcements.filter((a) => a.is_active).forEach((a) => {
     notifs.push({
-      id: `announcement-${a.id}`, type: "info", page: "Notifications", title: `📢 ${a.title}`,
-      detail: `${a.message} (${new Date(a.created_at).toLocaleDateString("en-PH", { dateStyle: "medium" })})`,
+      id: `announcement-${a.id}`, type: "info", title: `📢 ${a.title}`,
+      detail: a.message, at: a.created_at, announcement: a,
     });
   });
 
@@ -3879,40 +3880,8 @@ function AuditLog({ notify }) {
    NOTIFICATIONS
    ================================================================ */
 
-function Notifications({ notifications, dismissedNotifs, setDismissedNotifs, goTo }) {
-  const dismiss = (id) => setDismissedNotifs((prev) => [...prev, id]);
-  const visible = notifications.filter((n) => !dismissedNotifs.includes(n.id));
-  const iconFor = (type) => (type === "danger" ? "⚠" : type === "warning" ? "⏳" : "ℹ");
-  const bgFor = (type) => (type === "danger" ? "purple-bg" : type === "warning" ? "blue-bg" : "green-bg");
-
-  return (
-    <>
-      <div className="page-title">
-        <div><h2>Notifications</h2><p>Alerts about vendor price suggestions, flagged entries, and pending work.</p></div>
-        {dismissedNotifs.length > 0 && <button className="secondary-btn" onClick={() => setDismissedNotifs([])}>Restore Dismissed</button>}
-      </div>
-
-      <div className="panel">
-        {visible.length === 0 ? (
-          <p className="empty-row">You're all caught up.</p>
-        ) : (
-          visible.map((n) => (
-            <div className="activity" key={n.id}>
-              <div className={`activity-icon ${bgFor(n.type)}`}>{iconFor(n.type)}</div>
-              <div style={{ flex: 1 }}>
-                <strong>{n.title}</strong>
-                <p>{n.detail}</p>
-              </div>
-              <div className="action-icons" style={{ alignSelf: "center" }}>
-                <button title="View" onClick={() => goTo(n.page)}>👁</button>
-                <button title="Dismiss" onClick={() => dismiss(n.id)}>✕</button>
-              </div>
-            </div>
-          ))
-        )}
-      </div>
-    </>
-  );
+function Notifications(props) {
+  return <NotificationList {...props} title="Notifications" subtitle="Alerts about vendor price suggestions, flagged entries, and pending work." />;
 }
 
 export default LGU;
