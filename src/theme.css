@@ -1808,3 +1808,17 @@ table th {
 .lang-picker select { border: 0; background: transparent; font: inherit; color: inherit; padding: 2px 2px; cursor: pointer; }
 .lang-picker select:focus { outline: none; }
 .auth-lang { align-self: flex-end; margin-bottom: 10px; }
+
+/* Every pop-up: keep all four corners rounded. A scrolling pop-up's
+   scrollbar used to run into the corners and make the right side square. */
+.modal, .doc-preview, .confirm-box { scrollbar-width: thin; scrollbar-color: #c5d2de transparent; }
+.modal::-webkit-scrollbar, .doc-preview::-webkit-scrollbar { width: 8px; }
+.modal::-webkit-scrollbar-track, .doc-preview::-webkit-scrollbar-track { background: transparent; margin: 18px 0; }
+.modal::-webkit-scrollbar-thumb, .doc-preview::-webkit-scrollbar-thumb { background: #c5d2de; border-radius: 999px; border: 2px solid #fff; }
+.modal { border-radius: 20px; background-clip: padding-box; }
+
+/* User profile pop-up: a clean rounded photo */
+.profile-modal .profile-avatar { width: 64px; height: 64px; border-radius: 16px; flex: none; overflow: hidden; border: 1px solid var(--line); background: #e6f4f6; font-size: 20px; }
+.profile-modal .profile-badges { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; }
+.profile-modal .profile-badges .role, .profile-modal .profile-badges .badge { white-space: nowrap; border-radius: 999px; padding: 3px 10px; line-height: 1.4; height: auto; }
+.profile-modal .profile-badges .presence { white-space: nowrap; }
