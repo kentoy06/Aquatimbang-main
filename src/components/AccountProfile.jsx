@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { createPortal } from "react-dom";
 import { askConfirm } from "./ConfirmDialog.jsx";
 import PasswordInput from "./PasswordInput.jsx";
 import { apiUrl, authHeaders } from "../api/config.js";
@@ -357,7 +358,7 @@ function RegistrationDetails({ profile }) {
         These were checked when your account was approved. To correct one, contact {isVendor ? "your LGU Officer" : "an Administrator"}.
       </p>
       {previewError && <p className="reg-doc-error" role="alert">{previewError}</p>}
-      {preview && (
+      {preview && createPortal(
         <div className="doc-preview-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setPreview(null); }}>
           <div className="doc-preview" role="dialog" aria-modal="true" aria-label={preview.label}>
             <div className="doc-preview-head">
@@ -368,7 +369,8 @@ function RegistrationDetails({ profile }) {
               ? <img src={preview.url} alt={preview.label} />
               : <iframe src={preview.url} title={preview.label} />}
           </div>
-        </div>
+        </div>,
+        document.body,
       )}
     </div>
   );

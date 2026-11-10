@@ -7,7 +7,7 @@ import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 // useEffect lets us load data from Django when the LGU dashboard opens.
 import React, { useEffect, useState, lazy, Suspense } from "react";
-import NotificationList from "./components/NotificationList.jsx";
+import NotificationList, { useNotificationState } from "./components/NotificationList.jsx";
 import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Lgu.css";
@@ -382,7 +382,6 @@ useEffect(() => {
     return () => { cancelled = true; if (timer) clearInterval(timer); };
   }, [activePage]);
 
-  const [dismissedNotifs, setDismissedNotifs] = useState([]);
 
   const notify = (message) => {
     setToast(message);
@@ -391,7 +390,8 @@ useEffect(() => {
 
   const { announcements } = useAnnouncements(0, { live: true });
   const notifications = buildLguNotifications(suggestions, priceRecords, fisherfolk, announcements);
-  const unread = notifications.filter((n) => !dismissedNotifs.includes(n.id));
+  // Seen / dismissed notifications are remembered per user on this device.
+  const { dismissed: dismissedNotifs, setDismissed: setDismissedNotifs, seen: seenNotifs, markSeen: markNotifsSeen, unread: unread } = useNotificationState(notifications);
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
 
@@ -520,7 +520,7 @@ useEffect(() => {
       case "Messages":
         return <Messages />;
       case "Notifications":
-        return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} goTo={setActivePage} />;
+        return <Notifications notifications={notifications} dismissedNotifs={dismissedNotifs} setDismissedNotifs={setDismissedNotifs} seen={seenNotifs} markSeen={markNotifsSeen} goTo={setActivePage} />;
       case "My Profile":
         return <AccountProfile account={account} notify={notify} description="Your LGU officer account details and recent activity." />;
       default:

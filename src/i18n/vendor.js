@@ -447,6 +447,7 @@ const PHRASES = {
   "Announcement": ["Anunsyo", "Pahibalo"],
   "from": ["mula kay", "gikan kang"],
   "Messages": ["Mga Mensahe", "Mga Mensahe"],
+  "New": ["Bago", "Bag-o"],
 };
 
 export function translate(language, text, vars = {}) {

@@ -6,7 +6,7 @@ import MarketInsights from "./components/MarketInsights.jsx";
 import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useState, useEffect, lazy, Suspense } from "react";
-import NotificationList from "./components/NotificationList.jsx";
+import NotificationList, { useNotificationState } from "./components/NotificationList.jsx";
 import Messages, { useUnreadMessages } from "./components/Messages.jsx";
 import "./App.css";
 import "./Admin.css";
@@ -586,7 +586,6 @@ useEffect(() => {
   const { records: activityLogs } = useDjangoActivityLogs(`${activePage}-${reloadKey}`);
   const logs = activityLogs.map(toLogRow);
 
-  const [dismissedNotifs, setDismissedNotifs] = useState([]);
 
   /* ---------- HELPERS ---------- */
 
@@ -638,7 +637,8 @@ useEffect(() => {
   ];
 
   const notifications = buildNotifications(users, priceRecords, species, municipalities, suggestions);
-  const unreadNotifs = notifications.filter((n) => !dismissedNotifs.includes(n.id));
+  // Seen / dismissed notifications are remembered per user on this device.
+  const { dismissed: dismissedNotifs, setDismissed: setDismissedNotifs, seen: seenNotifs, markSeen: markNotifsSeen, unread: unreadNotifs } = useNotificationState(notifications);
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
 
@@ -719,7 +719,7 @@ useEffect(() => {
         return (
           <Notifications
             notifications={notifications} dismissedNotifs={dismissedNotifs}
-            setDismissedNotifs={setDismissedNotifs} goTo={setActivePage}
+            setDismissedNotifs={setDismissedNotifs} seen={seenNotifs} markSeen={markNotifsSeen} goTo={setActivePage}
           />
         );
       case "Reports Management":
