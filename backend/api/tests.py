@@ -2429,3 +2429,24 @@ class MessagingTests(TestCase):
         # Someone outside the conversation cannot read it.
         self.assertEqual(self.client_for(self.vendor2).get(f"/api/messages/conversations/{convo}/").status_code, 404)
         self.assertEqual(self.client_for(self.admin).get(f"/api/messages/conversations/{convo}/").status_code, 404)
+
+
+class MessagePhotoTests(MessagingTests):
+    """Profile photos in Messages: only for people you may message."""
+
+    def test_photo_access(self):
+        from django.core.files.uploadedfile import SimpleUploadedFile
+        import io
+        from PIL import Image
+        buf = io.BytesIO(); Image.new("RGB", (8, 8), "teal").save(buf, "JPEG")
+        profile = self.lgu.aquatimbang_profile
+        profile.profile_photo = SimpleUploadedFile("lgu.jpg", buf.getvalue(), content_type="image/jpeg")
+        profile.save()
+        contacts = self.client_for(self.vendor).get("/api/messages/contacts/").data
+        lgu_row = next(r for r in contacts if r["username"] == "m_lgu")
+        self.assertTrue(lgu_row["has_photo"])
+        self.assertEqual(self.client_for(self.vendor).get(f"/api/messages/people/{self.lgu.pk}/photo/").status_code, 200)
+        # A vendor from another municipality may not message this LGU, so no photo.
+        self.assertEqual(self.client_for(self.far_vendor).get(f"/api/messages/people/{self.lgu.pk}/photo/").status_code, 404)
+        # Vendors cannot see each other.
+        self.assertEqual(self.client_for(self.vendor2).get(f"/api/messages/people/{self.vendor.pk}/photo/").status_code, 404)

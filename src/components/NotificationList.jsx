@@ -1,6 +1,15 @@
 import React, { useEffect, useState } from "react";
 
-const plain = (text) => text;
+const plain = (text, vars = {}) => String(text).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
+
+// Notifications older than this are cleared from the list automatically.
+export const NOTIFICATION_HISTORY_DAYS = 30;
+export function isRecent(n) {
+  if (!n.at) return true; // things that need attention now
+  const d = new Date(String(n.at).length === 10 ? `${n.at}T00:00:00` : n.at);
+  if (Number.isNaN(d.getTime())) return true;
+  return Date.now() - d.getTime() <= NOTIFICATION_HISTORY_DAYS * 24 * 60 * 60 * 1000;
+}
 
 // A stable key for a notification (ids like 1, 2, 3 change as the list changes).
 export const notifKey = (n) => `${n.id}|${n.title}|${n.at || ""}`;
@@ -35,7 +44,7 @@ export function useNotificationState(notifications) {
     writeList("seenNotifs", [...next]);
     return next;
   });
-  const unread = notifications.filter((n) => !dismissed.includes(notifKey(n)) && !seen.has(notifKey(n)));
+  const unread = notifications.filter((n) => isRecent(n) && !dismissed.includes(notifKey(n)) && !seen.has(notifKey(n)));
   return { dismissed, setDismissed, seen, markSeen, unread };
 }
 
@@ -82,7 +91,7 @@ const when = (iso) => {
 export default function NotificationList({ notifications, dismissedNotifs, setDismissedNotifs, seen, markSeen, goTo, title, subtitle, t = plain }) {
   const [open, setOpen] = useState(null);
   const dismiss = (n) => setDismissedNotifs((prev) => [...prev, notifKey(n)]);
-  const visible = notifications.filter((n) => !dismissedNotifs.includes(notifKey(n)));
+  const visible = notifications.filter((n) => isRecent(n) && !dismissedNotifs.includes(notifKey(n)));
   // Remember what was new when the page opened, then clear the badge.
   const [fresh] = useState(() => new Set(visible.filter((n) => seen && !seen.has(notifKey(n))).map(notifKey)));
   const visibleKeys = visible.map(notifKey).join("\n");
@@ -145,6 +154,8 @@ export default function NotificationList({ notifications, dismissedNotifs, setDi
           ))
         )}
       </div>
+
+      <p className="notif-retention">{t("Notifications older than {n} days are cleared automatically.", { n: NOTIFICATION_HISTORY_DAYS })}</p>
 
       {open && (
         <div className="modal-backdrop" onMouseDown={(e) => { if (e.target === e.currentTarget) setOpen(null); }}>

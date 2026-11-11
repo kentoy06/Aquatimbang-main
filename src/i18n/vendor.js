@@ -565,6 +565,7 @@ const PHRASES = {
   "Prices validated by LGU officers": ["Mga presyong sinuri ng LGU officer", "Mga presyo nga gisusi sa LGU officer"],
   "Instant fair price computation": ["Mabilis na pagkuwenta ng patas na presyo", "Paspas nga pagkuwenta sa patas nga presyo"],
   "Short-term price forecasting": ["Panandaliang pagtataya ng presyo", "Mubong tagna sa presyo"],
+  "Notifications older than {n} days are cleared automatically.": ["Awtomatikong nabubura ang mga notipikasyong mahigit {n} araw na.", "Awtomatikong mapapas ang mga pahibalo nga sobra na sa {n} ka adlaw."],
 };
 
 export function translate(language, text, vars = {}) {

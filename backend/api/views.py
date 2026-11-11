@@ -4089,14 +4089,54 @@ from .models import Conversation, Message
 def _person(profile, logged_in=None):
     from .authentication import presence
     user = profile.user
+    role = profile.role.name
+    about = {}
+    if role == "Fish Vendor":
+        vendor = FishVendorVerification.objects.filter(profile=profile).first()
+        if vendor:
+            about = {"Market": vendor.market_name, "Stall": vendor.stall_number}
+    elif role == "LGU Officer":
+        officer = LGUOfficerVerification.objects.filter(profile=profile).first()
+        if officer:
+            about = {"Office": officer.department, "Position": officer.position}
     return {
         "id": user.pk,
         "name": user.get_full_name() or user.username,
         "username": user.username,
-        "role": profile.role.name,
+        "role": role,
         "municipality": profile.municipality.name if profile.municipality else "",
+        "has_photo": bool(profile.profile_photo),
+        "photo_version": profile.updated_at.isoformat() if profile.updated_at else "",
+        "about": {k: v for k, v in about.items() if v},
         **presence(profile, logged_in),
     }
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def message_person_photo(request, user_id):
+    """Profile photo of someone you may message or already talk with."""
+    from django.db.models import Q
+    from .messaging import can_message
+    _require_approved(request)
+    me = request.user
+    try:
+        other = User.objects.select_related("aquatimbang_profile").get(pk=user_id)
+    except User.DoesNotExist:
+        raise Http404("Not found.")
+    talking = Conversation.objects.filter(
+        Q(user_low=me, user_high=other) | Q(user_low=other, user_high=me)
+    ).exists()
+    if not (can_message(me, other) or talking):
+        raise Http404("Not found.")
+    profile = getattr(other, "aquatimbang_profile", None)
+    if profile is None or not profile.profile_photo:
+        raise Http404("No photo.")
+    try:
+        profile.profile_photo.open("rb")
+    except (FileNotFoundError, OSError):
+        raise Http404("No photo.")
+    return FileResponse(profile.profile_photo, filename=profile.profile_photo.name.split("/")[-1])
 
 
 def _conversation_row(conversation, me, logged_in=None):
