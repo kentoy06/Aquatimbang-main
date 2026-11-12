@@ -26,6 +26,7 @@ import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFo
 import { useProtectedImage } from "./api/images.js";
 import { FishPhotoInput, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 import { AnnouncementsManager } from "./components/Announcements.jsx";
+import PagedTable from "./components/PagedTable.jsx";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -1027,7 +1028,7 @@ function Dashboard({
             </button>
           </div>
 
-          <table>
+          <PagedTable>
             <thead>
               <tr>
                 <th>USER</th>
@@ -1052,7 +1053,7 @@ function Dashboard({
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
       </div>
 
@@ -1068,7 +1069,7 @@ function Dashboard({
             </button>
           </div>
 
-          <table>
+          <PagedTable>
             <thead>
               <tr>
                 <th>NAME</th>
@@ -1093,7 +1094,7 @@ function Dashboard({
                 ))
               )}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
 
         <div className="panel">
@@ -2099,7 +2100,7 @@ const submitReview = async () => {
         </div>
 
         <div className="users-table-wrap">
-        <table className="users-table">
+        <PagedTable className="users-table">
           <thead>
             <tr>
               <th>USER</th>
@@ -2179,7 +2180,7 @@ const submitReview = async () => {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
         </div>
       </div>
     </>
@@ -2497,7 +2498,7 @@ const toggleStatus = async (s) => {
           </div>
         </div>
 
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>SPECIES</th>
@@ -2546,7 +2547,7 @@ const toggleStatus = async (s) => {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -2652,7 +2653,7 @@ function MarketsCard({ municipalities, notify }) {
         </div>
       )}
 
-      <table className="inner-table">
+      <PagedTable className="inner-table">
         <thead>
           <tr>
             <th>MARKET</th>
@@ -2684,7 +2685,7 @@ function MarketsCard({ municipalities, notify }) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </PagedTable>
 
       {!form && (
         <button className="primary-btn full-btn" style={{ marginTop: 14 }} onClick={() => setForm({ name: "", municipality: "" })}>+ Add Market</button>
@@ -2808,7 +2809,7 @@ function MunicipalityMarket({ municipalities, onChanged, notify }) {
             </div>
           </div>
 
-          <table className="inner-table">
+          <PagedTable className="inner-table">
             <thead>
               <tr>
                 <th>NAME</th>
@@ -2839,7 +2840,7 @@ function MunicipalityMarket({ municipalities, onChanged, notify }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PagedTable>
 
           <button className="primary-btn full-btn" onClick={openAddMuni}>+ Add Municipality</button>
         </div>
@@ -3039,7 +3040,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
           />
         </div>
 
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>DATE</th>
@@ -3057,7 +3058,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
                 <td colSpan="7" className="empty-row">No records match these filters.</td>
               </tr>
             ) : (
-              visible.slice(0, 200).map((r) => (
+              visible.slice(0, 1000).map((r) => (
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td><strong>{r.species}</strong></td>
@@ -3085,8 +3086,8 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
               ))
             )}
           </tbody>
-        </table>
-        {visible.length > 200 && <p className="empty-row">Showing the 200 most recent of {visible.length} records — export for the full list.</p>}
+        </PagedTable>
+        {visible.length > 1000 && <p className="empty-row">Showing the 1,000 most recent of {visible.length} records — export for the full list.</p>}
       </div>
     </>
   );
@@ -3277,7 +3278,7 @@ function ActivityLogs({ notify }) {
         {loading && <p style={{ padding: 20 }}>Loading activity logs from Django...</p>}
         {error && <p role="alert" style={{ padding: 20, color: "#b91c1c" }}>{error}</p>}
         {!loading && !error && <div style={{ overflowX: "auto" }}>
-          <table>
+          <PagedTable>
             <thead><tr><th>DATE &amp; TIME</th><th>USER</th><th>ROLE</th><th>MODULE</th><th>ACTION</th><th>AFFECTED RECORD</th><th>DETAILS</th></tr></thead>
             <tbody>
               {visible.length === 0
@@ -3303,7 +3304,7 @@ function ActivityLogs({ notify }) {
                     </td>
                   </tr>; })}
             </tbody>
-          </table>
+          </PagedTable>
         </div>}
       </div>
       <AuditDetailsDialog log={selectedLog} onClose={() => setSelectedLog(null)} />
@@ -3433,7 +3434,7 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
           <input className="date-input" type="date" value={to} onChange={(e) => setTo(e.target.value)} />
         </div>
 
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>SUBMISSION DATE</th>
@@ -3474,7 +3475,7 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -3524,7 +3525,7 @@ function PredictiveAnalytics({ species, municipalities, defaultMunicipalityId, n
 
         {historyError && <div className="warn-box" role="alert">{historyError}</div>}
         <div style={{ overflowX: "auto" }}>
-          <table>
+          <PagedTable>
             <thead>
               <tr>
                 <th>GENERATED</th>
@@ -3557,7 +3558,7 @@ function PredictiveAnalytics({ species, municipalities, defaultMunicipalityId, n
                 ))
               )}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
       </div>
     </>
@@ -3649,7 +3650,7 @@ function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
           </select>
         </div>
 
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>DATE</th>
@@ -3683,7 +3684,7 @@ function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -3727,7 +3728,7 @@ function GeneratedReportsLog({ reloadKey }) {
         </div>
       </div>
       <div style={{ overflowX: "auto" }}>
-        <table>
+        <PagedTable>
           <thead>
             <tr><th>GENERATED</th><th>REPORT</th><th>FORMAT</th><th>FILTERS</th><th>ROWS</th><th>GENERATED BY</th></tr>
           </thead>
@@ -3751,7 +3752,7 @@ function GeneratedReportsLog({ reloadKey }) {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </div>
   );
@@ -3836,7 +3837,7 @@ function ReportsManagement({ users, species, logs, priceRecords, notify }) {
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table>
+          <PagedTable>
             <thead>
               <tr>{columns.map((c) => <th key={c}>{c.toUpperCase()}</th>)}</tr>
             </thead>
@@ -3846,7 +3847,7 @@ function ReportsManagement({ users, species, logs, priceRecords, notify }) {
                   <td colSpan={columns.length} className="empty-row">No data available for this report.</td>
                 </tr>
               ) : (
-                rows.slice(0, 50).map((r, i) => (
+                rows.slice(0, 1000).map((r, i) => (
                   <tr key={r.id || i}>
                     {cellsFor(r).map((c, ci) => (
                       <td key={ci}>{ci === 0 ? <strong>{c}</strong> : c}</td>
@@ -3855,11 +3856,11 @@ function ReportsManagement({ users, species, logs, priceRecords, notify }) {
                 ))
               )}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
 
-        {rows.length > 50 && (
-          <p className="empty-row">Showing the first 50 of {rows.length} rows — export for the full report.</p>
+        {rows.length > 1000 && (
+          <p className="empty-row">Showing the first 1,000 of {rows.length} rows — export for the full report.</p>
         )}
       </div>
 

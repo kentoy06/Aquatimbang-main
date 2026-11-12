@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { askConfirm } from "./ConfirmDialog.jsx";
 import { deleteClosedSeason, listClosedSeasons, listFishSpecies, saveClosedSeason } from "../api/forecast.js";
+import PagedTable from "./PagedTable.jsx";
 
 const MONTHS = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const DAYS_IN_MONTH = [31, 29, 31, 30, 31, 30, 31, 31, 30, 31, 30, 31];
@@ -168,7 +169,7 @@ export default function ClosedSeasonsSection({ notify }) {
         </div>
         {error && <div className="warn-box" role="alert">{error}</div>}
         <div style={{ overflowX: "auto" }}>
-          <table className="inner-table">
+          <PagedTable className="inner-table">
             <thead><tr><th>SEASON</th><th>DATES</th><th>FISH</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
             <tbody>
               {loading ? (
@@ -194,7 +195,7 @@ export default function ClosedSeasonsSection({ notify }) {
                 </tr>
               ))}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
         <p className="season-sub" style={{ marginTop: 12 }}>
           Starter dates are from BFAR announcements. Please confirm them with BFAR or the DVMF each year.

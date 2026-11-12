@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { apiUrl, authHeaders, fetchAll } from "../api/config.js";
 import { parseCsv, parsePriceList, TEMPLATE_CSV, toImportRows } from "../api/csvImport.js";
 import { askConfirm } from "./ConfirmDialog.jsx";
+import PagedTable from "./PagedTable.jsx";
 
 const CHUNK = 2000;
 
@@ -284,7 +285,7 @@ export default function PriceImport({ notify, onImported }) {
               </div>
 
               <div style={{ overflowX: "auto", marginTop: 12 }}>
-                <table className="inner-table">
+                <PagedTable className="inner-table">
                   <thead><tr>{isList && <th>IMPORT</th>}<th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></tr></thead>
                   <tbody>
                     {(isList ? parsed.rows : parsed.rows.slice(0, 8)).map((r, i) => isList ? (
@@ -297,7 +298,7 @@ export default function PriceImport({ notify, onImported }) {
                       <tr key={i}><td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td><td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td></tr>
                     ))}
                   </tbody>
-                </table>
+                </PagedTable>
                 {isList
                   ? <p className="chart-note">Untick anything that is not a fish you track (for example shellfish or squid) and it will not be imported.</p>
                   : parsed.rows.length > 8 && <p className="chart-note">First 8 of {parsed.rows.length.toLocaleString()} prices.</p>}
@@ -328,12 +329,12 @@ export default function PriceImport({ notify, onImported }) {
 
               {check?.errors.length > 0 && (
                 <div style={{ maxHeight: 220, overflowY: "auto", marginTop: 8 }}>
-                  <table className="inner-table">
+                  <PagedTable className="inner-table">
                     <thead><tr><th>ROW</th><th>PROBLEM</th></tr></thead>
                     <tbody>
                       {check.errors.slice(0, 200).map((e, i) => <tr key={i}><td>{e.row}</td><td>{e.message}</td></tr>)}
                     </tbody>
-                  </table>
+                  </PagedTable>
                   {check.error_count > 200 && <p className="chart-note">Showing 200 of {check.error_count.toLocaleString()} problems.</p>}
                 </div>
               )}
@@ -425,7 +426,7 @@ function RecentImports({ reloadKey, notify, onUndone }) {
       </div>
       {error && <div className="warn-box" style={{ margin: "0 18px 18px" }}>{error}</div>}
       <div style={{ overflowX: "auto" }}>
-        <table>
+        <PagedTable>
           <thead><tr><th>IMPORTED</th><th>FILE</th><th>DATES</th><th>PRICES</th><th>STATUS</th><th>ACTION</th></tr></thead>
           <tbody>
             {rows === null && !error && <tr><td colSpan="6" className="empty-row">Loading…</td></tr>}
@@ -470,7 +471,7 @@ function RecentImports({ reloadKey, notify, onUndone }) {
               </React.Fragment>
             ))}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </div>
   );
@@ -527,7 +528,7 @@ function ImportFishList({ batch, notify, onChanged }) {
       <p className="import-fish-muted">
         {data.fish.length} fish in this import{data.municipalities.length ? ` · ${data.municipalities.join(", ")}` : ""}. Remove only the fish that was wrong.
       </p>
-      <table className="inner-table">
+      <PagedTable className="inner-table">
         <thead><tr><th>FISH</th><th>PRICES</th><th>DATES</th><th>PRICE RANGE</th><th>ACTION</th></tr></thead>
         <tbody>
           {data.fish.map((fish) => (
@@ -544,7 +545,7 @@ function ImportFishList({ batch, notify, onChanged }) {
             </tr>
           ))}
         </tbody>
-      </table>
+      </PagedTable>
     </div>
   );
 }
