@@ -1904,3 +1904,8 @@ table th {
   .stall-row { grid-template-columns: 56px minmax(0, 1fr) auto; }
 }
 .login-right .form-row { align-items: start; }
+
+/* Landing photo on phones: the text sits over the bright market lights, so darken more. */
+@media (max-width: 700px) {
+  .hero-shade { background: linear-gradient(180deg, rgba(4, 14, 24, .78) 0%, rgba(4, 14, 24, .62) 55%, rgba(4, 14, 24, .8) 100%) !important; }
+}
