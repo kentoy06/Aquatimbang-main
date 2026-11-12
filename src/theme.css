@@ -1922,3 +1922,19 @@ table th {
   .login-right .form-row > .form-group { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 6px; align-content: start; margin-bottom: 14px; }
   .login-right .form-row > .form-group > label { align-self: end; }
 }
+
+/* Remove fish: merge or delete completely */
+.remove-mode { display: grid; gap: 8px; margin: 4px 0 14px; }
+.remove-mode label {
+  display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid #d0d5dd;
+  border-radius: 12px; cursor: pointer; background: #fff;
+}
+.remove-mode label.on { border-color: var(--ocean); background: #f0fafc; }
+.remove-mode label.on.danger { border-color: #d92d45; background: #fff5f6; }
+.remove-mode input { margin-top: 3px; accent-color: var(--ocean); }
+.remove-mode label.danger input { accent-color: #d92d45; }
+.remove-mode span { display: grid; gap: 2px; }
+.remove-mode strong { font-size: 14px; color: var(--navy-900); }
+.remove-mode small { font-size: 12.5px; color: #667085; line-height: 1.4; }
+.remove-delete-btn { flex: 1; padding: 12px 14px; white-space: nowrap; }
+.remove-delete-btn:disabled { opacity: 0.45; cursor: not-allowed; box-shadow: none; }

@@ -1399,6 +1399,44 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
             source.delete()
         return Response({"message": f"{source.name} was merged into {target.name}.", **details})
 
+    @action(detail=True, methods=["post"], url_path="delete-everything")
+    def delete_everything(self, request, pk=None):
+        """
+        Delete a fish together with everything recorded under it (prices,
+        their corrections, vendor suggestions, saved calculations, scanner
+        photos and forecasts). For a fish that should not be in the system at
+        all, e.g. a non-fish item imported by mistake. The fish's exact name
+        must be typed to confirm. The audit log keeps what was removed.
+        """
+        from .models import FishScanPhoto, VendorPriceSuggestion, WeightEntry
+        fish = self.get_object()
+        typed = str(request.data.get("confirm_name") or "").strip()
+        if typed.lower() != fish.name.strip().lower():
+            return Response(
+                {"confirm_name": f'Type "{fish.name}" to confirm.'},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        reason = str(request.data.get("reason") or "").strip()[:300]
+        with transaction.atomic():
+            prices = PriceRecord.objects.filter(fish_species=fish)
+            published = prices.filter(status=PriceRecord.STATUS_PUBLISHED).count()
+            details = {
+                "deleted_id": fish.pk,
+                "deleted_name": fish.name,
+                "prices_deleted": prices.count(),
+                "published_prices_deleted": published,
+                "suggestions_deleted": VendorPriceSuggestion.objects.filter(fish_species=fish).count(),
+                "calculations_deleted": WeightEntry.objects.filter(fish_species=fish).count(),
+                "reason": reason,
+            }
+            self._log("deleted with all records", fish, details)
+            prices.delete()
+            VendorPriceSuggestion.objects.filter(fish_species=fish).delete()
+            WeightEntry.objects.filter(fish_species=fish).delete()
+            FishScanPhoto.objects.filter(fish_species=fish).delete()
+            fish.delete()
+        return Response({"message": f"{fish.name} and all its records were deleted.", **details})
+
     @action(detail=True, methods=["get"], authentication_classes=[], permission_classes=[AllowAny])
     def photo(self, request, pk=None):
         """
