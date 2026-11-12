@@ -1842,7 +1842,7 @@ class LoadFishPhotosTests(TestCase):
         self.assertTrue(FishSpecies.objects.get(name="Bisugo").photo)
         self.assertTrue(FishSpecies.objects.get(name="Alumahan").photo)
         self.assertTrue(FishSpecies.objects.get(name="Dalagang Bukid").photo)  # multi-word name
-        self.assertTrue(FishSpecies.objects.get(name="Lapu-lapu").photo)  # hyphenated name
+        self.assertTrue(FishSpecies.objects.get(name="Lapu-Lapu").photo)  # hyphenated name
         self.assertFalse(FishSpecies.objects.get(name="Galunggong").photo)
 
 
@@ -2510,6 +2510,19 @@ class FishNameTests(TestCase):
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(response.data["name"], "Dalagang Bukid")
         self.assertEqual(response.data["price_class"], "first_class")
+
+    def test_repeated_word_names_get_a_hyphen_and_capitals(self):
+        from .validators import clean_fish_name
+        for typed in ["lapu lapu", "lapu-lapu", "Lapu-lapu", "LAPU LAPU", "lapulapu", "lapu - lapu"]:
+            self.assertEqual(clean_fish_name(typed), "Lapu-Lapu", typed)
+        self.assertEqual(clean_fish_name("salay salay"), "Salay-Salay")
+        self.assertEqual(clean_fish_name("sapsap"), "Sapsap")  # a one-word name stays one word
+        self.assertEqual(clean_fish_name("LGU Test Fish"), "LGU Test Fish")
+        response = self.client.post("/api/fish-species/", {"name": "maya maya"}, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["name"], "Maya-Maya")
+        # The same fish typed differently is a duplicate.
+        self.assertEqual(self.client.post("/api/fish-species/", {"name": "MAYA-MAYA"}, format="json").status_code, 400)
 
 
 class PriceClassRangeTests(StallSampleTests):

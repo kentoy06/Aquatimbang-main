@@ -1,3 +1,4 @@
+import re
 from pathlib import Path
 
 from PIL import Image, UnidentifiedImageError
@@ -87,23 +88,49 @@ def validate_image_upload(file):
         )
     validate_file_contents(file, extension)
 
+def _cap(part, lower_first):
+    """Capital first letter; the rest in small letters when lower_first."""
+    if lower_first:
+        part = part.lower()
+    for i, ch in enumerate(part):
+        if ch.isalpha():
+            return part[:i] + ch.upper() + part[i + 1:]
+    return part
+
+
 def clean_fish_name(raw):
     """
-    Tidy a fish name the same way everywhere: single spaces, and each word
-    starts with a capital letter. A name typed all in small letters or all in
-    capitals is turned into normal capitals ("bangus" or "BANGUS" -> "Bangus",
-    "dalagang  bukid" -> "Dalagang Bukid", "lapu-lapu" -> "Lapu-lapu"); a name
-    that already mixes capitals keeps them ("LGU Test Fish").
+    Tidy a fish name the same way everywhere:
+
+    - single spaces, no spaces around a hyphen ("lapu - lapu" -> "lapu-lapu")
+    - a repeated word is joined with a hyphen, as in Cebuano and Filipino
+      fish names ("lapu lapu", "lapulapu" -> "Lapu-Lapu", "salay salay" ->
+      "Salay-Salay")
+    - every word, and every part after a hyphen, starts with a capital letter
+      ("bangus" or "BANGUS" -> "Bangus", "dalagang  bukid" -> "Dalagang Bukid",
+      "maya-maya" -> "Maya-Maya")
+
+    A name typed all in small letters or all in capitals gets small letters
+    after each capital; a name that already mixes capitals keeps them
+    ("LGU Test Fish").
     """
-    text = " ".join(str(raw or "").split())
+    text = " ".join(str(raw or "").replace("_", " ").split())
+    text = re.sub(r"\s*-\s*", "-", text).strip("-")
     letters = [ch for ch in text if ch.isalpha()]
-    one_case = letters and (all(ch.islower() for ch in letters) or all(ch.isupper() for ch in letters))
-    tidy = []
+    one_case = bool(letters) and (all(ch.islower() for ch in letters) or all(ch.isupper() for ch in letters))
+
+    words = []
     for word in text.split(" "):
-        word = word.lower() if one_case else word
-        for i, ch in enumerate(word):
-            if ch.isalpha():
-                word = word[:i] + ch.upper() + word[i + 1:]
-                break
-        tidy.append(word)
+        # "lapu lapu": the same word twice in a row becomes "lapu-lapu".
+        if words and "-" not in words[-1] and word.lower() == words[-1].lower():
+            words[-1] = f"{words[-1]}-{word}"
+            continue
+        # "lapulapu": a word made of the same half twice (at least 4 letters each,
+        # so one-word names such as "Sapsap" stay as they are).
+        half = len(word) // 2
+        if len(word) >= 8 and len(word) % 2 == 0 and word.isalpha() and word[:half].lower() == word[half:].lower():
+            word = f"{word[:half]}-{word[half:]}"
+        words.append(word)
+
+    tidy = ["-".join(_cap(part, one_case) for part in word.split("-")) for word in words]
     return " ".join(tidy).strip()

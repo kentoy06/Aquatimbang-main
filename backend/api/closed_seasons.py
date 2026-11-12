@@ -13,7 +13,7 @@ DEFAULT_SEASONS = [
         "Visayan Sea closed season",
         "Visayan Sea",
         (11, 15), (2, 15),
-        ["Tamban", "Alumahan", "Hasa-hasa"],
+        ["Tamban", "Alumahan", "Hasa-Hasa"],
         "No catching of sardines, herrings and mackerels so they can spawn.",
     ),
     (
@@ -27,14 +27,14 @@ DEFAULT_SEASONS = [
         "Zamboanga Peninsula closed season",
         "Zamboanga Peninsula",
         (12, 1), (3, 1),
-        ["Tamban", "Alumahan", "Hasa-hasa"],
+        ["Tamban", "Alumahan", "Hasa-Hasa"],
         "No catching of sardines, herrings and mackerels so they can spawn.",
     ),
     (
         "Davao Gulf closed season",
         "Davao Gulf",
         (6, 1), (8, 31),
-        ["Tamban", "Alumahan", "Hasa-hasa", "Galunggong", "Matambaka"],
+        ["Tamban", "Alumahan", "Hasa-Hasa", "Galunggong", "Matambaka"],
         "No catching of small pelagic fish (sardines, mackerels, scads) so they can spawn.",
     ),
 ]
