@@ -45,7 +45,7 @@ DEMO_FISH = {
     "Tamban": (110, 1),
     "Tulingan": (220, 9),
     "Alumahan": (260, 1),
-    "Lapu-lapu": (420, 12),
+    "Lapu-Lapu": (420, 12),
     "Dalagang Bukid": (280, 12),
 }
 

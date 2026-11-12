@@ -469,12 +469,17 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         send_to_review = bool(request.data.get("send_to_review"))
 
         from .validators import clean_fish_name
-        species = {" ".join(fish.name.lower().split()): fish for fish in FishSpecies.objects.all()}
+        # Match names ignoring capitals, spaces and hyphens: "lapu lapu",
+        # "Lapu-lapu" and "LAPULAPU" are all the same fish.
+        def name_key(value):
+            return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
+
+        species = {name_key(fish.name): fish for fish in FishSpecies.objects.all()}
         # Fish not in AquaTimbang yet are added with a tidy name ("bangus" -> "Bangus").
         new_fish = {}
 
         def find_fish(raw):
-            key = " ".join(str(raw or "").lower().split())
+            key = name_key(raw)
             if not key:
                 return None
             if key in species:
