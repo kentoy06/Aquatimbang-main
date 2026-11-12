@@ -49,6 +49,9 @@ function downloadTemplate() {
  */
 export default function PriceImport({ notify, onImported }) {
   const [municipalities, setMunicipalities] = useState([]);
+  const [markets, setMarkets] = useState([]);
+  // Market for rows without a Market column (each market has its own prices).
+  const [marketId, setMarketId] = useState("");
   const [fileName, setFileName] = useState("");
   const [table, setTable] = useState(null);
   const [defaultMunicipality, setDefaultMunicipality] = useState("");
@@ -72,12 +75,27 @@ export default function PriceImport({ notify, onImported }) {
   const [skipped, setSkipped] = useState(() => new Set());
 
   useEffect(() => {
-    fetchAll("/municipalities/").then((rows) => setMunicipalities(rows.filter((m) => m.is_active !== false))).catch(() => {});
+    fetchAll("/municipalities/").then((rows) => {
+      const active = rows.filter((m) => m.is_active !== false);
+      setMunicipalities(active);
+      // The study covers Cebu City; it is chosen at first and can be changed.
+      const cebu = active.find((m) => /^cebu city$/i.test(m.name));
+      if (cebu) setDefaultMunicipality((current) => current || cebu.name);
+    }).catch(() => {});
+    fetchAll("/markets/").then((rows) => setMarkets(rows.filter((m) => m.is_active !== false))).catch(() => {});
   }, []);
 
   const parsed = mode === "file"
     ? (table ? toImportRows(table, { defaultMunicipality, dayFirst }) : null)
     : (pasteText.trim() ? parsePriceList(pasteText, { date: pasteDate, municipality: defaultMunicipality, dayFirst: Boolean(dayFirst) }) : null);
+  // Markets of the chosen municipality; Pasil Fish Market first.
+  const placeId = municipalities.find((m) => m.name === defaultMunicipality)?.id;
+  const marketsHere = markets.filter((m) => String(m.municipality) === String(placeId));
+  useEffect(() => {
+    if (marketsHere.some((m) => String(m.id) === String(marketId))) return;
+    const preferred = marketsHere.find((m) => /pasil/i.test(m.name)) || marketsHere[0];
+    setMarketId(preferred ? String(preferred.id) : "");
+  }, [placeId, markets.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const sourceName = mode === "file" ? fileName : `Pasted price list${parsed?.rows[0]?.date ? ` (${parsed.rows[0].date})` : ""}`;
   const isList = parsed?.layout === "list";
   const rowsToImport = parsed ? parsed.rows.filter((r) => !(isList && skipped.has(r.row))) : [];
@@ -106,8 +124,9 @@ export default function PriceImport({ notify, onImported }) {
     try {
       // One batch id for every chunk of this file, so the whole import can be undone.
       const batchId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      const result = await runImport(rowsToImport, source.trim(), dryRun, setProgress, dryRun ? {} : {
-        batch_id: batchId, file_name: importName.trim() || sourceName, send_to_review: sendToReview,
+      const market = marketId ? { market: Number(marketId) } : {};
+      const result = await runImport(rowsToImport, source.trim(), dryRun, setProgress, dryRun ? market : {
+        ...market, batch_id: batchId, file_name: importName.trim() || sourceName, send_to_review: sendToReview,
       });
       if (dryRun) {
         setCheck(result);
@@ -182,6 +201,16 @@ export default function PriceImport({ notify, onImported }) {
               {municipalities.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
             </select>
           </div>
+          {defaultMunicipality && (
+            <div className="form-group">
+              <label htmlFor="import-market">Market</label>
+              <select id="import-market" value={marketId} onChange={(e) => changeSetting(() => setMarketId(e.target.value))}>
+                {!marketsHere.length && <option value="">No markets listed (add them in Municipality &amp; Market)</option>}
+                {marketsHere.map((m) => <option key={m.id} value={m.id}>{m.name}</option>)}
+              </select>
+              <small className="field-help">Each market has its own prices. A file with a <code>Market</code> column uses that instead.</small>
+            </div>
+          )}
           <div className="form-group">
             <label htmlFor="import-name">Name this import <span className="optional">(optional)</span></label>
             <input id="import-name" maxLength={200} value={importName} placeholder={sourceName || "e.g. DVMF printout – October 6, 2026"}

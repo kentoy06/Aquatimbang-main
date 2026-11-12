@@ -2571,3 +2571,39 @@ class FishMergeTests(StallSampleTests):
     def test_lgu_can_delete_unused_fish(self):
         unused = FishSpecies.objects.create(name="Typo Fish")
         self.assertEqual(self.client.delete(f"/api/fish-species/{unused.pk}/").status_code, 204)
+
+
+class MarketPriceTests(StallSampleTests):
+    """Each market (e.g. Pasil, Carbon) has its own official price."""
+
+    def setUp(self):
+        super().setUp()
+        from .models import Market
+        self.pasil = Market.objects.create(municipality=self.place, name="Pasil Fish Market")
+        self.carbon = Market.objects.create(municipality=self.place, name="Carbon Market")
+        other = Municipality.objects.create(name="Other Town")
+        self.elsewhere = Market.objects.create(municipality=other, name="Other Market")
+
+    def test_one_price_per_market_and_day(self):
+        self.assertEqual(self.post(price_per_kg="180", market=self.pasil.pk).status_code, 201)
+        self.assertEqual(self.post(price_per_kg="200", market=self.carbon.pk).status_code, 201)   # Carbon differs
+        again = self.post(price_per_kg="181", market=self.pasil.pk)
+        self.assertEqual(again.status_code, 400)
+        self.assertIn("Pasil Fish Market", str(again.data))
+        self.assertEqual(self.post(price_per_kg="181", market=self.elsewhere.pk).status_code, 400)  # wrong municipality
+        listed = self.client.get("/api/prices/", {"market": self.carbon.pk}).data
+        rows = listed["results"] if isinstance(listed, dict) else listed
+        self.assertEqual([(r["market_name"], r["price_per_kg"]) for r in rows], [("Carbon Market", "200.00")])
+
+    def test_import_by_market(self):
+        rows = [
+            {"row": 2, "date": "2026-01-05", "fish": "Sample Fish", "municipality": "Sample City", "market": "pasil fish market", "price": "180"},
+            {"row": 3, "date": "2026-01-05", "fish": "Sample Fish", "municipality": "Sample City", "market": "Carbon Market", "price": "200"},
+            {"row": 4, "date": "2026-01-06", "fish": "Sample Fish", "municipality": "Sample City", "price": "182"},
+            {"row": 5, "date": "2026-01-06", "fish": "Sample Fish", "municipality": "Sample City", "market": "Nowhere", "price": "182"},
+        ]
+        done = self.client.post("/api/prices/import/", {"rows": rows, "market": self.pasil.pk}, format="json").data
+        self.assertEqual(done["imported"], 3)
+        self.assertEqual([e["row"] for e in done["errors"]], [5])
+        self.assertEqual(PriceRecord.objects.filter(market=self.pasil).count(), 2)
+        self.assertEqual(PriceRecord.objects.filter(market=self.carbon).count(), 1)

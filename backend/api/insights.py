@@ -82,8 +82,8 @@ def score_price(price, normal, params=None):
     return {"level": level, "z_score": round(z, 2), "percent_from_usual": round(pct, 1)}
 
 
-def history_before(species_id, municipality_id, day, exclude_id=None, window_days=NORMAL_WINDOW_DAYS):
-    """Published prices of the `window_days` before `day`."""
+def history_before(species_id, municipality_id, day, exclude_id=None, window_days=NORMAL_WINDOW_DAYS, market_id=None):
+    """Published prices of the `window_days` before `day` (in one market when given)."""
     rows = PriceRecord.objects.filter(
         status=PriceRecord.STATUS_PUBLISHED,
         fish_species_id=species_id,
@@ -93,17 +93,21 @@ def history_before(species_id, municipality_id, day, exclude_id=None, window_day
     )
     if exclude_id:
         rows = rows.exclude(pk=exclude_id)
+    if market_id:
+        rows = rows.filter(market_id=market_id)
     return list(rows.values_list("price_per_kg", flat=True))
 
 
-def check_price(species, municipality, price, day, params=None):
-    """Is this price unusual for this fish, place and time? Used while encoding."""
+def check_price(species, municipality, price, day, params=None, market=None):
+    """Is this price unusual for this fish, place (market) and time? Used while encoding."""
     p = _params(params)
-    history = history_before(species.pk, municipality.pk, day, window_days=p["window_days"])
+    history = history_before(species.pk, municipality.pk, day, window_days=p["window_days"],
+                             market_id=market.pk if market else None)
+    place_name = f"{market.name}, {municipality.name}" if market else municipality.name
     if len(history) < MIN_HISTORY:
         return {
             "level": "no_history",
-            "message": f"Not enough past prices for {species.name} in {municipality.name} yet to judge this price.",
+            "message": f"Not enough past prices for {species.name} in {place_name} yet to judge this price.",
             "history_count": len(history),
         }
     normal = _normal_from(history)
@@ -112,16 +116,16 @@ def check_price(species, municipality, price, day, params=None):
     direction = "higher" if pct > 0 else "lower"
     usual = f"₱{normal['low']:,.2f}–₱{normal['high']:,.2f}"
     if result["level"] == "normal" and normal["low"] <= float(price) <= normal["high"]:
-        message = f"Within the usual range for {species.name} in {municipality.name} ({usual}/kg)."
+        message = f"Within the usual range for {species.name} in {place_name} ({usual}/kg)."
     elif result["level"] == "normal":
         message = (
-            f"Slightly {direction} than usual for {species.name} in {municipality.name} "
+            f"Slightly {direction} than usual for {species.name} in {place_name} "
             f"({abs(pct):.0f}% from the median ₱{normal['median']:,.2f}; usually {usual}/kg), but not unusual."
         )
     else:
         message = (
             f"₱{float(price):,.2f} is {abs(pct):.0f}% {direction} than the usual {species.name} price in "
-            f"{municipality.name} (median ₱{normal['median']:,.2f}, usually {usual}/kg). Check it before saving."
+            f"{place_name} (median ₱{normal['median']:,.2f}, usually {usual}/kg). Check it before saving."
         )
     return {
         **result,
@@ -147,20 +151,20 @@ def find_outliers(records, params=None):
     start = min(r.recorded_date for r in records) - timedelta(days=window_days)
     end = max(r.recorded_date for r in records)
     groups = {}
-    for fish_id, place_id, day, price, pk in PriceRecord.objects.filter(
+    for fish_id, place_id, market_id, day, price, pk in PriceRecord.objects.filter(
         status=PriceRecord.STATUS_PUBLISHED,
         fish_species_id__in={r.fish_species_id for r in records},
         municipality_id__in={r.municipality_id for r in records},
         recorded_date__gte=start,
         recorded_date__lte=end,
-    ).values_list("fish_species_id", "municipality_id", "recorded_date", "price_per_kg", "pk"):
-        groups.setdefault((fish_id, place_id), []).append((day, float(price), pk))
+    ).values_list("fish_species_id", "municipality_id", "market_id", "recorded_date", "price_per_kg", "pk"):
+        groups.setdefault((fish_id, place_id, market_id), []).append((day, float(price), pk))
 
     found = []
     for record in records:
         window_start = record.recorded_date - timedelta(days=window_days)
         history = [
-            price for day, price, pk in groups.get((record.fish_species_id, record.municipality_id), [])
+            price for day, price, pk in groups.get((record.fish_species_id, record.municipality_id, record.market_id), [])
             if window_start <= day < record.recorded_date and pk != record.pk
         ]
         if len(history) < MIN_HISTORY:

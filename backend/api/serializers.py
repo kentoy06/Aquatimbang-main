@@ -650,12 +650,13 @@ def attach_previous_prices(records):
             municipality_id__in={r.municipality_id for r in records},
         )
         .order_by("recorded_date", "id")
-        .values_list("fish_species_id", "municipality_id", "recorded_date", "price_per_kg")
+        .values_list("fish_species_id", "municipality_id", "market_id", "recorded_date", "price_per_kg")
     )
-    for species_id, municipality_id, recorded_date, price in published:
-        history.setdefault((species_id, municipality_id), []).append((recorded_date, price))
+    # Compare within the same market: Pasil and Carbon have their own prices.
+    for species_id, municipality_id, market_id, recorded_date, price in published:
+        history.setdefault((species_id, municipality_id, market_id), []).append((recorded_date, price))
     for record in records:
-        rows = history.get((record.fish_species_id, record.municipality_id), [])
+        rows = history.get((record.fish_species_id, record.municipality_id, record.market_id), [])
         # Rows are sorted by date; find the last one before this record's date.
         index = bisect_left(rows, (record.recorded_date,)) - 1
         record._previous_price = rows[index][1] if index >= 0 else None
@@ -715,6 +716,9 @@ class PriceRecordSerializer(serializers.ModelSerializer):
         read_only=True
 
     )
+
+    # Market where the price was taken (e.g. Pasil Fish Market).
+    market_name = serializers.CharField(source="market.name", read_only=True, allow_null=True)
 
     # Return the readable status.
 
@@ -897,6 +901,8 @@ class PriceRecordSerializer(serializers.ModelSerializer):
             "municipality",
 
             "municipality_name",
+            "market",
+            "market_name",
 
             # Price information.
 
@@ -1058,6 +1064,28 @@ class PriceRecordSerializer(serializers.ModelSerializer):
         attrs = super().validate(attrs)
         from decimal import Decimal
         species = attrs.get("fish_species") or getattr(self.instance, "fish_species", None)
+        # The market must be in the chosen municipality.
+        market = attrs.get("market", getattr(self.instance, "market", None))
+        place = attrs.get("municipality") or getattr(self.instance, "municipality", None)
+        if market is not None:
+            if place is not None and market.municipality_id != place.pk:
+                raise serializers.ValidationError({"market": f"{market.name} is not in {place.name}."})
+            if not market.is_active and "market" in attrs:
+                raise serializers.ValidationError({"market": f"{market.name} is not active."})
+        # One price per fish, municipality, market and day.
+        fish_now = attrs.get("fish_species") or getattr(self.instance, "fish_species", None)
+        day_now = attrs.get("recorded_date") or getattr(self.instance, "recorded_date", None)
+        if fish_now is not None and place is not None and day_now is not None:
+            same = PriceRecord.objects.filter(
+                fish_species=fish_now, municipality=place, market=market, recorded_date=day_now,
+            ).exclude(status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN])
+            if self.instance is not None:
+                same = same.exclude(pk=self.instance.pk)
+            if same.exists():
+                where = f"{market.name}, {place.name}" if market else place.name
+                raise serializers.ValidationError({
+                    "non_field_errors": [f"{fish_now.name} already has a price in {where} for {day_now:%b %d, %Y}. Edit that record instead."]
+                })
         sampled = attrs.get("sampled_prices")
         if sampled:
             from statistics import median

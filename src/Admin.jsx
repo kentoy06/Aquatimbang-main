@@ -224,7 +224,7 @@ const toPriceRow = (r) => ({
   species: r.fish_name,
   speciesId: r.fish_species,
   municipality: r.municipality_name,
-  market: r.municipality_name,
+  market: r.market_name || "",
   price: Number(r.price_per_kg),
   previousPrice: r.previous_price === null || r.previous_price === undefined ? null : Number(r.previous_price),
   enteredBy: r.recorded_by_name || "—",
@@ -2466,7 +2466,7 @@ const toggleStatus = async (s) => {
                   <div className="history-item" key={r.id}>
                     <div>
                       <strong>{peso(r.price)} / kg</strong>
-                      <p>{r.market}{r.status === "Corrected" ? " · corrected" : ""}</p>
+                      <p>{r.municipality}{r.market ? ` · ${r.market}` : ""}{r.status === "Corrected" ? " · corrected" : ""}</p>
                     </div>
                     <small>{fmtDate(r.date)}</small>
                   </div>
@@ -3061,7 +3061,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
                 <tr key={r.id}>
                   <td>{fmtDate(r.date)}</td>
                   <td><strong>{r.species}</strong></td>
-                  <td>{r.municipality}</td>
+                  <td>{r.municipality}{r.market ? <small className="market-tag">{r.market}</small> : null}</td>
                   <td>
                     <strong>{peso(r.price)}</strong>
                     {r.isCorrection && r.corrections.length > 0 && (
@@ -3675,7 +3675,7 @@ function DataMonitoring({ species, municipalities, priceRecords, goTo }) {
                       <span>{r.species}</span>
                     </span>
                   </td>
-                  <td>{r.municipality}</td>
+                  <td>{r.municipality}{r.market ? <small className="market-tag">{r.market}</small> : null}</td>
                   <td><strong>{peso(r.price)}</strong></td>
                   <td>{r.enteredBy}</td>
                   <td><span className={`badge ${r.status.toLowerCase()}`}>{r.status}</span></td>
@@ -3794,7 +3794,7 @@ function ReportsManagement({ users, species, logs, priceRecords, notify }) {
     if (reportType === "External Factor Report") {
       return [row.date, row.fuel_price !== null ? peso(row.fuel_price) : "—", row.weather_display, row.is_holiday ? "Yes" : "No", row.notes || ""];
     }
-    return [fmtDate(row.date), row.species, row.market, peso(row.price), row.enteredBy, row.status];
+    return [fmtDate(row.date), row.species, row.market ? `${row.municipality} · ${row.market}` : row.municipality, peso(row.price), row.enteredBy, row.status];
   };
 
   const rows = rowsFor();

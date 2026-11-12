@@ -1427,7 +1427,8 @@ function latestPublishedRows(records, municipality) {
   );
   const groups = new Map();
   filtered.forEach((r) => {
-    const key = `${r.fish_species}|${r.municipality}`;
+    // Each market (Pasil, Carbon…) has its own price.
+    const key = `${r.fish_species}|${r.municipality}|${r.market || ""}`;
     const old = groups.get(key);
     if (!old || String(r.recorded_date) > String(old.recorded_date) ||
       (r.recorded_date === old.recorded_date && r.id > old.id)) groups.set(key, r);
@@ -1488,7 +1489,7 @@ function LivePublishedPrices({ records, loading, error, municipality, onMunicipa
     <PublishedState loading={loading} error={error} records={records} municipality={municipality} />
     {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><table>
       <thead><tr><th>{t("FISH SPECIES")}</th><th>{t("MUNICIPALITY")}</th><th>{t("OFFICIAL PRICE / KG")}</th><th>{t("RECORDED DATE")}</th><th>{t("STATUS")}</th></tr></thead>
-      <tbody>{rows.map((r) => <tr key={`${r.fish_species}-${r.municipality}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} /></td><td>{r.municipality_name || "—"}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td><td><span className="badge success">{t("Published")}</span></td></tr>)}</tbody>
+      <tbody>{rows.map((r) => <tr key={`${r.fish_species}-${r.municipality}-${r.market || ""}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} /></td><td>{r.municipality_name || "—"}{r.market_name ? <small className="market-tag">{r.market_name}</small> : null}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td><td><span className="badge success">{t("Published")}</span></td></tr>)}</tbody>
     </table></div>}
   </>;
 }
@@ -1533,7 +1534,7 @@ function LiveVendorDashboard({ records, loading, error, municipality, onMunicipa
       <div className="config-card"><h3>{t("My Pending Suggestions")}</h3><h2>{pending}</h2></div>
     </div>
     <PublishedState loading={loading} error={error} records={records} municipality={municipality} />
-    {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><div className="panel-header"><div><h3>{t("Latest Official Fish Prices")}</h3><p>{t("Only LGU-published records")}</p></div><button className="primary-btn" onClick={() => goTo("Current Fish Prices")}>{t("View All Prices")}</button></div><table><thead><tr><th>{t("SPECIES")}</th><th>{t("PRICE / KG")}</th><th>{t("AS OF")}</th></tr></thead><tbody>{rows.slice(0, 8).map((r) => <tr key={`${r.fish_species}-${r.municipality}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} /></td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td></tr>)}</tbody></table></div>}
+    {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><div className="panel-header"><div><h3>{t("Latest Official Fish Prices")}</h3><p>{t("Only LGU-published records")}</p></div><button className="primary-btn" onClick={() => goTo("Current Fish Prices")}>{t("View All Prices")}</button></div><table><thead><tr><th>{t("SPECIES")}</th><th>{t("PRICE / KG")}</th><th>{t("AS OF")}</th></tr></thead><tbody>{rows.slice(0, 8).map((r) => <tr key={`${r.fish_species}-${r.municipality}-${r.market || ""}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} />{r.market_name ? <small className="market-tag">{r.market_name}</small> : null}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td></tr>)}</tbody></table></div>}
   </>;
 }
 

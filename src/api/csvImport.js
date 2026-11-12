@@ -9,6 +9,7 @@ const HEADER_NAMES = {
   date: ["date", "petsa", "recorded date", "recorded_date", "day", "petsa sa rekord"],
   fish: ["fish", "species", "fish species", "fish_species", "fish name", "isda", "commodity", "item"],
   municipality: ["municipality", "city", "lgu", "municipality/city", "city/municipality", "munisipyo", "location"],
+  market: ["market", "merkado", "market name", "public market"],
   price: ["price", "price per kg", "price/kg", "price_per_kg", "price (php)", "price per kilo", "presyo", "amount", "prevailing price"],
 };
 
@@ -101,6 +102,7 @@ const HEADER_WORDS = {
   fish: /\b(fish|species|isda|commodity)\b/,
   municipality: /\b(municipality|city|lgu|munisipyo|location)\b/,
   price: /\b(price|presyo|amount)\b/,
+  market: /\b(market|merkado)\b/,
 };
 
 function findColumn(header, kind) {
@@ -125,6 +127,7 @@ export function toImportRows(table, { defaultMunicipality = "", dayFirst = null 
   const fishCol = findColumn(header, "fish");
   const placeCol = findColumn(header, "municipality");
   const priceCol = findColumn(header, "price");
+  const marketCol = findColumn(header, "market");
   const problems = [];
   if (dateCol < 0) problems.push(`No date column found. Name one column "Date". Columns found: ${header.join(", ")}`);
   if (placeCol < 0 && !defaultMunicipality) problems.push('No "Municipality" column; choose the municipality on the page.');
@@ -133,7 +136,7 @@ export function toImportRows(table, { defaultMunicipality = "", dayFirst = null 
   const rows = [];
   const layout = fishCol >= 0 && priceCol >= 0 ? "long" : "wide";
   const fishColumns = layout === "wide"
-    ? header.map((name, i) => ({ name, i })).filter(({ name, i }) => name && i !== dateCol && i !== placeCol && !NOT_FISH.test(headerKey(name)))
+    ? header.map((name, i) => ({ name, i })).filter(({ name, i }) => name && i !== dateCol && i !== placeCol && i !== marketCol && !NOT_FISH.test(headerKey(name)))
     : [];
   if (layout === "wide" && !fishColumns.length) problems.push(`No fish columns found. Use "Fish" (or "Species") and "Price" columns, or one column per fish. Columns found: ${header.join(", ")}`);
   if (layout === "wide" && (fishCol >= 0) !== (priceCol >= 0)) {
@@ -148,13 +151,14 @@ export function toImportRows(table, { defaultMunicipality = "", dayFirst = null 
     const rawDate = clean(cells[dateCol]);
     const date = parseDate(rawDate, dayFirstUsed) || rawDate;
     const municipality = placeCol >= 0 ? clean(cells[placeCol]) || defaultMunicipality : defaultMunicipality;
+    const market = marketCol >= 0 ? clean(cells[marketCol]) : "";
     if (layout === "long") {
-      rows.push({ row: rowNumber, date, fish: clean(cells[fishCol]), municipality, price: cleanPrice(cells[priceCol]) });
+      rows.push({ row: rowNumber, date, fish: clean(cells[fishCol]), municipality, market, price: cleanPrice(cells[priceCol]) });
     } else {
       fishColumns.forEach(({ name, i }) => {
         const price = cleanPrice(cells[i]);
         // Blank or "-" cells mean no price that day.
-        if (price && price !== "-") rows.push({ row: rowNumber, date, fish: name, municipality, price });
+        if (price && price !== "-") rows.push({ row: rowNumber, date, fish: name, municipality, market, price });
       });
     }
   });
