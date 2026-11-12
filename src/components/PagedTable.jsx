@@ -39,6 +39,17 @@ function sentenceCaseHeaders(table) {
   }
 }
 
+// Dates and times never break over two lines ("2026-" / "08-01").
+const DATE_TEXT = /^(\d{4}-\d{2}-\d{2}|\d{1,2}\/\d{1,2}\/\d{2,4}|[A-Z][a-z]{2} \d{1,2}, \d{4})(,? \d{1,2}:\d{2}( ?[AP]M)?)?$/;
+function keepDatesOnOneLine(table) {
+  const body = table?.tBodies?.[0];
+  if (!body) return;
+  for (const cell of body.querySelectorAll("td")) {
+    const isDate = DATE_TEXT.test(cell.textContent.trim());
+    if (isDate !== cell.hasAttribute("data-date")) cell.toggleAttribute("data-date", isDate);
+  }
+}
+
 export default function PagedTable({ pageSize = 10, paged = true, children, ...tableProps }) {
   const tableRef = useRef(null);
   const [page, setPage] = useState(1);
@@ -62,6 +73,7 @@ export default function PagedTable({ pageSize = 10, paged = true, children, ...t
 
   const apply = useCallback(() => {
     sentenceCaseHeaders(tableRef.current);
+    keepDatesOnOneLine(tableRef.current);
     const all = groups();
     const real = all.filter((g) => g[1] !== "message");
     const total = real.length;

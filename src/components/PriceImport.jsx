@@ -275,6 +275,8 @@ export default function PriceImport({ notify, onImported }) {
                 <div className="profile-field"><span>{mode === "file" ? "File" : "From"}</span><strong>{sourceName}</strong></div>
                 <div className="profile-field"><span>Prices found</span><strong>{isList && skipped.size ? `${rowsToImport.length} of ${parsed.rows.length}` : parsed.rows.length.toLocaleString()}</strong></div>
                 <div className="profile-field"><span>Layout</span><strong>{parsed.layout === "list" ? "Price list (one date)" : parsed.layout === "long" ? "One row per price" : `One column per fish (${parsed.fishColumns.length})`}</strong></div>
+                {isList && parsed.rows[0] && <div className="profile-field"><span>Date of these prices</span><strong>{new Date(`${parsed.rows[0].date}T00:00:00`).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}</strong></div>}
+                {isList && parsed.rows[0]?.municipality && <div className="profile-field"><span>Municipality</span><strong>{parsed.rows[0].municipality}</strong></div>}
                 {parsed.layout !== "list" && <div className="profile-field">
                   <span>Dates like 03/04/2024 mean</span>
                   <select value={parsed.dayFirst ? "dmy" : "mdy"} onChange={(e) => changeSetting(() => setDayFirst(e.target.value === "dmy"))}>
@@ -286,13 +288,13 @@ export default function PriceImport({ notify, onImported }) {
 
               <div style={{ overflowX: "auto", marginTop: 12 }}>
                 <PagedTable className="inner-table">
-                  <thead><tr>{isList && <th>IMPORT</th>}<th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></tr></thead>
+                  <thead><tr>{isList ? <><th>IMPORT</th><th>LINE</th><th>FISH</th><th>PRICE / KG</th></> : <><th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></>}</tr></thead>
                   <tbody>
                     {(isList ? parsed.rows : parsed.rows.slice(0, 8)).map((r, i) => isList ? (
                       <tr key={i} className={skipped.has(r.row) ? "import-skipped" : ""}>
                         <td><input type="checkbox" checked={!skipped.has(r.row)} onChange={() => toggleSkip(r.row)} aria-label={`Import ${r.fish}`} /></td>
-                        <td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td>
-                        <td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td>
+                        <td>{r.row}</td><td><strong>{r.fish}</strong></td>
+                        <td>₱{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td>
                       </tr>
                     ) : (
                       <tr key={i}><td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td><td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td></tr>
