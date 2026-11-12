@@ -1300,15 +1300,24 @@ function PriceEntry({
     setForm((previous) => ({ ...previous, price: stallMedian === null ? "" : String(stallMedian) }));
   }, [priceMode, stallMedian]);
 
-  // Learned check: is this price unusual for this fish and municipality?
-  const priceCheck = usePriceCheck({
-    speciesId: form.species, municipalityId: form.municipality, price: form.price, date: form.date,
-  });
-
-  // Markets of the chosen municipality.
+  // Markets of the chosen municipality; each market has its own official price.
   const marketsHere = markets.filter(
     (market) => String(market.municipality) === String(form.municipality) && market.is_active !== false
   );
+  const selectedMarket = marketsHere.find((market) => market.name === sourceChoice) || null;
+  // Default to Pasil Fish Market (the study's market), else the first market.
+  useEffect(() => {
+    if (sourceChoice || !marketsHere.length) return;
+    const preferred = marketsHere.find((m) => /pasil/i.test(m.name)) || marketsHere[0];
+    setSourceChoice(preferred.name);
+    setForm((previous) => ({ ...previous, source: preferred.name }));
+  }, [sourceChoice, marketsHere.map((m) => m.id).join(",")]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Learned check: is this price unusual for this fish in this market?
+  const priceCheck = usePriceCheck({
+    speciesId: form.species, municipalityId: form.municipality, price: form.price, date: form.date,
+    marketId: selectedMarket?.id,
+  });
 
   // Update one form field.
   const update = (key, value) => {
@@ -1585,12 +1594,14 @@ function PriceEntry({
           Number(form.species) &&
         Number(record.municipality) ===
           Number(form.municipality) &&
-        record.recorded_date === form.date
+        Number(record.market || 0) === Number(selectedMarket?.id || 0) &&
+        record.recorded_date === form.date &&
+        !["rejected", "withdrawn"].includes(record.status)
     );
 
     if (duplicate) {
       notify(
-        "This fish already has a price for this municipality and date. Edit the existing record instead."
+        "This fish already has a price for this market and date. Edit the existing record instead."
       );
       return;
     }
@@ -1619,6 +1630,7 @@ function PriceEntry({
               form.source ||
               "LGU Price Entry",
             sampled_prices: priceMode === "stalls" ? validStallPrices : [],
+            market: selectedMarket ? selectedMarket.id : null,
           }),
         }
       );
@@ -2010,7 +2022,7 @@ function PriceEntry({
 
           {/* SOURCE: a market from Municipality & Market, or typed in */}
           <div className="form-group">
-            <label htmlFor="entry-source">Source / Market</label>
+            <label htmlFor="entry-source">Market</label>
             <select
               id="entry-source"
               value={sourceChoice}
@@ -2024,8 +2036,11 @@ function PriceEntry({
               {marketsHere.map((market) => (
                 <option key={market.id} value={market.name}>{market.name}</option>
               ))}
-              <option value={OTHER_SOURCE}>Other (type it)</option>
+              <option value={OTHER_SOURCE}>Other source (not a listed market)</option>
             </select>
+            <small style={{ display: "block", marginTop: 6, color: "#64748b" }}>
+              Each market has its own official price (Pasil and Carbon prices differ).
+            </small>
             {sourceChoice === OTHER_SOURCE && (
               <input
                 type="text"
@@ -2111,7 +2126,7 @@ function PriceEntry({
                     </td>
 
                     <td>
-                      {record.source || "—"}
+                      {record.market_name || record.source || "—"}
                     </td>
 
                     <td>
@@ -2651,7 +2666,7 @@ console.log("Bangus #8 comparison:", {
                           </strong>
 
                           <small>
-                            {record.municipality_name || ""}
+                            {record.municipality_name || ""}{record.market_name ? ` · ${record.market_name}` : ""}
                           </small>
                         </div>
                       </div>
@@ -3335,7 +3350,7 @@ function PriceSuggestions({ notify, onUsePrice }) {
 
 function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
   // The latest published price for each species and municipality is the official reference.
-  const rows = latestBy(priceRecords.filter(isPublished), (r) => `${r.fish_species}|${r.municipality}`)
+  const rows = latestBy(priceRecords.filter(isPublished), (r) => `${r.fish_species}|${r.municipality}|${r.market || ""}`)
     .sort((a, b) => a.fish_name.localeCompare(b.fish_name) || a.municipality_name.localeCompare(b.municipality_name));
 
   return (
@@ -3368,7 +3383,7 @@ function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
               rows.map((r) => (
                 <tr key={r.id}>
                   <td><strong>{r.fish_name}</strong></td>
-                  <td>{r.municipality_name}</td>
+                  <td>{r.municipality_name}{r.market_name ? <small className="market-tag">{r.market_name}</small> : null}</td>
                   <td><strong>{peso(r.price_per_kg)}</strong></td>
                   <td>{fmtDate(r.recorded_date)}</td>
                   <td>{r.published_by_name || "—"}</td>
@@ -3521,9 +3536,9 @@ function PriceComparison({ priceRecords, loading, error }) {
   const [asOf, setAsOf] = useState("");
   const current = species.includes(selected) ? selected : species[0] || "";
 
-  // Latest published price for the species in each municipality, on or before the chosen date.
-  const rows = latestBy(published.filter((r) => r.fish_name === current && (!asOf || r.recorded_date <= asOf)), (r) => r.municipality)
-    .map((r) => ({ municipality: r.municipality_name, price: Number(r.price_per_kg), date: r.recorded_date }))
+  // Latest published price for the species in each market (e.g. Pasil vs Carbon), on or before the chosen date.
+  const rows = latestBy(published.filter((r) => r.fish_name === current && (!asOf || r.recorded_date <= asOf)), (r) => `${r.municipality}|${r.market || ""}`)
+    .map((r) => ({ municipality: r.market_name ? `${r.market_name} · ${r.municipality_name}` : r.municipality_name, price: Number(r.price_per_kg), date: r.recorded_date }))
     .sort((a, b) => b.price - a.price);
   const highest = rows.length ? Math.max(...rows.map((r) => r.price)) : null;
   const lowest = rows.length ? Math.min(...rows.map((r) => r.price)) : null;
@@ -3550,7 +3565,7 @@ function PriceComparison({ priceRecords, loading, error }) {
           <div><h3>{current || "—"} — Price by Municipality</h3><p>{asOf ? `Latest published rates on or before ${fmtDate(asOf)}` : "Latest published rates"}</p></div>
         </div>
         <table>
-          <thead><tr><th>MUNICIPALITY</th><th>PRICE / KG</th><th>PRICE DATE</th><th>VS. HIGHEST</th><th>NOTE</th></tr></thead>
+          <thead><tr><th>MARKET</th><th>PRICE / KG</th><th>PRICE DATE</th><th>VS. HIGHEST</th><th>NOTE</th></tr></thead>
           <tbody>
             {loading ? (
               <tr><td colSpan="5" className="empty-row">Loading published prices…</td></tr>
@@ -3647,7 +3662,7 @@ function PriceAnomalies({ priceRecords, suggestions }) {
                   <td>{fmtDate(r.recorded_date)}</td>
                   <td><strong>{r.fish_name}</strong></td>
                   <td className="flag-price"><strong>{peso(r.price_per_kg)}</strong></td>
-                  <td>{r.municipality_name}</td>
+                  <td>{r.municipality_name}{r.market_name ? <small className="market-tag">{r.market_name}</small> : null}</td>
                   <td><span className={`badge ${r.status === "flagged" ? "flagged" : "pending"}`}>{STATUS_LABELS[r.status] || r.status}</span></td>
                 </tr>
               ))

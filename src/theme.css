@@ -1910,3 +1910,5 @@ table th {
   .hero-shade { background: linear-gradient(180deg, rgba(4, 14, 24, .78) 0%, rgba(4, 14, 24, .62) 55%, rgba(4, 14, 24, .8) 100%) !important; }
 }
 .import-tabs { margin-bottom: 14px; } .import-paste { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13.5px; padding: 10px 12px; border-radius: 10px; border: 1px solid #cfdbe6; resize: vertical; }
+.import-skipped td { color: #98a2b3; text-decoration: line-through; } .import-skipped td:first-child { text-decoration: none; }
+.market-tag { display: block; font-size: 11.5px; color: #0e7c86; font-weight: 600; margin-top: 2px; }

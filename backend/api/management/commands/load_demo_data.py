@@ -206,6 +206,15 @@ class Command(BaseCommand):
         holy_week = {}
         now = timezone.now()
         rows, skipped = [], 0
+        # Simulated prices belong to the study's market: Pasil Fish Market in
+        # Cebu City (created if missing), or the municipality's only market.
+        from api.models import Market
+        markets = list(Market.objects.filter(municipality=municipality, is_active=True))
+        market = next((m for m in markets if "pasil" in m.name.lower()), None)
+        if market is None and municipality.name.lower() == "cebu city":
+            market = Market.objects.create(municipality=municipality, name="Pasil Fish Market")
+        if market is None and len(markets) == 1:
+            market = markets[0]
         for fish, base, peak in chosen:
             fish_seasons = [s for s in seasons if fish in s.species.all()]
             taken = set(
@@ -236,7 +245,7 @@ class Command(BaseCommand):
                 )
                 price = max(20.0, level * (1 + effect))
                 rows.append(PriceRecord(
-                    fish_species=fish, municipality=municipality, recorded_date=day,
+                    fish_species=fish, municipality=municipality, market=market, recorded_date=day,
                     price_per_kg=Decimal(f"{price:.2f}"), source=DEMO_SOURCE,
                     remarks="Simulated price for demonstration only. Not real DVMF data.",
                     status=PriceRecord.STATUS_PUBLISHED, reviewed_at=now, published_at=now,

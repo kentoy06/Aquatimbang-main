@@ -5,9 +5,9 @@ import { apiUrl, authHeaders } from "../api/config.js";
  * Learned price check: asks the server whether a price is unusual for this
  * fish and municipality, half a second after the officer stops typing.
  */
-export function usePriceCheck({ speciesId, municipalityId, price, date }) {
+export function usePriceCheck({ speciesId, municipalityId, price, date, marketId }) {
   const [result, setResult] = useState(null);
-  const key = speciesId && municipalityId && Number(price) > 0 ? `${speciesId}|${municipalityId}|${price}|${date}` : "";
+  const key = speciesId && municipalityId && Number(price) > 0 ? `${speciesId}|${municipalityId}|${marketId || ""}|${price}|${date}` : "";
 
   useEffect(() => {
     if (!key) return undefined;
@@ -15,13 +15,14 @@ export function usePriceCheck({ speciesId, municipalityId, price, date }) {
     const timer = setTimeout(() => {
       const params = new URLSearchParams({ species: speciesId, municipality: municipalityId, price: String(price) });
       if (date) params.set("date", date);
+      if (marketId) params.set("market", marketId);
       fetch(apiUrl(`/insights/price-check/?${params}`), { headers: authHeaders() })
         .then((r) => (r.ok ? r.json() : null))
         .then((data) => { if (!cancelled) setResult(data ? { key, ...data } : null); })
         .catch(() => { if (!cancelled) setResult(null); });
     }, 500);
     return () => { cancelled = true; clearTimeout(timer); };
-  }, [key, speciesId, municipalityId, price, date]);
+  }, [key, speciesId, municipalityId, price, date, marketId]);
 
   return result && result.key === key ? result : null;
 }

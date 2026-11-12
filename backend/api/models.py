@@ -642,6 +642,12 @@ A pending record may also be flagged or rejected.
 
     )
 
+    # Market where the price was taken (e.g. Pasil Fish Market). Each market
+    # has its own official price; empty only on older records.
+    market = models.ForeignKey(
+        "Market", on_delete=models.PROTECT, null=True, blank=True, related_name="price_records",
+    )
+
     # Prices checked at randomly chosen stalls; the official price is their
     # median. Empty when one price was typed directly or imported.
     sampled_prices = models.JSONField(default=list, blank=True)
@@ -797,23 +803,18 @@ A pending record may also be flagged or rejected.
 
         constraints = [
 
+            # One price per fish, market and day (Pasil and Carbon differ).
             models.UniqueConstraint(
-
-                fields=[
-
-                    "fish_species",
-
-                    "municipality",
-
-                    "recorded_date",
-
-                ],
-
-                condition=~models.Q(status__in=["rejected", "withdrawn"]),
-
-                name="unique_daily_fish_price",
-
-            )
+                fields=["fish_species", "municipality", "market", "recorded_date"],
+                condition=~models.Q(status__in=["rejected", "withdrawn"]) & models.Q(market__isnull=False),
+                name="unique_daily_fish_price_per_market",
+            ),
+            # Prices without a market (older records): one per municipality and day.
+            models.UniqueConstraint(
+                fields=["fish_species", "municipality", "recorded_date"],
+                condition=~models.Q(status__in=["rejected", "withdrawn"]) & models.Q(market__isnull=True),
+                name="unique_daily_fish_price_no_market",
+            ),
 
         ]
 

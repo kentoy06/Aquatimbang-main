@@ -227,6 +227,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
     queryset = PriceRecord.objects.select_related(
         "fish_species",
         "municipality",
+        "market",
         "recorded_by",
         "reviewed_by",
         "published_by",
@@ -281,6 +282,9 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             except ValueError:
                 raise DRFValidationError({name: "Use the date format YYYY-MM-DD."})
             queryset = queryset.filter(Q(**{lookup: day}) | ~Q(status=PriceRecord.STATUS_PUBLISHED))
+        market = self.request.query_params.get("market")
+        if market:
+            queryset = queryset.filter(market_id=market)
         return queryset
 
     # --------------------------------------------------------
@@ -490,6 +494,13 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                 new_fish[key] = fish
             return new_fish[key]
         places = {place.name.strip().lower(): place for place in Municipality.objects.all()}
+        # Markets by municipality and lower-case name; a market chosen on the
+        # page is used for rows without a Market column.
+        from .models import Market
+        markets = {(m.municipality_id, m.name.strip().lower()): m for m in Market.objects.filter(is_active=True)}
+        chosen_market = None
+        if str(request.data.get("market") or "").isdigit():
+            chosen_market = Market.objects.filter(pk=int(request.data.get("market")), is_active=True).first()
         bounds = SystemSetting.load()
         today = timezone.localdate()
 
@@ -513,6 +524,17 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             place = places.get(str(row.get("municipality", "")).strip().lower())
             if place is None:
                 problems.append(f"unknown municipality \"{row.get('municipality', '')}\"")
+            market = None
+            market_name = " ".join(str(row.get("market") or "").split())
+            if place is not None and market_name:
+                market = markets.get((place.id, market_name.lower()))
+                if market is None:
+                    problems.append(f"unknown market \"{market_name}\" in {place.name} (add it in Municipality & Market)")
+            elif place is not None and chosen_market is not None:
+                if chosen_market.municipality_id == place.id:
+                    market = chosen_market
+                else:
+                    problems.append(f"{chosen_market.name} is not in {place.name}")
             try:
                 price = Decimal(str(row.get("price", "")).replace(",", "").replace("₱", "").strip())
                 if not price.is_finite():
@@ -528,14 +550,14 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                 price = None
                 problems.append(f"unreadable price \"{row.get('price', '')}\"")
             if not problems:
-                key = (fish.id, place.id, day)
+                key = (fish.id, place.id, market.id if market else None, day)
                 if key in seen:
-                    problems.append("same fish, municipality and date appears earlier in the file")
+                    problems.append("same fish, market and date appears earlier in the file")
                 seen.add(key)
             if problems:
                 errors.append({"row": row_number, "message": "; ".join(problems)})
             else:
-                candidates.append((row_number, fish, place, day, price))
+                candidates.append((row_number, fish, place, day, price, market))
 
         # Prices already in AquaTimbang are kept; the file's row is skipped.
         existing = set()
@@ -549,9 +571,9 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                     recorded_date__lte=max(days),
                 ).exclude(
                     status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN]
-                ).values_list("fish_species_id", "municipality_id", "recorded_date")
+                ).values_list("fish_species_id", "municipality_id", "market_id", "recorded_date")
             )
-        new_rows = [c for c in candidates if (c[1].id, c[2].id, c[3]) not in existing]
+        new_rows = [c for c in candidates if (c[1].id, c[2].id, c[5].id if c[5] else None, c[3]) not in existing]
 
         imported = 0
         batch = None
@@ -577,6 +599,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                         PriceRecord(
                             fish_species=fish,
                             municipality=place,
+                            market=market,
                             recorded_date=day,
                             price_per_kg=price,
                             source=source,
@@ -589,7 +612,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                             published_at=now if published else None,
                             import_batch=batch,
                         )
-                        for _, fish, place, day, price in new_rows
+                        for _, fish, place, day, price, market in new_rows
                     ],
                     batch_size=1000,
                 )
@@ -699,6 +722,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             if new_species.pk != record.fish_species_id and PriceRecord.objects.filter(
                 fish_species=new_species,
                 municipality_id=record.municipality_id,
+                market_id=record.market_id,
                 recorded_date=record.recorded_date,
             ).exclude(status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN]).exclude(pk=record.pk).exists():
                 return Response(
@@ -1709,11 +1733,11 @@ def public_summary(request):
                 status=PriceRecord.STATUS_PUBLISHED,
                 fish_species__is_active=True,
             )
-            .select_related("fish_species", "municipality")
+            .select_related("fish_species", "municipality", "market")
             .order_by("-recorded_date", "-id")
         )
         for record in recent:
-            key = (record.fish_species_id, record.municipality_id)
+            key = (record.fish_species_id, record.municipality_id, record.market_id)
             if key in seen:
                 continue
             seen.add(key)
@@ -1729,7 +1753,7 @@ def public_summary(request):
                 "price_per_kg": record.price_per_kg,
                 "recorded_date": record.recorded_date,
                 # Market the LGU checked (e.g. Pasil Fish Market), when one was given.
-                "market": _market_label(record.source),
+                "market": record.market.name if record.market_id else _market_label(record.source),
                 "stalls_checked": len(record.sampled_prices or []),
             })
             if len(today_prices) >= 500:
@@ -1793,7 +1817,10 @@ def price_check(request):
         day = _date.fromisoformat(request.query_params.get("date") or timezone.localdate().isoformat())
     except ValueError:
         return Response({"date": "Use the date format YYYY-MM-DD."}, status=status.HTTP_400_BAD_REQUEST)
-    return Response(check_price(species, place, price, day))
+    from .models import Market
+    market = Market.objects.filter(pk=request.query_params.get("market") or 0, municipality=place).first() \
+        if str(request.query_params.get("market") or "").isdigit() else None
+    return Response(check_price(species, place, price, day, market=market))
 
 
 @api_view(["GET"])
