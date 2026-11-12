@@ -570,6 +570,7 @@ const PHRASES = {
   "Take a photo of your document": ["Kunan ng larawan ang iyong dokumento", "Kuhaa og litrato ang imong dokumento"],
   "Fill in what you can. You can register even if some details are missing; an Administrator will check them and may ask you for the rest before approving.": ["Punan ang kaya mo. Maaari kang magrehistro kahit may kulang; susuriin ito ng Administrator at maaaring hingin ang iba bago aprubahan.", "Pun-a ang imong mahimo. Makaparehistro ka bisan kulang pa; susihon kini sa Administrator ug mahimong pangayoon ang uban sa dili pa aprobahan."],
   "No email? You can still register. If you forget your password, ask your LGU Officer to reset it.": ["Walang email? Maaari ka pa ring magrehistro. Kung makalimutan mo ang password, magpa-reset sa iyong LGU Officer.", "Walay email? Makaparehistro gihapon ka. Kung makalimtan nimo ang password, pa-reset sa imong LGU Officer."],
+  "All fields here are optional.": ["Opsyonal ang lahat ng field dito.", "Opsyonal ang tanang field dinhi."],
 };
 
 export function translate(language, text, vars = {}) {
