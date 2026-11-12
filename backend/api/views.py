@@ -1350,6 +1350,21 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
                     "otherwise deactivate it to keep its price history."
                 )
             })
+    @action(detail=False, methods=["get"], url_path="known-names")
+    def known_names(self, request):
+        """
+        Fish names offered when adding a fish: every fish already in the list
+        (marked registered) and fish commonly sold in Cebu markets that are
+        not in it yet.
+        """
+        from .species_tools import KNOWN_FISH, name_key
+        rows = {}
+        for name, scientific in FishSpecies.objects.values_list("name", "scientific_name"):
+            rows[name_key(name)] = {"name": name, "scientific_name": scientific or "", "registered": True}
+        for name, scientific in KNOWN_FISH:
+            rows.setdefault(name_key(name), {"name": name, "scientific_name": scientific, "registered": False})
+        return Response(sorted(rows.values(), key=lambda row: row["name"].lower()))
+
     @action(detail=True, methods=["get"], url_path="usage")
     def usage(self, request, pk=None):
         """How much is recorded under this fish (shown before removing it)."""
