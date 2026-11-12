@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import FishNameField from "./components/FishNameField.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { LearnedOutliers, PriceCheckNote, usePriceCheck } from "./components/PriceInsights.jsx";
@@ -1193,13 +1194,14 @@ function LGUFishSpeciesManagement({ notify }) {
                 <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 13 }}>Changes are saved directly to AquaTimbang's database.</p>
               </div>
               <button type="button" aria-label="Close form" disabled={busy} onClick={() => setShowForm(false)}
-                style={{ border: "1px solid #e2e8f0", borderRadius: 8, background: "#f8fafc", color: "#334155", fontSize: 21, width: 36, height: 36, cursor: "pointer", flexShrink: 0 }}>×</button>
+                className="dialog-close-btn">✕</button>
             </div>
             <form onSubmit={save}>
               <div className="form-group">
                 <label htmlFor="lgu-species-name">Common Name *</label>
-                <input id="lgu-species-name" autoFocus required maxLength={100} value={form.name}
-                  onChange={(event) => setForm((old) => ({ ...old, name: event.target.value }))} />
+                <FishNameField id="lgu-species-name" autoFocus required value={form.name}
+                  onChange={(name) => setForm((old) => ({ ...old, name }))}
+                  onPick={(fish) => setForm((old) => ({ ...old, scientific_name: fish.scientific_name || old.scientific_name }))} />
               </div>
               <div className="form-group">
                 <label htmlFor="lgu-species-scientific">Scientific Name</label>

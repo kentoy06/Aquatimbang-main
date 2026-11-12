@@ -14,49 +14,51 @@ def name_key(value):
     return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
 
 
-# Common name (as a name_key) -> scientific name, for fish commonly sold in
-# Cebu City markets. Used to fill the scientific name when it is left blank;
-# the LGU or Administrator can still edit it.
-KNOWN_SCIENTIFIC_NAMES = {
-    "galunggong": "Decapterus macrosoma",
-    "budloy": "Decapterus macrosoma",
-    "bangus": "Chanos chanos",
-    "tilapia": "Oreochromis niloticus",
-    "tulingan": "Auxis thazard",
-    "alumahan": "Rastrelliger kanagurta",
-    "anduhaw": "Rastrelliger kanagurta",
-    "hasahasa": "Rastrelliger brachysoma",
-    "tamban": "Sardinella lemuru",
-    "tunsoy": "Sardinella fimbriata",
-    "matambaka": "Selar crumenophthalmus",
-    "salaysalay": "Selaroides leptolepis",
-    "dilis": "Stolephorus spp.",
-    "bolinaw": "Stolephorus spp.",
-    "lapulapu": "Epinephelus spp.",
-    "pugapo": "Epinephelus spp.",
-    "mayamaya": "Lutjanus spp.",
-    "tambakol": "Thunnus albacares",
-    "bariles": "Thunnus albacares",
-    "tanigue": "Scomberomorus commerson",
-    "tangigue": "Scomberomorus commerson",
-    "danggit": "Siganus spp.",
-    "samaral": "Siganus spp.",
-    "dalagangbukid": "Caesio cuning",
-    "sapsap": "Leiognathus spp.",
-    "talakitok": "Caranx spp.",
-    "mamsa": "Caranx spp.",
-    "bisugo": "Nemipterus spp.",
-    "pampano": "Trachinotus blochii",
-    "espada": "Trichiurus lepturus",
-    "hito": "Clarias batrachus",
-    "dalag": "Channa striata",
-    "haluan": "Channa striata",
-    "bilongbilong": "Mene maculata",
-    "kitang": "Scatophagus argus",
-    "labahita": "Acanthurus spp.",
-    "molmol": "Scarus spp.",
-    "dorado": "Coryphaena hippurus",
-}
+# Fish commonly sold in Cebu City markets: (common name, scientific name).
+# Offered as choices when adding a fish, and used to fill the scientific name
+# when it is left blank; the LGU or Administrator can still edit it.
+KNOWN_FISH = [
+    ("Galunggong", "Decapterus macrosoma"),
+    ("Budloy", "Decapterus macrosoma"),
+    ("Bangus", "Chanos chanos"),
+    ("Tilapia", "Oreochromis niloticus"),
+    ("Tulingan", "Auxis thazard"),
+    ("Alumahan", "Rastrelliger kanagurta"),
+    ("Anduhaw", "Rastrelliger kanagurta"),
+    ("Hasa-Hasa", "Rastrelliger brachysoma"),
+    ("Tamban", "Sardinella lemuru"),
+    ("Tunsoy", "Sardinella fimbriata"),
+    ("Matambaka", "Selar crumenophthalmus"),
+    ("Salay-Salay", "Selaroides leptolepis"),
+    ("Dilis", "Stolephorus spp."),
+    ("Bolinaw", "Stolephorus spp."),
+    ("Lapu-Lapu", "Epinephelus spp."),
+    ("Pugapo", "Epinephelus spp."),
+    ("Maya-Maya", "Lutjanus spp."),
+    ("Tambakol", "Thunnus albacares"),
+    ("Bariles", "Thunnus albacares"),
+    ("Tanigue", "Scomberomorus commerson"),
+    ("Tangigue", "Scomberomorus commerson"),
+    ("Danggit", "Siganus spp."),
+    ("Samaral", "Siganus spp."),
+    ("Dalagang Bukid", "Caesio cuning"),
+    ("Sapsap", "Leiognathus spp."),
+    ("Talakitok", "Caranx spp."),
+    ("Mamsa", "Caranx spp."),
+    ("Bisugo", "Nemipterus spp."),
+    ("Pampano", "Trachinotus blochii"),
+    ("Espada", "Trichiurus lepturus"),
+    ("Hito", "Clarias batrachus"),
+    ("Dalag", "Channa striata"),
+    ("Haluan", "Channa striata"),
+    ("Bilong-Bilong", "Mene maculata"),
+    ("Kitang", "Scatophagus argus"),
+    ("Labahita", "Acanthurus spp."),
+    ("Molmol", "Scarus spp."),
+    ("Dorado", "Coryphaena hippurus"),
+]
+
+KNOWN_SCIENTIFIC_NAMES = {name_key(name): scientific for name, scientific in KNOWN_FISH}
 
 
 def known_scientific_name(common_name):

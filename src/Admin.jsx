@@ -27,6 +27,7 @@ import { useProtectedImage } from "./api/images.js";
 import { FishPhotoInput, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 import { AnnouncementsManager } from "./components/Announcements.jsx";
 import PagedTable from "./components/PagedTable.jsx";
+import FishNameField from "./components/FishNameField.jsx";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -2383,8 +2384,10 @@ const toggleStatus = async (s) => {
             </div>
 
             <div className="form-group">
-              <label>Common Name</label>
-              <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
+              <label htmlFor="admin-species-name">Common Name</label>
+              <FishNameField id="admin-species-name" value={form.name}
+                onChange={(name) => setForm((old) => ({ ...old, name }))}
+                onPick={(fish) => setForm((old) => ({ ...old, scientific: fish.scientific_name || old.scientific }))} />
             </div>
 
             <div className="form-group">

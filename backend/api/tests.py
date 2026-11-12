@@ -2625,6 +2625,14 @@ class FishNameVariantTests(StallSampleTests):
         self.assertEqual(self.client.post("/api/fish-species/", {"name": "maya2x"}, format="json").status_code, 400)
         self.assertEqual(self.client.post("/api/fish-species/", {"name": "Mayamaya"}, format="json").status_code, 400)
 
+    def test_known_names_list(self):
+        FishSpecies.objects.create(name="Lapu-Lapu")
+        rows = {r["name"]: r for r in self.client.get("/api/fish-species/known-names/").data}
+        self.assertTrue(rows["Lapu-Lapu"]["registered"])
+        self.assertTrue(rows["Sample Fish"]["registered"])
+        self.assertFalse(rows["Bolinaw"]["registered"])
+        self.assertEqual(rows["Bolinaw"]["scientific_name"], "Stolephorus spp.")
+
     def test_cleanup_merges_spelling_variants(self):
         from importlib import import_module
         from django.apps import apps as django_apps
