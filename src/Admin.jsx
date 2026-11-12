@@ -2389,7 +2389,7 @@ const toggleStatus = async (s) => {
 
             <div className="form-group">
               <label>Scientific Name</label>
-              <input value={form.scientific} onChange={(e) => setForm({ ...form, scientific: e.target.value })} />
+              <input value={form.scientific} placeholder="Leave blank to fill in automatically for known fish" onChange={(e) => setForm({ ...form, scientific: e.target.value })} />
             </div>
 
             <div className="form-group">
