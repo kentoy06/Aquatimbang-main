@@ -172,7 +172,6 @@ function Landing({ onGetStarted, onRegister }) {
         </div>
 
         <div className="hero-side-label" aria-hidden="true"><span>TRANSPARENCY</span></div>
-        {photoOk && <small className="hero-credit">Cover photo: © WWF-Philippines / Alo Lantin</small>}
         </>
         )}
 
