@@ -1865,3 +1865,19 @@ table th {
 .msg-profile-facts dt { color: #64748b; margin: 0; }
 .msg-profile-facts dd { margin: 0; font-weight: 700; color: var(--navy-900); text-align: right; }
 .msg-profile .primary-btn { width: 100%; margin-top: 4px; }
+
+/* Price Entry: price from several stalls (median) */
+.price-mode { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; background: #eef3f7; padding: 4px; border-radius: 12px; margin-bottom: 10px; }
+.price-mode button { border: 0; background: transparent; padding: 8px 10px; border-radius: 9px; font-weight: 700; font-size: 13px; color: #5b7389; cursor: pointer; }
+.price-mode button.active { background: #fff; color: var(--navy-900); box-shadow: 0 1px 4px rgba(7, 26, 43, .12); }
+.stall-prices { display: grid; gap: 8px; }
+.stall-help { margin: 0 0 2px; font-size: 12.5px; color: #64748b; }
+.stall-row { display: grid; grid-template-columns: 64px 1fr auto; align-items: center; gap: 8px; }
+.stall-label { font-size: 13px; font-weight: 700; color: #5b7389; }
+.stall-remove { border: 1px solid #f3b4ae; color: #b42318; background: #fff; border-radius: 999px; width: 30px; height: 30px; cursor: pointer; }
+.stall-add { justify-self: start; border: 1px dashed #9fb4c7; background: #fff; color: var(--navy-900); border-radius: 999px; padding: 6px 14px; font-weight: 700; font-size: 12.5px; cursor: pointer; }
+.stall-median { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 10px 12px; border-radius: 12px; background: #ecf7f8; border: 1px solid #b9dfe3; }
+.stall-median span { font-size: 12.5px; color: #0e7c86; font-weight: 700; }
+.stall-median strong { font-size: 18px; color: var(--navy-900); white-space: nowrap; }
+.stall-median.empty { background: #f6f9fb; border-color: var(--line); }
+.stall-median.empty strong { font-size: 13px; color: #8a97a8; font-weight: 600; }

@@ -2450,3 +2450,32 @@ class MessagePhotoTests(MessagingTests):
         self.assertEqual(self.client_for(self.far_vendor).get(f"/api/messages/people/{self.lgu.pk}/photo/").status_code, 404)
         # Vendors cannot see each other.
         self.assertEqual(self.client_for(self.vendor2).get(f"/api/messages/people/{self.vendor.pk}/photo/").status_code, 404)
+
+
+class StallSampleTests(TestCase):
+    """Price Entry with prices from several stalls: the official price is the median."""
+
+    def setUp(self):
+        role = Role.objects.get_or_create(name="LGU Officer")[0]
+        self.place = Municipality.objects.create(name="Sample City", province="Cebu")
+        self.fish = FishSpecies.objects.create(name="Sample Fish")
+        self.officer = User.objects.create_user("ss_lgu", "ss@example.com", "TestPass123!")
+        UserProfile.objects.create(user=self.officer, role=role, municipality=self.place, account_status="approved", is_active=True)
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=self.officer)[0].key}")
+
+    def post(self, **extra):
+        body = {"fish_species": self.fish.pk, "municipality": self.place.pk, "price_per_kg": "999",
+                "recorded_date": str(timezone.localdate()), "source": "Carbon Market", **extra}
+        return self.client.post("/api/prices/", body, format="json")
+
+    def test_median_of_stalls(self):
+        response = self.post(sampled_prices=[200, 180, 190])
+        self.assertEqual(response.status_code, 201, response.data)
+        record = PriceRecord.objects.get(pk=response.data["id"])
+        self.assertEqual(record.price_per_kg, Decimal("190.00"))
+        self.assertEqual(record.sampled_prices, ["200.00", "180.00", "190.00"])
+
+    def test_needs_three_stalls(self):
+        self.assertEqual(self.post(sampled_prices=[180, 190]).status_code, 400)
+        self.assertEqual(self.post(sampled_prices=[180, -1, 190]).status_code, 400)

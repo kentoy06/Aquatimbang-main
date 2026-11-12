@@ -635,6 +635,10 @@ A pending record may also be flagged or rejected.
 
     )
 
+    # Prices checked at randomly chosen stalls; the official price is their
+    # median. Empty when one price was typed directly or imported.
+    sampled_prices = models.JSONField(default=list, blank=True)
+
     # ---------------------------------------------------------
 
     # WORKFLOW STATUS

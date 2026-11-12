@@ -915,6 +915,7 @@ class PriceRecordSerializer(serializers.ModelSerializer):
             "source",
 
             "remarks",
+            "sampled_prices",
 
             # User who entered the price.
 
@@ -1031,6 +1032,41 @@ class PriceRecordSerializer(serializers.ModelSerializer):
         check_price_bounds(value)
 
         return value
+
+    def validate_sampled_prices(self, value):
+        """
+        Stall prices checked by the LGU: none, or 3 to 10 positive prices.
+        """
+        from decimal import Decimal, InvalidOperation
+        if value in (None, ""):
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Send the stall prices as a list.")
+        if not value:
+            return []
+        if not 3 <= len(value) <= 10:
+            raise serializers.ValidationError("Enter the prices from 3 to 10 stalls.")
+        cleaned = []
+        for item in value:
+            try:
+                price = Decimal(str(item)).quantize(Decimal("0.01"))
+            except (InvalidOperation, ValueError):
+                raise serializers.ValidationError("Every stall price must be a number.")
+            if not price.is_finite() or price <= 0:
+                raise serializers.ValidationError("Every stall price must be greater than zero.")
+            check_price_bounds(price)
+            cleaned.append(price)
+        return [str(p) for p in cleaned]
+
+    def validate(self, attrs):
+        """When stall prices are given, the official price is their median."""
+        attrs = super().validate(attrs)
+        sampled = attrs.get("sampled_prices")
+        if sampled:
+            from decimal import Decimal
+            from statistics import median
+            attrs["price_per_kg"] = Decimal(median(Decimal(p) for p in sampled)).quantize(Decimal("0.01"))
+        return attrs
 
     def validate_status(self, value):
 
