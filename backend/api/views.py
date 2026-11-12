@@ -1311,11 +1311,70 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
         except ProtectedError:
             raise ValidationError({
                 "detail": (
-                    "This fish species cannot be deleted because it has "
-                    "existing price records. Please deactivate it instead "
-                    "to preserve historical price data."
+                    "This fish has prices or other records, so it cannot simply be deleted. "
+                    "If it was added by mistake, merge it into the correct fish instead; "
+                    "otherwise deactivate it to keep its price history."
                 )
             })
+    @action(detail=True, methods=["get"], url_path="usage")
+    def usage(self, request, pk=None):
+        """How much is recorded under this fish (shown before removing it)."""
+        from .models import VendorPriceSuggestion, WeightEntry
+        fish = self.get_object()
+        return Response({
+            "prices": PriceRecord.objects.filter(fish_species=fish).count(),
+            "suggestions": VendorPriceSuggestion.objects.filter(fish_species=fish).count(),
+            "calculations": WeightEntry.objects.filter(fish_species=fish).count(),
+        })
+
+    @action(detail=True, methods=["post"], url_path="merge")
+    def merge(self, request, pk=None):
+        """
+        Fix a fish added by mistake (e.g. "Anduhao" for "Anduhaw"): move its
+        prices, suggestions, calculations, scanner photos, vendor lists and
+        closed seasons to the correct fish, then delete it. When both fish have
+        a price for the same municipality and day, the correct fish's price is
+        kept and the duplicate is removed.
+        """
+        from django.db.models import Q
+        from .models import FishScanPhoto, VendorPriceSuggestion, WeightEntry
+        source = self.get_object()
+        try:
+            target = FishSpecies.objects.get(pk=int(request.data.get("into")))
+        except (TypeError, ValueError, FishSpecies.DoesNotExist):
+            return Response({"into": "Choose the correct fish."}, status=status.HTTP_400_BAD_REQUEST)
+        if target.pk == source.pk:
+            return Response({"into": "Choose a different fish."}, status=status.HTTP_400_BAD_REQUEST)
+        reason = str(request.data.get("reason") or "").strip()[:300]
+
+        live = ~Q(status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN])
+        with transaction.atomic():
+            taken = set(
+                PriceRecord.objects.filter(live, fish_species=target)
+                .values_list("municipality_id", "recorded_date")
+            )
+            duplicates = [
+                record.pk for record in PriceRecord.objects.filter(live, fish_species=source)
+                if (record.municipality_id, record.recorded_date) in taken
+            ]
+            PriceRecord.objects.filter(pk__in=duplicates).delete()
+            moved = PriceRecord.objects.filter(fish_species=source).update(fish_species=target)
+            suggestions = VendorPriceSuggestion.objects.filter(fish_species=source).update(fish_species=target)
+            WeightEntry.objects.filter(fish_species=source).update(fish_species=target)
+            FishScanPhoto.objects.filter(fish_species=source).update(fish_species=target)
+            for vendor in source.vendors.all():
+                vendor.species_sold.add(target)
+            for season in source.closed_seasons.all():
+                season.species.add(target)
+            details = {
+                "merged_into": target.name, "merged_into_id": target.pk,
+                "prices_moved": moved, "duplicate_prices_removed": len(duplicates),
+                "suggestions_moved": suggestions, "reason": reason,
+            }
+            self._log("merged", source, details)
+            source.delete()
+        return Response({"message": f"{source.name} was merged into {target.name}.", **details})
+
     @action(detail=True, methods=["get"], authentication_classes=[], permission_classes=[AllowAny])
     def photo(self, request, pk=None):
         """

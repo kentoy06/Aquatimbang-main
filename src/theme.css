@@ -1882,3 +1882,25 @@ table th {
 .stall-median.empty { background: #f6f9fb; border-color: var(--line); }
 .stall-median.empty strong { font-size: 13px; color: #8a97a8; font-weight: 600; }
 .cfg-sub { margin: 12px 0 6px; font-size: 14px; color: var(--navy-900); } .cfg-sub small { font-weight: 500; color: #64748b; }
+.table-avatar.user-avatar { overflow: hidden; padding: 0; flex: none; } .table-avatar.user-avatar img { width: 100%; height: 100%; object-fit: cover; display: block; }
+
+/* Register / Login on phones: nothing may be wider than the card. */
+.login-card > * { min-width: 0; }
+.login-right { min-width: 0; max-width: 100%; }
+.login-right .form-row > *, .login-right .form-group { min-width: 0; }
+.login-right input, .login-right select, .login-right textarea { max-width: 100%; min-width: 0; }
+@media (max-width: 600px) {
+  .login-card { grid-template-columns: minmax(0, 1fr) !important; width: calc(100% - 24px); max-width: 100%; }
+  .login-right { padding: 22px 16px !important; }
+  .login-right .form-row { grid-template-columns: minmax(0, 1fr) !important; display: grid; gap: 0; }
+  .role-toggle { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .role-toggle-btn { min-width: 0; white-space: normal; padding-left: 8px; padding-right: 8px; }
+  .auth-tabs { max-width: 100%; }
+  .file-field-row { flex-direction: column; }
+  .file-field-actions { flex-direction: row; justify-content: flex-end; }
+  .file-field-camera { flex-wrap: wrap; }
+  .file-field-camera button { max-width: 100%; white-space: normal; }
+  .register-section-verify, .register-section { padding-left: 12px; padding-right: 12px; }
+  .stall-row { grid-template-columns: 56px minmax(0, 1fr) auto; }
+}
+.login-right .form-row { align-items: start; }

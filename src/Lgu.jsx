@@ -37,6 +37,7 @@ import FishScanReview from "./components/FishScanReview.jsx";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
 import { listExternalFactors } from "./api/forecast.js";
 import { FishPhotoInput, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
+import { useRemoveFish } from "./components/RemoveFish.jsx";
 import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
 import { describeFilters, exportReport } from "./api/reportExport.js";
 import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
@@ -1027,6 +1028,8 @@ function LGUFishSpeciesManagement({ notify }) {
   };
 
   useEffect(() => { loadSpecies(); }, []);
+  // Remove a mistaken fish (delete, or merge into the correct fish when it has prices).
+  const remover = useRemoveFish({ notify, species, onDone: () => loadSpecies() });
 
   const openAdd = () => {
     setEditing(null);
@@ -1150,6 +1153,10 @@ function LGUFishSpeciesManagement({ notify }) {
                           style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box", flex: "0 0 auto", minWidth: 116, minHeight: 36, padding: "8px 14px", whiteSpace: "nowrap", borderRadius: 8, border: `1px solid ${item.is_active ? "#fecaca" : "#99f6e4"}`, background: item.is_active ? "#fff1f2" : "#ccfbf1", color: item.is_active ? "#be123c" : "#0f766e", fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>
                           {item.is_active ? "Deactivate" : "Activate"}
                         </button>
+                        <button type="button" disabled={busy} onClick={() => remover.start(item)} title="Remove a fish added by mistake"
+                          style={{ display: "inline-flex", alignItems: "center", justifyContent: "center", boxSizing: "border-box", flex: "0 0 auto", minWidth: 82, minHeight: 36, padding: "8px 14px", whiteSpace: "nowrap", borderRadius: 8, border: "1px solid #fecaca", background: "#fff", color: "#b42318", fontWeight: 700, cursor: busy ? "wait" : "pointer" }}>
+                          Remove
+                        </button>
                       </div>
                     </td>
                   </tr>
@@ -1157,7 +1164,11 @@ function LGUFishSpeciesManagement({ notify }) {
             </tbody>
           </table>
         </div>
-        <div className="info-box">LGU Officers can add, edit, activate, and deactivate species. Permanent deletion is restricted to Administrators.</div>
+        <div className="info-box">
+          <strong>Deactivate</strong> a fish that is no longer sold (its price history is kept).
+          <strong> Remove</strong> a fish added by mistake: it is deleted if nothing is recorded under it, or merged into the correct fish if it already has prices.
+        </div>
+        {remover.dialog}
       </div>
 
       {showForm && (

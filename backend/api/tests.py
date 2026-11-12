@@ -445,9 +445,13 @@ class FishSpeciesPermissionTests(TestCase):
                 self.assertEqual(response.status_code, 200, response.data)
                 self.species.refresh_from_db()
                 self.assertEqual(self.species.is_active, active)
-    def test_lgu_cannot_delete_species(self):
+    def test_lgu_cannot_delete_species_with_prices(self):
+        # LGU Officers may remove a fish added by mistake, but never one with
+        # prices (those are merged into the correct fish instead).
+        PriceRecord.objects.create(fish_species=self.species, municipality=Municipality.objects.create(name="Del Town"),
+                                   price_per_kg=Decimal("150"), recorded_date=timezone.localdate(), status="published")
         response = self.lgu_client.delete(f"{self.URL}{self.species.pk}/")
-        self.assertEqual(response.status_code, 403)
+        self.assertEqual(response.status_code, 400)
         self.assertTrue(FishSpecies.objects.filter(pk=self.species.pk).exists())
     def test_vendor_can_only_read_species(self):
         url = f"{self.URL}{self.species.pk}/"
@@ -2540,3 +2544,30 @@ class RelaxedRegistrationTests(RegistrationPhotoAndSpeciesTests):
         payload = self.vendor_payload(username="lgu_two", email="", role=self.roles["LGU Officer"].id,
                                       market_name=None, stall_number=None, species_sold=None, stall_photo=None)
         self.assertEqual(APIClient().post("/api/auth/register/", payload, format="multipart").status_code, 400)
+
+
+class FishMergeTests(StallSampleTests):
+    """A fish added by mistake is merged into the correct one."""
+
+    def test_merge_moves_prices_and_removes_duplicates(self):
+        wrong = FishSpecies.objects.create(name="Anduhao")
+        right = FishSpecies.objects.create(name="Anduhaw")
+        day1, day2 = datetime.date(2026, 11, 1), datetime.date(2026, 11, 2)
+        PriceRecord.objects.create(fish_species=wrong, municipality=self.place, price_per_kg=Decimal("150"), recorded_date=day1, status="published")
+        PriceRecord.objects.create(fish_species=wrong, municipality=self.place, price_per_kg=Decimal("151"), recorded_date=day2, status="published")
+        PriceRecord.objects.create(fish_species=right, municipality=self.place, price_per_kg=Decimal("160"), recorded_date=day2, status="published")
+
+        usage = self.client.get(f"/api/fish-species/{wrong.pk}/usage/").data
+        self.assertEqual(usage["prices"], 2)
+        # Deleting a fish with prices is refused; merging works.
+        self.assertEqual(self.client.delete(f"/api/fish-species/{wrong.pk}/").status_code, 400)
+        response = self.client.post(f"/api/fish-species/{wrong.pk}/merge/", {"into": right.pk, "reason": "Typo"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertFalse(FishSpecies.objects.filter(pk=wrong.pk).exists())
+        prices = PriceRecord.objects.filter(fish_species=right).order_by("recorded_date")
+        self.assertEqual([str(p.price_per_kg) for p in prices], ["150.00", "160.00"])  # day 2 keeps the correct fish's price
+        self.assertTrue(ActivityLog.objects.filter(action="merged", target_name="Anduhao").exists())
+
+    def test_lgu_can_delete_unused_fish(self):
+        unused = FishSpecies.objects.create(name="Typo Fish")
+        self.assertEqual(self.client.delete(f"/api/fish-species/{unused.pk}/").status_code, 204)

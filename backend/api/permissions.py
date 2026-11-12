@@ -289,11 +289,12 @@ class CanManageFishSpecies(BasePermission):
         if role in ("administrator", "system administrator"):
             return profile.account_status == "approved"
 
-        # LGU Officers may create and update, but not delete.
+        # LGU Officers may create, update and remove a mistaken fish (a fish
+        # with prices can only be merged into the correct one, never lost).
         if role == "lgu officer":
             return (
                 profile.account_status == "approved"
-                and request.method in ("POST", "PUT", "PATCH")
+                and request.method in ("POST", "PUT", "PATCH", "DELETE")
             )
 
         # Fish Vendors cannot modify species.

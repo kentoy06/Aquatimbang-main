@@ -3,6 +3,7 @@ import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { LearnedOutliers } from "./components/PriceInsights.jsx";
 import MarketInsights from "./components/MarketInsights.jsx";
+import { useRemoveFish } from "./components/RemoveFish.jsx";
 import Presence from "./components/Presence.jsx";
 import { FishCell, PriceCell, RECORD_DETAIL_KEYS, logRecordParts, useFishLookup } from "./components/AuditRecord.jsx";
 import React, { useRef, useState, useEffect, lazy, Suspense } from "react";
@@ -1359,6 +1360,17 @@ function TemporaryPasswordModal({ result, onClose }) {
    ================================================================ */
 
 // Account photo in the profile window, or initials when there is none.
+// Small photo for the user tables; initials when no photo was uploaded.
+function TableUserPhoto({ account }) {
+  const hasPhoto = Boolean(account.verification?.documents?.profile_photo);
+  const photo = useProtectedImage(hasPhoto ? `/auth/users/${account.id}/verification/profile-photo/` : "");
+  return (
+    <div className="table-avatar user-avatar">
+      {photo ? <img src={photo} alt="" /> : String(account.name || "?").split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase()}
+    </div>
+  );
+}
+
 function ProfilePhoto({ account, fallback }) {
   const hasPhoto = Boolean(account.verification?.documents?.profile_photo);
   const photo = useProtectedImage(hasPhoto ? `/auth/users/${account.id}/verification/profile-photo/` : "");
@@ -2110,7 +2122,7 @@ const submitReview = async () => {
                 <tr key={u.id}>
                   <td>
                     <div className="user-cell">
-                      <div className="table-avatar">{initials(u.name)}</div>
+                      <TableUserPhoto account={u} />
                       <div>
                         <strong>{u.name}</strong>
                         <small>{u.email}</small>
@@ -2341,42 +2353,18 @@ const toggleStatus = async (s) => {
   }
 };
 
- const remove = async (s) => {
-  if (speciesSaving) return;
-
-  if (recordsFor(s.name).length > 0) {
-    notify("This species has price records. Deactivate it instead of deleting.");
-    return;
-  }
-
-  if (!await askConfirm(
-    `Permanently delete ${s.name}? This action cannot be undone.`
-  )) {
-    return;
-  }
-
-  setSpeciesSaving(true);
-
-  try {
-    await speciesRequest(
-      `${API_BASE_URL}/fish-species/${s.id}/`,
-      "DELETE"
-    );
-
-    setSpecies((prev) => prev.filter((item) => item.id !== s.id));
-
-    notify(`${s.name} deleted successfully.`);
-  } catch (error) {
-    console.error("Species deletion error:", error);
-    notify(error.message);
-  } finally {
-    setSpeciesSaving(false);
-  }
-};
+ // Remove a mistaken fish: delete it, or merge it into the correct fish when it has prices.
+ const remover = useRemoveFish({
+  notify,
+  species,
+  onDone: () => fetchAll("/fish-species/").then((rows) => setSpecies(rows.map(mapDatabaseSpecies))).catch(() => {}),
+ });
+ const remove = (s) => remover.start(s);
 
 
   return (
     <>
+      {remover.dialog}
       <div className="page-title">
         <div>
           <h2>Fish Species</h2>
