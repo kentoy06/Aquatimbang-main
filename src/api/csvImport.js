@@ -179,14 +179,25 @@ export function parsePriceList(text, { date = "", municipality = "", dayFirst = 
   const rows = [];
   const problems = [];
   let foundDate = "";
+  const skippedDates = []; // date lines that could not be read
   const number = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
   String(text || "").split(/\r?\n/).forEach((rawLine, index) => {
     const line = clean(rawLine).replace(/^(\d+[.)]|[-•*–·])\s+/, "");
     if (!line) return;
     // A date line, e.g. "Date: March 4, 2024" or "Petsa: 03/04/2024".
-    const dateText = line.replace(/^(date|petsa|as of|price as of)\s*[:-]?\s*/i, "").trim();
+    const labelled = /^(date|petsa|as of|price as of|prices as of)\b/i.test(line);
+    const dateText = line.replace(/^(date|petsa|as of|prices? as of)\s*[:-]?\s*/i, "").trim();
     const asDate = parseDate(dateText, dayFirst);
     if (asDate) { foundDate = foundDate || asDate; return; }
+    // A line labelled as a date, or made of a month name and numbers only
+    // ("Date: August 1202", "Aug 1 2026"), is never a fish price, even when
+    // the date in it cannot be read.
+    const MONTH = /^(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?|enero|pebrero|marso|abril|mayo|hunyo|hulyo|agosto|setyembre|oktubre|nobyembre|disyembre)\.?$/i;
+    const words = dateText.split(/[\s,/.-]+/).filter((w) => /[A-Za-z]/.test(w));
+    if (labelled || (words.length && words.every((w) => MONTH.test(w)))) {
+      skippedDates.push(rawLine.trim());
+      return;
+    }
     const numbers = [...line.matchAll(number)];
     if (!numbers.length) return; // headings such as "Fish Prices" or "Species Price"
     const first = numbers[0];
@@ -200,7 +211,8 @@ export function parsePriceList(text, { date = "", municipality = "", dayFirst = 
     rows.push({ row: index + 1, date: "", fish, municipality, price: String(price), range: isRange ? `${values[0]}–${values[1]}` : "" });
   });
   const useDate = date || foundDate;
-  if (!useDate) problems.push("Choose the date of these prices (or put a line like \"Date: March 4, 2024\" in the list).");
+  if (!useDate && skippedDates.length) problems.push(`Could not read the date in "${skippedDates[0]}". Choose the date of these prices above.`);
+  else if (!useDate) problems.push("Choose the date of these prices (or put a line like \"Date: March 4, 2024\" in the list).");
   if (!municipality) problems.push("Choose the municipality of these prices.");
   if (!rows.length) problems.push("No prices found. Put one fish per line with its price, for example: Bangus 180");
   rows.forEach((r) => { r.date = useDate; });
