@@ -469,10 +469,13 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         send_to_review = bool(request.data.get("send_to_review"))
 
         from .validators import clean_fish_name
-        # Match names ignoring capitals, spaces and hyphens: "lapu lapu",
-        # "Lapu-lapu" and "LAPULAPU" are all the same fish.
+        from .species_tools import known_scientific_name, name_key as plain_key
+
+        # Match names after tidying them, ignoring capitals, spaces and
+        # hyphens: "lapu lapu", "Lapu-lapu", "LAPULAPU" and "lapu2x" are all
+        # the same fish.
         def name_key(value):
-            return "".join(ch for ch in str(value or "").lower() if ch.isalnum())
+            return plain_key(clean_fish_name(value))
 
         species = {name_key(fish.name): fish for fish in FishSpecies.objects.all()}
         # Fish not in AquaTimbang yet are added with a tidy name ("bangus" -> "Bangus").
@@ -489,10 +492,12 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                 if len(name) < 2 or not any(ch.isalpha() for ch in name):
                     return None
                 if dry_run:
-                    fish = FishSpecies(name=name)
+                    fish = FishSpecies(name=name, scientific_name=known_scientific_name(name))
                     fish.id = -(len(new_fish) + 1)  # placeholder until it is saved
                 else:
-                    fish, created = FishSpecies.objects.get_or_create(name=name)
+                    fish, created = FishSpecies.objects.get_or_create(
+                        name=name, defaults={"scientific_name": known_scientific_name(name)},
+                    )
                     if created:
                         log_activity(request.user, "created", "FishSpecies", fish.pk, fish.name,
                                      {"reason": "Added automatically from an imported file"})
@@ -1362,11 +1367,11 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
         Fix a fish added by mistake (e.g. "Anduhao" for "Anduhaw"): move its
         prices, suggestions, calculations, scanner photos, vendor lists and
         closed seasons to the correct fish, then delete it. When both fish have
-        a price for the same municipality and day, the correct fish's price is
-        kept and the duplicate is removed.
+        a price for the same municipality, market and day, the correct fish's
+        price is kept and the duplicate is removed.
         """
-        from django.db.models import Q
-        from .models import FishScanPhoto, VendorPriceSuggestion, WeightEntry
+        from .models import ClosedFishingSeason, FishScanPhoto, FishVendorVerification, VendorPriceSuggestion, WeightEntry
+        from .species_tools import merge_species
         source = self.get_object()
         try:
             target = FishSpecies.objects.get(pk=int(request.data.get("into")))
@@ -1376,30 +1381,12 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
             return Response({"into": "Choose a different fish."}, status=status.HTTP_400_BAD_REQUEST)
         reason = str(request.data.get("reason") or "").strip()[:300]
 
-        live = ~Q(status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN])
         with transaction.atomic():
-            taken = set(
-                PriceRecord.objects.filter(live, fish_species=target)
-                .values_list("municipality_id", "recorded_date")
+            counts = merge_species(
+                source, target, PriceRecord, VendorPriceSuggestion, WeightEntry,
+                FishScanPhoto, FishVendorVerification, ClosedFishingSeason,
             )
-            duplicates = [
-                record.pk for record in PriceRecord.objects.filter(live, fish_species=source)
-                if (record.municipality_id, record.recorded_date) in taken
-            ]
-            PriceRecord.objects.filter(pk__in=duplicates).delete()
-            moved = PriceRecord.objects.filter(fish_species=source).update(fish_species=target)
-            suggestions = VendorPriceSuggestion.objects.filter(fish_species=source).update(fish_species=target)
-            WeightEntry.objects.filter(fish_species=source).update(fish_species=target)
-            FishScanPhoto.objects.filter(fish_species=source).update(fish_species=target)
-            for vendor in source.vendors.all():
-                vendor.species_sold.add(target)
-            for season in source.closed_seasons.all():
-                season.species.add(target)
-            details = {
-                "merged_into": target.name, "merged_into_id": target.pk,
-                "prices_moved": moved, "duplicate_prices_removed": len(duplicates),
-                "suggestions_moved": suggestions, "reason": reason,
-            }
+            details = {"merged_into": target.name, "merged_into_id": target.pk, **counts, "reason": reason}
             self._log("merged", source, details)
             source.delete()
         return Response({"message": f"{source.name} was merged into {target.name}.", **details})

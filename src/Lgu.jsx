@@ -1203,7 +1203,7 @@ function LGUFishSpeciesManagement({ notify }) {
               </div>
               <div className="form-group">
                 <label htmlFor="lgu-species-scientific">Scientific Name</label>
-                <input id="lgu-species-scientific" maxLength={150} value={form.scientific_name}
+                <input id="lgu-species-scientific" maxLength={150} value={form.scientific_name} placeholder="Leave blank to fill in automatically for known fish"
                   onChange={(event) => setForm((old) => ({ ...old, scientific_name: event.target.value }))} />
               </div>
               <div className="form-group">

@@ -2601,6 +2601,46 @@ class FishMergeTests(StallSampleTests):
         self.assertTrue(ActivityLog.objects.filter(action="deleted with all records", target_name="Lumayagan").exists())
 
 
+class FishNameVariantTests(StallSampleTests):
+    """'lapu2x', 'lapu lapu' and 'Lapu-Lapu' are one fish; known fish get a scientific name."""
+
+    def test_import_matches_name_variants(self):
+        lapu = FishSpecies.objects.create(name="Lapu-Lapu")
+        rows = [
+            {"row": 2, "date": "2026-01-05", "fish": "lapu2x", "municipality": "Sample City", "price": "400"},
+            {"row": 3, "date": "2026-01-06", "fish": "LAPU LAPU", "municipality": "Sample City", "price": "410"},
+            {"row": 4, "date": "2026-01-07", "fish": "bolinaw", "municipality": "Sample City", "price": "120"},
+        ]
+        done = self.client.post("/api/prices/import/", {"rows": rows}, format="json").data
+        self.assertEqual(done["imported"], 3, done)
+        self.assertEqual(PriceRecord.objects.filter(fish_species=lapu).count(), 2)
+        self.assertFalse(FishSpecies.objects.exclude(pk=lapu.pk).filter(name__icontains="lapu").exists())
+        self.assertEqual(FishSpecies.objects.get(name="Bolinaw").scientific_name, "Stolephorus spp.")
+
+    def test_new_fish_gets_scientific_name_and_variants_are_duplicates(self):
+        response = self.client.post("/api/fish-species/", {"name": "tangigue"}, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["scientific_name"], "Scomberomorus commerson")
+        FishSpecies.objects.create(name="Maya-Maya")
+        self.assertEqual(self.client.post("/api/fish-species/", {"name": "maya2x"}, format="json").status_code, 400)
+        self.assertEqual(self.client.post("/api/fish-species/", {"name": "Mayamaya"}, format="json").status_code, 400)
+
+    def test_cleanup_merges_spelling_variants(self):
+        from importlib import import_module
+        from django.apps import apps as django_apps
+        cleanup = import_module("api.migrations.0037_fix_fish_name_variants")
+        keep = FishSpecies.objects.create(name="Lapu-Lapu")
+        extra = FishSpecies.objects.create(name="Lapu2x")
+        PriceRecord.objects.create(fish_species=extra, municipality=self.place, price_per_kg=Decimal("400"),
+                                   recorded_date=datetime.date(2026, 1, 5), status="published")
+        lower = FishSpecies.objects.create(name="tasik")
+        cleanup.fix_variants(django_apps, None)
+        self.assertFalse(FishSpecies.objects.filter(pk=extra.pk).exists())
+        self.assertEqual(PriceRecord.objects.get().fish_species_id, keep.pk)
+        self.assertEqual(FishSpecies.objects.get(pk=keep.pk).scientific_name, "Epinephelus spp.")
+        self.assertEqual(FishSpecies.objects.get(pk=lower.pk).name, "Tasik")
+
+
 class MarketPriceTests(StallSampleTests):
     """Each market (e.g. Pasil, Carbon) has its own official price."""
 

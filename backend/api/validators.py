@@ -104,8 +104,8 @@ def clean_fish_name(raw):
 
     - single spaces, no spaces around a hyphen ("lapu - lapu" -> "lapu-lapu")
     - a repeated word is joined with a hyphen, as in Cebuano and Filipino
-      fish names ("lapu lapu", "lapulapu" -> "Lapu-Lapu", "salay salay" ->
-      "Salay-Salay")
+      fish names ("lapu lapu", "lapulapu", "lapu2x" -> "Lapu-Lapu",
+      "salay salay" -> "Salay-Salay")
     - every word, and every part after a hyphen, starts with a capital letter
       ("bangus" or "BANGUS" -> "Bangus", "dalagang  bukid" -> "Dalagang Bukid",
       "maya-maya" -> "Maya-Maya")
@@ -115,6 +115,8 @@ def clean_fish_name(raw):
     ("LGU Test Fish").
     """
     text = " ".join(str(raw or "").replace("_", " ").split())
+    # Text shorthand for a repeated word: "lapu2x", "lapu 2x", "lapu2" -> "lapu-lapu".
+    text = re.sub(r"\b([A-Za-z]{2,})\s?(?:2x|x2|2)\b", lambda m: f"{m.group(1)}-{m.group(1)}", text, flags=re.IGNORECASE)
     text = re.sub(r"\s*-\s*", "-", text).strip("-")
     letters = [ch for ch in text if ch.isalpha()]
     one_case = bool(letters) and (all(ch.islower() for ch in letters) or all(ch.isupper() for ch in letters))

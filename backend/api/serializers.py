@@ -568,12 +568,27 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
         name = clean_fish_name(value)
         if len(name) < 2:
             raise serializers.ValidationError("Enter the fish name.")
-        others = FishSpecies.objects.filter(name__iexact=name)
+        from .species_tools import name_key
+        # The same fish written another way ("Lapu Lapu", "lapulapu") is a duplicate.
+        others = FishSpecies.objects.all()
         if self.instance is not None:
             others = others.exclude(pk=self.instance.pk)
-        if others.exists():
-            raise serializers.ValidationError(f"{others.first().name} is already in the fish list.")
+        same = next((fish for fish in others if name_key(fish.name) == name_key(name)), None)
+        if same:
+            raise serializers.ValidationError(f"{same.name} is already in the fish list.")
         return name
+
+    def validate(self, attrs):
+        """Fill in the scientific name of a well-known fish when it is left blank."""
+        from .species_tools import known_scientific_name
+        attrs = super().validate(attrs)
+        name = attrs.get("name") or getattr(self.instance, "name", "")
+        current = attrs.get("scientific_name", getattr(self.instance, "scientific_name", "") if self.instance else "")
+        if not (current or "").strip():
+            known = known_scientific_name(name)
+            if known:
+                attrs["scientific_name"] = known
+        return attrs
 
     class Meta:
 
