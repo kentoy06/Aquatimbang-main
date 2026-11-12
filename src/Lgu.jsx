@@ -984,7 +984,7 @@ function LGUFishSpeciesManagement({ notify }) {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", scientific_name: "", description: "", photo_credit: "" });
+  const [form, setForm] = useState({ name: "", scientific_name: "", price_class: "common", description: "", photo_credit: "" });
   const [photoFile, setPhotoFile] = useState(null);
 
   const request = async (url, method = "GET", payload) => {
@@ -1030,7 +1030,7 @@ function LGUFishSpeciesManagement({ notify }) {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: "", scientific_name: "", description: "", photo_credit: "" });
+    setForm({ name: "", scientific_name: "", price_class: "common", description: "", photo_credit: "" });
     setPhotoFile(null);
     setShowForm(true);
   };
@@ -1040,6 +1040,7 @@ function LGUFishSpeciesManagement({ notify }) {
     setForm({
       name: item.name || "",
       scientific_name: item.scientific_name || "",
+      price_class: item.price_class || "common",
       description: item.description || "",
       photo_credit: item.photo_credit || "",
     });
@@ -1052,6 +1053,7 @@ function LGUFishSpeciesManagement({ notify }) {
     const payload = {
       name: form.name.trim(),
       scientific_name: form.scientific_name.trim(),
+      price_class: form.price_class || "common",
       description: form.description.trim(),
       photo_credit: (form.photo_credit || "").trim(),
     };
@@ -1193,6 +1195,15 @@ function LGUFishSpeciesManagement({ notify }) {
                   onChange={(event) => setForm((old) => ({ ...old, scientific_name: event.target.value }))} />
               </div>
               <div className="form-group">
+                <label htmlFor="lgu-species-class">Price class</label>
+                <select id="lgu-species-class" value={form.price_class || "common"}
+                  onChange={(event) => setForm((old) => ({ ...old, price_class: event.target.value }))}>
+                  <option value="common">Common fish</option>
+                  <option value="first_class">First-class fish</option>
+                </select>
+                <small className="field-help">Decides which allowed price range in System Configuration is used.</small>
+              </div>
+              <div className="form-group">
                 <label htmlFor="lgu-species-description">Description</label>
                 <textarea id="lgu-species-description" rows={4} value={form.description}
                   onChange={(event) => setForm((old) => ({ ...old, description: event.target.value }))} />
@@ -1261,6 +1272,22 @@ function PriceEntry({
     price: draft?.price ? String(draft.price) : "",
     source: "",
   });
+
+  // Price from randomly checked stalls: the official price is their median.
+  const [priceMode, setPriceMode] = useState(draft?.price ? "single" : "stalls");
+  const [stallPrices, setStallPrices] = useState(["", "", ""]);
+  const validStallPrices = stallPrices.map(Number).filter((n) => n > 0);
+  const stallMedian = (() => {
+    if (validStallPrices.length < 3) return null;
+    const sorted = [...validStallPrices].sort((a, b) => a - b);
+    const mid = Math.floor(sorted.length / 2);
+    const value = sorted.length % 2 ? sorted[mid] : (sorted[mid - 1] + sorted[mid]) / 2;
+    return Math.round(value * 100) / 100;
+  })();
+  useEffect(() => {
+    if (priceMode !== "stalls") return;
+    setForm((previous) => ({ ...previous, price: stallMedian === null ? "" : String(stallMedian) }));
+  }, [priceMode, stallMedian]);
 
   // Learned check: is this price unusual for this fish and municipality?
   const priceCheck = usePriceCheck({
@@ -1515,6 +1542,12 @@ function PriceEntry({
       return;
     }
 
+    // Checking stalls: at least 3 stall prices are needed.
+    if (priceMode === "stalls" && validStallPrices.length < 3) {
+      notify("Enter the price from at least 3 stalls.");
+      return;
+    }
+
     // Validate the entered price.
     if (
       !form.price ||
@@ -1574,6 +1607,7 @@ function PriceEntry({
             source:
               form.source ||
               "LGU Price Entry",
+            sampled_prices: priceMode === "stalls" ? validStallPrices : [],
           }),
         }
       );
@@ -1616,6 +1650,7 @@ function PriceEntry({
         ...previous,
         price: "",
       }));
+      setStallPrices(["", "", ""]);
     } catch (error) {
       console.error("Saving price error:", error);
 
@@ -1902,6 +1937,45 @@ function PriceEntry({
           <div className="form-group">
             <label>Price per Kilogram</label>
 
+            <div className="price-mode" role="radiogroup" aria-label="How the price was taken">
+              <button type="button" role="radio" aria-checked={priceMode === "stalls"} className={priceMode === "stalls" ? "active" : ""} onClick={() => setPriceMode("stalls")}>
+                Check 3 stalls (recommended)
+              </button>
+              <button type="button" role="radio" aria-checked={priceMode === "single"} className={priceMode === "single" ? "active" : ""} onClick={() => setPriceMode("single")}>
+                One price
+              </button>
+            </div>
+
+            {priceMode === "stalls" && (
+              <div className="stall-prices">
+                <p className="stall-help">Pick stalls at random and enter each one's price per kg. The official price is the middle (median) price.</p>
+                {stallPrices.map((value, index) => (
+                  <div className="stall-row" key={index}>
+                    <span className="stall-label">Stall {index + 1}</span>
+                    <div className="input-with-unit">
+                      <span>₱</span>
+                      <input
+                        type="number" min="0.01" step="0.01" placeholder="0.00" value={value}
+                        aria-label={`Price at stall ${index + 1}`}
+                        onChange={(event) => setStallPrices((prev) => prev.map((p, i) => (i === index ? event.target.value : p)))}
+                      />
+                    </div>
+                    {stallPrices.length > 3 && (
+                      <button type="button" className="stall-remove" aria-label={`Remove stall ${index + 1}`} onClick={() => setStallPrices((prev) => prev.filter((_, i) => i !== index))}>✕</button>
+                    )}
+                  </div>
+                ))}
+                {stallPrices.length < 10 && (
+                  <button type="button" className="stall-add" onClick={() => setStallPrices((prev) => [...prev, ""])}>+ Add another stall</button>
+                )}
+                <div className={`stall-median ${stallMedian === null ? "empty" : ""}`}>
+                  <span>Official price (median of {validStallPrices.length} stall{validStallPrices.length === 1 ? "" : "s"})</span>
+                  <strong>{stallMedian === null ? "Enter at least 3 stall prices" : `₱${stallMedian.toFixed(2)} / kg`}</strong>
+                </div>
+              </div>
+            )}
+
+            {priceMode === "single" && (
             <div className="input-with-unit">
               <span>₱</span>
 
@@ -1919,6 +1993,7 @@ function PriceEntry({
                 }
               />
             </div>
+            )}
             <PriceCheckNote check={priceCheck} />
           </div>
 

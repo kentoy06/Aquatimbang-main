@@ -137,7 +137,8 @@ function Register({ onBack, onGoToLogin }) {
     !form.username.trim() ||
     !form.password.trim() ||
     !form.contact.trim() ||
-    !form.email.trim() ||
+    // Vendors without an email can still register; LGU staff need one.
+    (role !== "Fish Vendor" && !form.email.trim()) ||
     !form.dob ||
     !form.sex
   ) {
@@ -212,10 +213,6 @@ function Register({ onBack, onGoToLogin }) {
     return;
   }
 
-  if (role === "LGU Officer" && (!form.department.trim() || !form.position.trim() || !form.authorization_document)) {
-    setError(t("Please enter your department, position, and upload your proof of employment."));
-    return;
-  }
 
  // Prepare registration data, including uploaded files.
 const registrationData = new FormData();
@@ -453,8 +450,11 @@ if (role === "LGU Officer") {
 
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="reg-email">{t("Email Address")}</label>
+                  <label htmlFor="reg-email">{t("Email Address")}{role === "Fish Vendor" && <>{" "}<span className="optional">{t("(optional)")}</span></>}</label>
                   <input id="reg-email" type="email" value={form.email} placeholder={t("you@email.com")} autoComplete="email" onChange={(e) => update("email", e.target.value)} />
+                  {role === "Fish Vendor" && !form.email.trim() && (
+                    <small className="field-help">{t("No email? You can still register. If you forget your password, ask your LGU Officer to reset it.")}</small>
+                  )}
                 </div>
                 <div className="form-group">
                   <label htmlFor="reg-contact">{t("Contact Number")}</label>
@@ -592,6 +592,8 @@ if (role === "LGU Officer") {
                   file={form.permit_document}
                   error={fileErrors.permit_document}
                   onChange={(file) => pickFile("permit_document", file, false)}
+                  camera="environment"
+                  cameraTitle="Take a photo of your permit"
                 />
 
                 <FileField
@@ -613,16 +615,16 @@ if (role === "LGU Officer") {
               <section className="register-section register-section-verify">
                 <h4 className="register-section-title">{t("LGU Officer Verification")}</h4>
                 <p className="register-section-desc">
-                  {t("Provide your official employment details. Your account stays pending until an Administrator has reviewed your credentials.")}
+                  {t("Fill in what you can. You can register even if some details are missing; an Administrator will check them and may ask you for the rest before approving.")}
                 </p>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="reg-department">{t("Department / Office")}</label>
+                    <label htmlFor="reg-department">{t("Department / Office")}{" "}<span className="optional">{t("(optional)")}</span></label>
                     <input id="reg-department" type="text" placeholder={t("e.g. Agriculture Office")} value={form.department} onChange={(e) => update("department", e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="reg-position">{t("Official Position")}</label>
+                    <label htmlFor="reg-position">{t("Official Position")}{" "}<span className="optional">{t("(optional)")}</span></label>
                     <input id="reg-position" type="text" placeholder={t("e.g. Fisheries Officer")} value={form.position} onChange={(e) => update("position", e.target.value)} />
                   </div>
                 </div>
@@ -646,6 +648,9 @@ if (role === "LGU Officer") {
                   file={form.authorization_document}
                   error={fileErrors.authorization_document}
                   onChange={(file) => pickFile("authorization_document", file, false)}
+                  optional
+                  camera="environment"
+                  cameraTitle="Take a photo of your document"
                 />
               </section>
             )}

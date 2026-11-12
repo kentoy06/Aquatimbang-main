@@ -52,7 +52,7 @@ class RegisterSerializer(serializers.Serializer):
 
     username = serializers.CharField(max_length=150)
 
-    email = serializers.EmailField()
+    email = serializers.EmailField(required=False, allow_blank=True)
 
     # write_only prevents the password from being returned in JSON.
 
@@ -303,37 +303,14 @@ class RegisterSerializer(serializers.Serializer):
 
         # ====================================================
 
-        if role and role.name == "LGU Officer":
+        # LGU Officer details (office, position, ID, proof of employment) are
+        # optional: the Administrator checks them and can ask for the rest
+        # before approving.
 
-            # Require the officer's government department.
-
-            if not attrs.get("department", "").strip():
-
-                raise serializers.ValidationError({
-
-                    "department": "Department or office is required for LGU Officers."
-
-                })
-
-            # Require the officer's official position.
-
-            if not attrs.get("position", "").strip():
-
-                raise serializers.ValidationError({
-
-                    "position": "Official position is required for LGU Officers."
-
-                })
-
-            # Require an authorization document.
-
-            if not attrs.get("authorization_document"):
-
-                raise serializers.ValidationError({
-
-                    "authorization_document": "Proof of LGU authorization is required."
-
-                })
+        # Fish Vendors may register without an email (password resets are
+        # then done by their LGU Officer); everyone else needs one.
+        if not (attrs.get("email") or "").strip() and not (role and role.name == "Fish Vendor"):
+            raise serializers.ValidationError({"email": "An email address is required."})
 
         return attrs
 
@@ -399,9 +376,13 @@ class RegisterSerializer(serializers.Serializer):
 
     def validate_email(self, value):
 
+        # No email (allowed for Fish Vendors): nothing to compare.
+        if not value:
+            return ""
+
         # Prevent duplicate email addresses.
 
-        if User.objects.filter(email=value).exists():
+        if User.objects.filter(email__iexact=value).exists():
 
             raise serializers.ValidationError(
 
@@ -581,6 +562,19 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
 
     """
 
+    def validate_name(self, value):
+        """Tidy capitals and refuse a name that only differs in capitals."""
+        from .validators import clean_fish_name
+        name = clean_fish_name(value)
+        if len(name) < 2:
+            raise serializers.ValidationError("Enter the fish name.")
+        others = FishSpecies.objects.filter(name__iexact=name)
+        if self.instance is not None:
+            others = others.exclude(pk=self.instance.pk)
+        if others.exists():
+            raise serializers.ValidationError(f"{others.first().name} is already in the fish list.")
+        return name
+
     class Meta:
 
         # Connect this serializer to FishSpecies.
@@ -593,6 +587,7 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
 
             "name",
 
+            "price_class",
             "scientific_name",
 
             "description",
@@ -624,13 +619,16 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
 
         ]
 
-def check_price_bounds(value):
-    """Raise a validation error when a price is outside the configured range."""
+def check_price_bounds(value, species=None):
+    """
+    Raise a validation error when a price is outside the range set in System
+    Configuration for this fish's class (first-class or common fish).
+    """
     from .models import SystemSetting
-    bounds = SystemSetting.load()
-    if value < bounds.min_price_per_kg or value > bounds.max_price_per_kg:
+    low, high, label = SystemSetting.load().bounds_for(species)
+    if value < low or value > high:
         raise serializers.ValidationError(
-            f"Price must be between ₱{bounds.min_price_per_kg:,.2f} and ₱{bounds.max_price_per_kg:,.2f} per kg. "
+            f"Price for {label} must be between ₱{low:,.2f} and ₱{high:,.2f} per kg. "
             "An Administrator can change this range in System Configuration."
         )
 
@@ -915,6 +913,7 @@ class PriceRecordSerializer(serializers.ModelSerializer):
             "source",
 
             "remarks",
+            "sampled_prices",
 
             # User who entered the price.
 
@@ -1026,11 +1025,57 @@ class PriceRecordSerializer(serializers.ModelSerializer):
 
             )
 
-        # UC-4 step 4: stay within the range set in System Configuration.
-
-        check_price_bounds(value)
+        # The allowed range depends on the fish (checked in validate()).
 
         return value
+
+    def validate_sampled_prices(self, value):
+        """
+        Stall prices checked by the LGU: none, or 3 to 10 positive prices.
+        """
+        from decimal import Decimal, InvalidOperation
+        if value in (None, ""):
+            return []
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Send the stall prices as a list.")
+        if not value:
+            return []
+        if not 3 <= len(value) <= 10:
+            raise serializers.ValidationError("Enter the prices from 3 to 10 stalls.")
+        cleaned = []
+        for item in value:
+            try:
+                price = Decimal(str(item)).quantize(Decimal("0.01"))
+            except (InvalidOperation, ValueError):
+                raise serializers.ValidationError("Every stall price must be a number.")
+            if not price.is_finite() or price <= 0:
+                raise serializers.ValidationError("Every stall price must be greater than zero.")
+            cleaned.append(price)
+        return [str(p) for p in cleaned]
+
+    def validate(self, attrs):
+        """When stall prices are given, the official price is their median."""
+        attrs = super().validate(attrs)
+        from decimal import Decimal
+        species = attrs.get("fish_species") or getattr(self.instance, "fish_species", None)
+        sampled = attrs.get("sampled_prices")
+        if sampled:
+            from statistics import median
+            for price in sampled:
+                try:
+                    check_price_bounds(Decimal(price), species)
+                except serializers.ValidationError as error:
+                    raise serializers.ValidationError({"sampled_prices": f"Stall price ₱{Decimal(price):,.2f}: {error.detail[0]}"})
+            attrs["price_per_kg"] = Decimal(median(Decimal(p) for p in sampled)).quantize(Decimal("0.01"))
+        # UC-4 step 4: stay within the range set in System Configuration.
+        if "price_per_kg" in attrs or "fish_species" in attrs:
+            price = attrs.get("price_per_kg", getattr(self.instance, "price_per_kg", None))
+            if price is not None:
+                try:
+                    check_price_bounds(price, species)
+                except serializers.ValidationError as error:
+                    raise serializers.ValidationError({"price_per_kg": error.detail[0]})
+        return attrs
 
     def validate_status(self, value):
 
@@ -1235,7 +1280,11 @@ class SystemSettingSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = SystemSetting
-        fields = ["min_price_per_kg", "max_price_per_kg", "updated_by_name", "updated_at"]
+        fields = [
+            "min_price_per_kg", "max_price_per_kg",
+            "first_class_min_price_per_kg", "first_class_max_price_per_kg",
+            "updated_by_name", "updated_at",
+        ]
         read_only_fields = ["updated_by_name", "updated_at"]
 
     def validate(self, attrs):
@@ -1245,6 +1294,12 @@ class SystemSettingSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"min_price_per_kg": "The minimum must be greater than zero."})
         if low is not None and high is not None and high <= low:
             raise serializers.ValidationError({"max_price_per_kg": "The maximum must be higher than the minimum."})
+        first_low = attrs.get("first_class_min_price_per_kg", getattr(self.instance, "first_class_min_price_per_kg", None))
+        first_high = attrs.get("first_class_max_price_per_kg", getattr(self.instance, "first_class_max_price_per_kg", None))
+        if first_low is not None and first_low <= 0:
+            raise serializers.ValidationError({"first_class_min_price_per_kg": "The minimum must be greater than zero."})
+        if first_low is not None and first_high is not None and first_high <= first_low:
+            raise serializers.ValidationError({"first_class_max_price_per_kg": "The maximum must be higher than the minimum."})
         return attrs
 
 

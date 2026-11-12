@@ -200,7 +200,7 @@ function Landing({ onGetStarted, onRegister }) {
                 <FishThumb fish={{ id: p.fish_id, name: p.fish_name, has_photo: p.has_photo, updated_at: p.updated_at }} size={54} />
                 <div>
                   <strong>{p.fish_name}</strong>
-                  <span>{p.municipality_name}</span>
+                  <span>{p.municipality_name}{p.market ? ` · ${p.market}` : ""}</span>
                   <span className="price-date">{formatDate(p.recorded_date)}</span>
                 </div>
                 <b>{peso(p.price_per_kg)}<small>/kg</small></b>
