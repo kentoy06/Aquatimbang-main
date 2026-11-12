@@ -615,27 +615,27 @@ if (role === "LGU Officer") {
               <section className="register-section register-section-verify">
                 <h4 className="register-section-title">{t("LGU Officer Verification")}</h4>
                 <p className="register-section-desc">
-                  {t("Fill in what you can. You can register even if some details are missing; an Administrator will check them and may ask you for the rest before approving.")}
+                  <strong>{t("All fields here are optional.")}</strong>{" "}{t("Fill in what you can. You can register even if some details are missing; an Administrator will check them and may ask you for the rest before approving.")}
                 </p>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="reg-department">{t("Department / Office")}{" "}<span className="optional">{t("(optional)")}</span></label>
+                    <label htmlFor="reg-department">{t("Department / Office")}</label>
                     <input id="reg-department" type="text" placeholder={t("e.g. Agriculture Office")} value={form.department} onChange={(e) => update("department", e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="reg-position">{t("Official Position")}{" "}<span className="optional">{t("(optional)")}</span></label>
+                    <label htmlFor="reg-position">{t("Official Position")}</label>
                     <input id="reg-position" type="text" placeholder={t("e.g. Fisheries Officer")} value={form.position} onChange={(e) => update("position", e.target.value)} />
                   </div>
                 </div>
 
                 <div className="form-row">
                   <div className="form-group">
-                    <label htmlFor="reg-official-email">{t("Work Email")}{" "}<span className="optional">{t("(optional)")}</span></label>
+                    <label htmlFor="reg-official-email">{t("Work Email")}</label>
                     <input id="reg-official-email" type="email" placeholder={t("name@lgu.gov.ph")} value={form.official_email} onChange={(e) => update("official_email", e.target.value)} />
                   </div>
                   <div className="form-group">
-                    <label htmlFor="reg-employee-id">{t("Employee ID")}{" "}<span className="optional">{t("(optional)")}</span></label>
+                    <label htmlFor="reg-employee-id">{t("Employee ID")}</label>
                     <input id="reg-employee-id" type="text" placeholder={t("e.g. 2024-0153")} value={form.employee_id} onChange={(e) => update("employee_id", e.target.value)} />
                   </div>
                 </div>
