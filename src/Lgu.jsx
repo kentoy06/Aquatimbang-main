@@ -1166,7 +1166,7 @@ function LGUFishSpeciesManagement({ notify }) {
         </div>
         <div className="info-box">
           <strong>Deactivate</strong> a fish that is no longer sold (its price history is kept).
-          <strong> Remove</strong> a fish added by mistake: it is deleted if nothing is recorded under it, or merged into the correct fish if it already has prices.
+          <strong> Remove</strong> a fish added by mistake: it is deleted if nothing is recorded under it. If it already has prices, merge it into the correct fish, or delete it completely with its prices.
         </div>
         {remover.dialog}
       </div>

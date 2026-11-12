@@ -2572,6 +2572,21 @@ class FishMergeTests(StallSampleTests):
         unused = FishSpecies.objects.create(name="Typo Fish")
         self.assertEqual(self.client.delete(f"/api/fish-species/{unused.pk}/").status_code, 204)
 
+    def test_lgu_can_delete_fish_with_all_records(self):
+        junk = FishSpecies.objects.create(name="Lumayagan")
+        PriceRecord.objects.create(fish_species=junk, municipality=self.place, price_per_kg=Decimal("150"),
+                                   recorded_date=datetime.date(2026, 11, 1), status="published")
+        url = f"/api/fish-species/{junk.pk}/delete-everything/"
+        # The exact name must be typed.
+        self.assertEqual(self.client.post(url, {"confirm_name": "Lumayag"}, format="json").status_code, 400)
+        self.assertTrue(FishSpecies.objects.filter(pk=junk.pk).exists())
+        response = self.client.post(url, {"confirm_name": "lumayagan", "reason": "Not a fish"}, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["prices_deleted"], 1)
+        self.assertFalse(FishSpecies.objects.filter(pk=junk.pk).exists())
+        self.assertFalse(PriceRecord.objects.filter(fish_species_id=junk.pk).exists())
+        self.assertTrue(ActivityLog.objects.filter(action="deleted with all records", target_name="Lumayagan").exists())
+
 
 class MarketPriceTests(StallSampleTests):
     """Each market (e.g. Pasil, Carbon) has its own official price."""
