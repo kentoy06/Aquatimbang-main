@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiUrl, authHeaders, fetchAll } from "../api/config.js";
-import { parseCsv, TEMPLATE_CSV, toImportRows } from "../api/csvImport.js";
+import { parseCsv, parsePriceList, TEMPLATE_CSV, toImportRows } from "../api/csvImport.js";
 import { askConfirm } from "./ConfirmDialog.jsx";
 
 const CHUNK = 2000;
@@ -61,12 +61,20 @@ export default function PriceImport({ notify, onImported }) {
   // Import as published prices (old official records) or send them to Review & Publish.
   const [sendToReview, setSendToReview] = useState(false);
   const [historyKey, setHistoryKey] = useState(0);
+  // "file": a CSV file. "paste": a price list copied from a document
+  // (one date, then one fish and price per line).
+  const [mode, setMode] = useState("file");
+  const [pasteText, setPasteText] = useState("");
+  const [pasteDate, setPasteDate] = useState("");
 
   useEffect(() => {
     fetchAll("/municipalities/").then((rows) => setMunicipalities(rows.filter((m) => m.is_active !== false))).catch(() => {});
   }, []);
 
-  const parsed = table ? toImportRows(table, { defaultMunicipality, dayFirst }) : null;
+  const parsed = mode === "file"
+    ? (table ? toImportRows(table, { defaultMunicipality, dayFirst }) : null)
+    : (pasteText.trim() ? parsePriceList(pasteText, { date: pasteDate, municipality: defaultMunicipality, dayFirst: Boolean(dayFirst) }) : null);
+  const sourceName = mode === "file" ? fileName : `Pasted price list${parsed?.rows[0]?.date ? ` (${parsed.rows[0].date})` : ""}`;
 
   const chooseFile = async (file) => {
     setCheck(null);
@@ -89,7 +97,7 @@ export default function PriceImport({ notify, onImported }) {
       // One batch id for every chunk of this file, so the whole import can be undone.
       const batchId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
       const result = await runImport(parsed.rows, source.trim(), dryRun, setProgress, dryRun ? {} : {
-        batch_id: batchId, file_name: fileName, send_to_review: sendToReview,
+        batch_id: batchId, file_name: sourceName, send_to_review: sendToReview,
       });
       if (dryRun) {
         setCheck(result);
@@ -121,18 +129,46 @@ export default function PriceImport({ notify, onImported }) {
 
       <div className="config-grid">
         <div className="config-card">
-          <div className="config-header">
-            <div className="config-icon blue">⇪</div>
-            <div><h3>1. Choose the file</h3><p>Excel: File → Save As → <strong>CSV UTF-8 (Comma delimited)</strong></p></div>
+          <div className="price-mode import-tabs" role="tablist" aria-label="How to add prices">
+            <button type="button" role="tab" aria-selected={mode === "file"} className={mode === "file" ? "active" : ""} onClick={() => { setMode("file"); setCheck(null); setDone(null); }}>Upload a CSV file</button>
+            <button type="button" role="tab" aria-selected={mode === "paste"} className={mode === "paste" ? "active" : ""} onClick={() => { setMode("paste"); setCheck(null); setDone(null); }}>Paste a price list</button>
           </div>
+          {mode === "file" ? (
+            <>
+              <div className="config-header">
+                <div className="config-icon blue">⇪</div>
+                <div><h3>1. Choose the file</h3><p>Excel: File → Save As → <strong>CSV UTF-8 (Comma delimited)</strong></p></div>
+              </div>
+              <div className="form-group">
+                <label htmlFor="import-file">CSV file</label>
+                <input id="import-file" type="file" accept=".csv,text/csv" onChange={(e) => chooseFile(e.target.files?.[0] || null)} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="config-header">
+                <div className="config-icon blue">✎</div>
+                <div><h3>1. Paste the price list</h3><p>For a document with one date and one price per fish (Word, PDF, message)</p></div>
+              </div>
+              <div className="form-group">
+                <label htmlFor="import-paste">Price list</label>
+                <textarea id="import-paste" className="import-paste" rows={9} value={pasteText}
+                  placeholder={"Date: March 4, 2024\nBangus - ₱180\nGalunggong 160.50\nTulingan 150-160"}
+                  onChange={(e) => { setPasteText(e.target.value); setCheck(null); setDone(null); }} />
+                <small className="field-help">One fish per line with its price. A range like 150-160 uses the middle price (₱155). Lines without a price are ignored.</small>
+              </div>
+              <div className="form-group">
+                <label htmlFor="import-date">Date of these prices</label>
+                <input id="import-date" type="date" value={pasteDate || parsed?.foundDate || ""} max={new Date().toLocaleDateString("en-CA")}
+                  onChange={(e) => changeSetting(() => setPasteDate(e.target.value))} />
+                {!pasteDate && parsed?.foundDate && <small className="field-help">Taken from the list. Change it if needed.</small>}
+              </div>
+            </>
+          )}
           <div className="form-group">
-            <label htmlFor="import-file">CSV file</label>
-            <input id="import-file" type="file" accept=".csv,text/csv" onChange={(e) => chooseFile(e.target.files?.[0] || null)} />
-          </div>
-          <div className="form-group">
-            <label htmlFor="import-municipality">Municipality (when the file has no Municipality column)</label>
+            <label htmlFor="import-municipality">{mode === "file" ? "Municipality (when the file has no Municipality column)" : "Municipality"}</label>
             <select id="import-municipality" value={defaultMunicipality} onChange={(e) => changeSetting(() => setDefaultMunicipality(e.target.value))}>
-              <option value="">Use the file's Municipality column</option>
+              <option value="">{mode === "file" ? "Use the file's Municipality column" : "Choose the municipality…"}</option>
               {municipalities.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
             </select>
           </div>
@@ -140,14 +176,14 @@ export default function PriceImport({ notify, onImported }) {
             <label htmlFor="import-source">Source</label>
             <input id="import-source" maxLength={150} value={source} onChange={(e) => setSource(e.target.value)} />
           </div>
-          <div className="info-box">
+          {mode === "file" && <div className="info-box">
             <strong>Accepted layouts</strong>
             <ul style={{ margin: "6px 0 0", paddingLeft: 18 }}>
               <li>One row per price: <code>Date, Fish, Municipality, Price</code> (also <code>species</code>, <code>price_per_kg_php</code> and similar names)</li>
               <li>One column per fish: <code>Date, Bangus, Galunggong, …</code> (choose the municipality above, or add a Municipality column)</li>
             </ul>
             Fish and municipality names must match the ones in AquaTimbang. Blank cells are skipped. Prices already recorded for the same fish, municipality and day are kept and not overwritten.
-          </div>
+          </div>}
         </div>
 
         <div className="config-card">
@@ -156,7 +192,7 @@ export default function PriceImport({ notify, onImported }) {
             <div><h3>2. Check, then import</h3><p>Nothing is saved until you click Import</p></div>
           </div>
 
-          {!parsed && <div className="info-box">Choose a file to see what will be imported.</div>}
+          {!parsed && <div className="info-box">{mode === "file" ? "Choose a file to see what will be imported." : "Paste a price list to see what will be imported."}</div>}
 
           {parsed && parsed.problems.length > 0 && (
             <div className="warn-box" role="alert">{parsed.problems.map((p) => <div key={p}>{p}</div>)}</div>
@@ -165,16 +201,16 @@ export default function PriceImport({ notify, onImported }) {
           {parsed && !parsed.problems.length && (
             <>
               <div className="profile-grid">
-                <div className="profile-field"><span>File</span><strong>{fileName}</strong></div>
+                <div className="profile-field"><span>{mode === "file" ? "File" : "From"}</span><strong>{sourceName}</strong></div>
                 <div className="profile-field"><span>Prices found</span><strong>{parsed.rows.length.toLocaleString()}</strong></div>
-                <div className="profile-field"><span>Layout</span><strong>{parsed.layout === "long" ? "One row per price" : `One column per fish (${parsed.fishColumns.length})`}</strong></div>
-                <div className="profile-field">
+                <div className="profile-field"><span>Layout</span><strong>{parsed.layout === "list" ? "Price list (one date)" : parsed.layout === "long" ? "One row per price" : `One column per fish (${parsed.fishColumns.length})`}</strong></div>
+                {parsed.layout !== "list" && <div className="profile-field">
                   <span>Dates like 03/04/2024 mean</span>
                   <select value={parsed.dayFirst ? "dmy" : "mdy"} onChange={(e) => changeSetting(() => setDayFirst(e.target.value === "dmy"))}>
                     <option value="mdy">March 4 (month/day/year)</option>
                     <option value="dmy">3 April (day/month/year)</option>
                   </select>
-                </div>
+                </div>}
               </div>
 
               <div style={{ overflowX: "auto", marginTop: 12 }}>
@@ -182,7 +218,7 @@ export default function PriceImport({ notify, onImported }) {
                   <thead><tr><th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></tr></thead>
                   <tbody>
                     {parsed.rows.slice(0, 8).map((r, i) => (
-                      <tr key={i}><td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td><td>{r.price}</td></tr>
+                      <tr key={i}><td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td><td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td></tr>
                     ))}
                   </tbody>
                 </table>
@@ -237,7 +273,7 @@ export default function PriceImport({ notify, onImported }) {
               </fieldset>
 
               <div className="button-row" style={{ marginTop: 14 }}>
-                <button className="secondary-btn" onClick={() => run(true)} disabled={Boolean(busy)}>Check File</button>
+                <button className="secondary-btn" onClick={() => run(true)} disabled={Boolean(busy)}>{mode === "file" ? "Check File" : "Check List"}</button>
                 <button className="primary-btn" onClick={() => run(false)} disabled={Boolean(busy) || !check || check.ready === 0}>
                   {check ? `Import ${check.ready.toLocaleString()} Prices` : "Import"}
                 </button>

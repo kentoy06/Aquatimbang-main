@@ -163,3 +163,42 @@ export function toImportRows(table, { defaultMunicipality = "", dayFirst = null 
 
 export const TEMPLATE_CSV =
   "Date,Fish,Municipality,Price\r\n2024-01-05,Bangus,Cebu City,180.00\r\n2024-01-05,Galunggong,Cebu City,160.50\r\n2024-01-06,Bangus,Mandaue City,178.25\r\n";
+
+/**
+ * Read a price list copied from a document (Word, PDF, chat message):
+ *   "Bangus 180", "Galunggong - ₱160.50/kg", "1. Tamban: 90", "Lapu-lapu\t550",
+ *   "Tulingan 150-160" (a range uses the middle price).
+ * A line that is only a date ("March 4, 2024", "Date: 03/04/2024") sets the date.
+ * Returns the same shape as toImportRows.
+ */
+export function parsePriceList(text, { date = "", municipality = "", dayFirst = false } = {}) {
+  const rows = [];
+  const problems = [];
+  let foundDate = "";
+  const number = /\d{1,3}(?:,\d{3})+(?:\.\d+)?|\d+(?:\.\d+)?/g;
+  String(text || "").split(/\r?\n/).forEach((rawLine, index) => {
+    const line = clean(rawLine).replace(/^(\d+[.)]|[-•*–·])\s+/, "");
+    if (!line) return;
+    // A date line, e.g. "Date: March 4, 2024" or "Petsa: 03/04/2024".
+    const dateText = line.replace(/^(date|petsa|as of|price as of)\s*[:-]?\s*/i, "").trim();
+    const asDate = parseDate(dateText, dayFirst);
+    if (asDate) { foundDate = foundDate || asDate; return; }
+    const numbers = [...line.matchAll(number)];
+    if (!numbers.length) return; // headings such as "Fish Prices" or "Species Price"
+    const first = numbers[0];
+    const fish = line.slice(0, first.index).replace(/\bphp\.?\s*$/i, "").replace(/[\s:\-–—|₱]+$/, "").trim();
+    if (!fish || !/[A-Za-z]/.test(fish)) return;
+    const values = numbers.map((m) => Number(m[0].replace(/,/g, "")));
+    // "150-160" or "150 to 160": a range between the first two numbers.
+    const between = numbers[1] ? line.slice(first.index + first[0].length, numbers[1].index) : "";
+    const isRange = values.length >= 2 && /^\s*(-|–|—|to|hangtod|hanggang)\s*(₱|php)?\s*$/i.test(between);
+    const price = isRange ? Math.round(((values[0] + values[1]) / 2) * 100) / 100 : values[0];
+    rows.push({ row: index + 1, date: "", fish, municipality, price: String(price), range: isRange ? `${values[0]}–${values[1]}` : "" });
+  });
+  const useDate = date || foundDate;
+  if (!useDate) problems.push("Choose the date of these prices (or put a line like \"Date: March 4, 2024\" in the list).");
+  if (!municipality) problems.push("Choose the municipality of these prices.");
+  if (!rows.length) problems.push("No prices found. Put one fish per line with its price, for example: Bangus 180");
+  rows.forEach((r) => { r.date = useDate; });
+  return { rows: problems.length ? [] : rows, layout: "list", problems, dayFirst, fishColumns: [], foundDate };
+}
