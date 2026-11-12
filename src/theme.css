@@ -1912,3 +1912,13 @@ table th {
 .import-tabs { margin-bottom: 14px; } .import-paste { width: 100%; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13.5px; padding: 10px 12px; border-radius: 10px; border: 1px solid #cfdbe6; resize: vertical; }
 .import-skipped td { color: #98a2b3; text-decoration: line-through; } .import-skipped td:first-child { text-decoration: none; }
 .market-tag { display: block; font-size: 11.5px; color: #0e7c86; font-weight: 600; margin-top: 2px; }
+.draft-note-inline { display: block; color: #067647; margin-top: 4px; }
+.draft-note-inline .msg-link { padding: 0; font-size: inherit; }
+
+/* Register: line the boxes up even when a label wraps onto two lines.
+   Each form-row shares its rows (label / box / note) across both columns. */
+@media (min-width: 601px) {
+  .login-right .form-row { grid-template-rows: auto auto auto; row-gap: 0; align-items: stretch; }
+  .login-right .form-row > .form-group { display: grid; grid-row: span 3; grid-template-rows: subgrid; row-gap: 6px; align-content: start; margin-bottom: 14px; }
+  .login-right .form-row > .form-group > label { align-self: end; }
+}

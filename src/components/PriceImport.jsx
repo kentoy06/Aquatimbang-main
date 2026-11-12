@@ -47,6 +47,17 @@ function downloadTemplate() {
  * Import historical prices (e.g. DVFM records) from a CSV file.
  * Shared by the LGU Officer and Administrator dashboards.
  */
+const DRAFT_KEY = "aquatimbang:importDraft";
+function readDraft() {
+  try { return JSON.parse(localStorage.getItem(DRAFT_KEY) || "{}") || {}; } catch { return {}; }
+}
+function writeDraft(value) {
+  try {
+    if (value) localStorage.setItem(DRAFT_KEY, JSON.stringify(value));
+    else localStorage.removeItem(DRAFT_KEY);
+  } catch { /* storage unavailable */ }
+}
+
 export default function PriceImport({ notify, onImported }) {
   const [municipalities, setMunicipalities] = useState([]);
   const [markets, setMarkets] = useState([]);
@@ -66,11 +77,17 @@ export default function PriceImport({ notify, onImported }) {
   const [historyKey, setHistoryKey] = useState(0);
   // "file": a CSV file. "paste": a price list copied from a document
   // (one date, then one fish and price per line).
-  const [mode, setMode] = useState("file");
-  const [pasteText, setPasteText] = useState("");
-  const [pasteDate, setPasteDate] = useState("");
+  // A pasted list is kept as a draft on this device, so typing is not lost
+  // when you open another page and come back.
+  const draft = readDraft();
+  const [mode, setMode] = useState(draft.text ? "paste" : "file");
+  const [pasteText, setPasteText] = useState(draft.text || "");
+  const [pasteDate, setPasteDate] = useState(draft.date || "");
   // Name shown in Recent Imports (e.g. "DVMF printout – Oct 6, 2026").
-  const [importName, setImportName] = useState("");
+  const [importName, setImportName] = useState(draft.name || "");
+  useEffect(() => {
+    writeDraft(pasteText.trim() ? { text: pasteText, date: pasteDate, name: importName } : null);
+  }, [pasteText, pasteDate, importName]);
   // Pasted lines the officer unticked (not fish, or not to import).
   const [skipped, setSkipped] = useState(() => new Set());
 
@@ -133,6 +150,8 @@ export default function PriceImport({ notify, onImported }) {
       } else {
         setDone(result);
         setCheck(null);
+        // Imported: the pasted draft is no longer needed.
+        if (mode === "paste") { setPasteText(""); setPasteDate(""); setImportName(""); writeDraft(null); }
         notify(`${result.imported.toLocaleString()} prices imported${sendToReview ? " and sent to Review & Publish" : ""}.`);
         setHistoryKey((k) => k + 1);
         onImported?.();
@@ -185,6 +204,12 @@ export default function PriceImport({ notify, onImported }) {
                   placeholder={"Date: March 4, 2024\nBangus - ₱180\nGalunggong 160.50\nTulingan 150-160"}
                   onChange={(e) => { setPasteText(e.target.value); setCheck(null); setDone(null); setSkipped(new Set()); }} />
                 <small className="field-help">One fish per line with its price. A range like 150-160 uses the middle price (₱155). Lines without a price are ignored.</small>
+                {pasteText.trim() && (
+                  <small className="field-help draft-note-inline">
+                    ✓ Saved on this device. It stays here if you open another page, and is cleared after importing.{" "}
+                    <button type="button" className="msg-link" onClick={() => { setPasteText(""); setPasteDate(""); setImportName(""); setSkipped(new Set()); setCheck(null); }}>Clear</button>
+                  </small>
+                )}
               </div>
               <div className="form-group">
                 <label htmlFor="import-date">Date of these prices</label>
