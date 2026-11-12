@@ -66,6 +66,10 @@ export default function PriceImport({ notify, onImported }) {
   const [mode, setMode] = useState("file");
   const [pasteText, setPasteText] = useState("");
   const [pasteDate, setPasteDate] = useState("");
+  // Name shown in Recent Imports (e.g. "DVMF printout – Oct 6, 2026").
+  const [importName, setImportName] = useState("");
+  // Pasted lines the officer unticked (not fish, or not to import).
+  const [skipped, setSkipped] = useState(() => new Set());
 
   useEffect(() => {
     fetchAll("/municipalities/").then((rows) => setMunicipalities(rows.filter((m) => m.is_active !== false))).catch(() => {});
@@ -75,6 +79,12 @@ export default function PriceImport({ notify, onImported }) {
     ? (table ? toImportRows(table, { defaultMunicipality, dayFirst }) : null)
     : (pasteText.trim() ? parsePriceList(pasteText, { date: pasteDate, municipality: defaultMunicipality, dayFirst: Boolean(dayFirst) }) : null);
   const sourceName = mode === "file" ? fileName : `Pasted price list${parsed?.rows[0]?.date ? ` (${parsed.rows[0].date})` : ""}`;
+  const isList = parsed?.layout === "list";
+  const rowsToImport = parsed ? parsed.rows.filter((r) => !(isList && skipped.has(r.row))) : [];
+  const toggleSkip = (row) => {
+    setSkipped((prev) => { const next = new Set(prev); if (next.has(row)) next.delete(row); else next.add(row); return next; });
+    setCheck(null);
+  };
 
   const chooseFile = async (file) => {
     setCheck(null);
@@ -90,14 +100,14 @@ export default function PriceImport({ notify, onImported }) {
   };
 
   const run = async (dryRun) => {
-    if (!parsed?.rows.length) return;
+    if (!rowsToImport.length) return;
     setBusy(dryRun ? "check" : "import");
     setProgress(0);
     try {
       // One batch id for every chunk of this file, so the whole import can be undone.
       const batchId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
-      const result = await runImport(parsed.rows, source.trim(), dryRun, setProgress, dryRun ? {} : {
-        batch_id: batchId, file_name: sourceName, send_to_review: sendToReview,
+      const result = await runImport(rowsToImport, source.trim(), dryRun, setProgress, dryRun ? {} : {
+        batch_id: batchId, file_name: importName.trim() || sourceName, send_to_review: sendToReview,
       });
       if (dryRun) {
         setCheck(result);
@@ -154,7 +164,7 @@ export default function PriceImport({ notify, onImported }) {
                 <label htmlFor="import-paste">Price list</label>
                 <textarea id="import-paste" className="import-paste" rows={9} value={pasteText}
                   placeholder={"Date: March 4, 2024\nBangus - ₱180\nGalunggong 160.50\nTulingan 150-160"}
-                  onChange={(e) => { setPasteText(e.target.value); setCheck(null); setDone(null); }} />
+                  onChange={(e) => { setPasteText(e.target.value); setCheck(null); setDone(null); setSkipped(new Set()); }} />
                 <small className="field-help">One fish per line with its price. A range like 150-160 uses the middle price (₱155). Lines without a price are ignored.</small>
               </div>
               <div className="form-group">
@@ -171,6 +181,12 @@ export default function PriceImport({ notify, onImported }) {
               <option value="">{mode === "file" ? "Use the file's Municipality column" : "Choose the municipality…"}</option>
               {municipalities.map((m) => <option key={m.id} value={m.name}>{m.name}</option>)}
             </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="import-name">Name this import <span className="optional">(optional)</span></label>
+            <input id="import-name" maxLength={200} value={importName} placeholder={sourceName || "e.g. DVMF printout – October 6, 2026"}
+              onChange={(e) => setImportName(e.target.value)} />
+            <small className="field-help">Shown in Recent Imports so you can find (or undo) it later.</small>
           </div>
           <div className="form-group">
             <label htmlFor="import-source">Source</label>
@@ -202,7 +218,7 @@ export default function PriceImport({ notify, onImported }) {
             <>
               <div className="profile-grid">
                 <div className="profile-field"><span>{mode === "file" ? "File" : "From"}</span><strong>{sourceName}</strong></div>
-                <div className="profile-field"><span>Prices found</span><strong>{parsed.rows.length.toLocaleString()}</strong></div>
+                <div className="profile-field"><span>Prices found</span><strong>{isList && skipped.size ? `${rowsToImport.length} of ${parsed.rows.length}` : parsed.rows.length.toLocaleString()}</strong></div>
                 <div className="profile-field"><span>Layout</span><strong>{parsed.layout === "list" ? "Price list (one date)" : parsed.layout === "long" ? "One row per price" : `One column per fish (${parsed.fishColumns.length})`}</strong></div>
                 {parsed.layout !== "list" && <div className="profile-field">
                   <span>Dates like 03/04/2024 mean</span>
@@ -215,21 +231,29 @@ export default function PriceImport({ notify, onImported }) {
 
               <div style={{ overflowX: "auto", marginTop: 12 }}>
                 <table className="inner-table">
-                  <thead><tr><th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></tr></thead>
+                  <thead><tr>{isList && <th>IMPORT</th>}<th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></tr></thead>
                   <tbody>
-                    {parsed.rows.slice(0, 8).map((r, i) => (
+                    {(isList ? parsed.rows : parsed.rows.slice(0, 8)).map((r, i) => isList ? (
+                      <tr key={i} className={skipped.has(r.row) ? "import-skipped" : ""}>
+                        <td><input type="checkbox" checked={!skipped.has(r.row)} onChange={() => toggleSkip(r.row)} aria-label={`Import ${r.fish}`} /></td>
+                        <td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td>
+                        <td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td>
+                      </tr>
+                    ) : (
                       <tr key={i}><td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td><td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td></tr>
                     ))}
                   </tbody>
                 </table>
-                {parsed.rows.length > 8 && <p className="chart-note">First 8 of {parsed.rows.length.toLocaleString()} prices.</p>}
+                {isList
+                  ? <p className="chart-note">Untick anything that is not a fish you track (for example shellfish or squid) and it will not be imported.</p>
+                  : parsed.rows.length > 8 && <p className="chart-note">First 8 of {parsed.rows.length.toLocaleString()} prices.</p>}
               </div>
 
               {busy && (
                 <div className="info-box">
-                  {busy === "check" ? "Checking" : "Importing"}… {progress.toLocaleString()} / {parsed.rows.length.toLocaleString()}
+                  {busy === "check" ? "Checking" : "Importing"}… {progress.toLocaleString()} / {rowsToImport.length.toLocaleString()}
                   <div style={{ height: 6, background: "#e4e7ec", borderRadius: 4, marginTop: 6 }}>
-                    <div style={{ height: 6, width: `${(progress / parsed.rows.length) * 100}%`, background: "#0e7c86", borderRadius: 4 }} />
+                    <div style={{ height: 6, width: `${(progress / Math.max(1, rowsToImport.length)) * 100}%`, background: "#0e7c86", borderRadius: 4 }} />
                   </div>
                 </div>
               )}
