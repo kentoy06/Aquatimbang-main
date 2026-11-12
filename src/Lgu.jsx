@@ -984,7 +984,7 @@ function LGUFishSpeciesManagement({ notify }) {
   const [search, setSearch] = useState("");
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
-  const [form, setForm] = useState({ name: "", scientific_name: "", description: "", photo_credit: "" });
+  const [form, setForm] = useState({ name: "", scientific_name: "", price_class: "common", description: "", photo_credit: "" });
   const [photoFile, setPhotoFile] = useState(null);
 
   const request = async (url, method = "GET", payload) => {
@@ -1030,7 +1030,7 @@ function LGUFishSpeciesManagement({ notify }) {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: "", scientific_name: "", description: "", photo_credit: "" });
+    setForm({ name: "", scientific_name: "", price_class: "common", description: "", photo_credit: "" });
     setPhotoFile(null);
     setShowForm(true);
   };
@@ -1040,6 +1040,7 @@ function LGUFishSpeciesManagement({ notify }) {
     setForm({
       name: item.name || "",
       scientific_name: item.scientific_name || "",
+      price_class: item.price_class || "common",
       description: item.description || "",
       photo_credit: item.photo_credit || "",
     });
@@ -1052,6 +1053,7 @@ function LGUFishSpeciesManagement({ notify }) {
     const payload = {
       name: form.name.trim(),
       scientific_name: form.scientific_name.trim(),
+      price_class: form.price_class || "common",
       description: form.description.trim(),
       photo_credit: (form.photo_credit || "").trim(),
     };
@@ -1191,6 +1193,15 @@ function LGUFishSpeciesManagement({ notify }) {
                 <label htmlFor="lgu-species-scientific">Scientific Name</label>
                 <input id="lgu-species-scientific" maxLength={150} value={form.scientific_name}
                   onChange={(event) => setForm((old) => ({ ...old, scientific_name: event.target.value }))} />
+              </div>
+              <div className="form-group">
+                <label htmlFor="lgu-species-class">Price class</label>
+                <select id="lgu-species-class" value={form.price_class || "common"}
+                  onChange={(event) => setForm((old) => ({ ...old, price_class: event.target.value }))}>
+                  <option value="common">Common fish</option>
+                  <option value="first_class">First-class fish</option>
+                </select>
+                <small className="field-help">Decides which allowed price range in System Configuration is used.</small>
               </div>
               <div className="form-group">
                 <label htmlFor="lgu-species-description">Description</label>

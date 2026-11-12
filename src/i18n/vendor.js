@@ -566,6 +566,10 @@ const PHRASES = {
   "Instant fair price computation": ["Mabilis na pagkuwenta ng patas na presyo", "Paspas nga pagkuwenta sa patas nga presyo"],
   "Short-term price forecasting": ["Panandaliang pagtataya ng presyo", "Mubong tagna sa presyo"],
   "Notifications older than {n} days are cleared automatically.": ["Awtomatikong nabubura ang mga notipikasyong mahigit {n} araw na.", "Awtomatikong mapapas ang mga pahibalo nga sobra na sa {n} ka adlaw."],
+  "Take a photo of your permit": ["Kunan ng larawan ang iyong permit", "Kuhaa og litrato ang imong permit"],
+  "Take a photo of your document": ["Kunan ng larawan ang iyong dokumento", "Kuhaa og litrato ang imong dokumento"],
+  "Fill in what you can. You can register even if some details are missing; an Administrator will check them and may ask you for the rest before approving.": ["Punan ang kaya mo. Maaari kang magrehistro kahit may kulang; susuriin ito ng Administrator at maaaring hingin ang iba bago aprubahan.", "Pun-a ang imong mahimo. Makaparehistro ka bisan kulang pa; susihon kini sa Administrator ug mahimong pangayoon ang uban sa dili pa aprobahan."],
+  "No email? You can still register. If you forget your password, ask your LGU Officer to reset it.": ["Walang email? Maaari ka pa ring magrehistro. Kung makalimutan mo ang password, magpa-reset sa iyong LGU Officer.", "Walay email? Makaparehistro gihapon ka. Kung makalimtan nimo ang password, pa-reset sa imong LGU Officer."],
 };
 
 export function translate(language, text, vars = {}) {

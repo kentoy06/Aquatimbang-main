@@ -1668,13 +1668,17 @@ class PriceImportTests(TestCase):
         lgu = self.client_for("im_lgu")
         check = lgu.post("/api/prices/import/", {"rows": self.rows(), "source": "DVFM", "dry_run": True}, format="json")
         self.assertEqual(check.status_code, 200, check.data)
-        self.assertEqual(check.data["ready"], 2)
+        # "Tuna" is not in the fish list yet: it is added, not refused.
+        self.assertEqual(check.data["ready"], 3)
         self.assertEqual(check.data["imported"], 0)
-        self.assertEqual(sorted(e["row"] for e in check.data["errors"]), [4, 5, 6, 7, 8])
+        self.assertEqual(check.data["new_fish"], ["Tuna"])
+        self.assertEqual(sorted(e["row"] for e in check.data["errors"]), [4, 5, 7, 8])
         self.assertEqual(PriceRecord.objects.count(), 0)
+        self.assertFalse(FishSpecies.objects.filter(name="Tuna").exists())  # a check adds nothing
 
         done = lgu.post("/api/prices/import/", {"rows": self.rows(), "source": "DVFM"}, format="json")
-        self.assertEqual(done.data["imported"], 2)
+        self.assertEqual(done.data["imported"], 3)
+        self.assertTrue(FishSpecies.objects.filter(name="Tuna").exists())
         record = PriceRecord.objects.get(recorded_date="2022-01-04")
         self.assertEqual(record.status, "published")
         self.assertEqual(str(record.price_per_kg), "152.50")
@@ -1683,7 +1687,7 @@ class PriceImportTests(TestCase):
 
         again = lgu.post("/api/prices/import/", {"rows": self.rows(), "source": "DVFM"}, format="json")
         self.assertEqual(again.data["imported"], 0)
-        self.assertEqual(again.data["already_recorded"], 2)
+        self.assertEqual(again.data["already_recorded"], 3)
 
     def test_vendor_cannot_import(self):
         response = self.client_for("im_vendor").post("/api/prices/import/", {"rows": self.rows()}, format="json")
@@ -2479,3 +2483,60 @@ class StallSampleTests(TestCase):
     def test_needs_three_stalls(self):
         self.assertEqual(self.post(sampled_prices=[180, 190]).status_code, 400)
         self.assertEqual(self.post(sampled_prices=[180, -1, 190]).status_code, 400)
+
+
+class FishNameTests(TestCase):
+    """Fish names: tidy capitals and no duplicates that only differ in capitals."""
+
+    def setUp(self):
+        role = Role.objects.get_or_create(name="Administrator")[0]
+        admin = User.objects.create_user("fn_admin", "fn@example.com", "TestPass123!")
+        UserProfile.objects.create(user=admin, role=role, account_status="approved", is_active=True)
+        FishSpecies.objects.create(name="Bangus")
+        self.client = APIClient()
+        self.client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=admin)[0].key}")
+
+    def test_lowercase_duplicate_is_refused(self):
+        response = self.client.post("/api/fish-species/", {"name": "bangus"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("Bangus is already", str(response.data))
+
+    def test_new_name_gets_capitals(self):
+        response = self.client.post("/api/fish-species/", {"name": "dalagang  bukid", "price_class": "first_class"}, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(response.data["name"], "Dalagang Bukid")
+        self.assertEqual(response.data["price_class"], "first_class")
+
+
+class PriceClassRangeTests(StallSampleTests):
+    """First-class and common fish use their own allowed price ranges."""
+
+    def test_ranges_by_class(self):
+        from .models import SystemSetting
+        settings_row = SystemSetting.load()
+        settings_row.min_price_per_kg, settings_row.max_price_per_kg = Decimal("40"), Decimal("200")
+        settings_row.first_class_min_price_per_kg, settings_row.first_class_max_price_per_kg = Decimal("150"), Decimal("800")
+        settings_row.save()
+        self.assertEqual(self.post(price_per_kg="500").status_code, 400)          # common fish: max ₱200
+        self.fish.price_class = "first_class"
+        self.fish.save()
+        self.assertEqual(self.post(price_per_kg="500").status_code, 201)          # first-class: up to ₱800
+
+
+class RelaxedRegistrationTests(RegistrationPhotoAndSpeciesTests):
+    """Vendors may register without email; LGU officers with missing details."""
+
+    def test_vendor_without_email(self):
+        response = APIClient().post("/api/auth/register/", self.vendor_payload(email=""), format="multipart")
+        self.assertEqual(response.status_code, 201, response.data)
+        self.assertEqual(User.objects.get(username="new_vendor").email, "")
+
+    def test_lgu_with_missing_details(self):
+        payload = self.vendor_payload(username="new_lgu", email="new_lgu@example.com", role=self.roles["LGU Officer"].id,
+                                      market_name=None, stall_number=None, species_sold=None, stall_photo=None)
+        response = APIClient().post("/api/auth/register/", payload, format="multipart")
+        self.assertEqual(response.status_code, 201, response.data)
+        # An LGU officer still needs an email.
+        payload = self.vendor_payload(username="lgu_two", email="", role=self.roles["LGU Officer"].id,
+                                      market_name=None, stall_number=None, species_sold=None, stall_photo=None)
+        self.assertEqual(APIClient().post("/api/auth/register/", payload, format="multipart").status_code, 400)

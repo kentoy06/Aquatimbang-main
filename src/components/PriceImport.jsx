@@ -18,7 +18,7 @@ async function sendChunk(rows, source, dryRun, options) {
 
 // Send all rows in chunks and add up the results.
 async function runImport(rows, source, dryRun, onProgress, options = {}) {
-  const total = { ready: 0, imported: 0, already_recorded: 0, error_count: 0, errors: [], first_date: null, last_date: null };
+  const total = { ready: 0, imported: 0, already_recorded: 0, error_count: 0, errors: [], first_date: null, last_date: null, new_fish: [] };
   for (let start = 0; start < rows.length; start += CHUNK) {
     const result = await sendChunk(rows.slice(start, start + CHUNK), source, dryRun, options);
     total.ready += result.ready;
@@ -26,6 +26,7 @@ async function runImport(rows, source, dryRun, onProgress, options = {}) {
     total.already_recorded += result.already_recorded;
     total.error_count += result.error_count;
     total.errors.push(...result.errors);
+    (result.new_fish || []).forEach((name) => { if (!total.new_fish.includes(name)) total.new_fish.push(name); });
     if (result.first_date && (!total.first_date || result.first_date < total.first_date)) total.first_date = result.first_date;
     if (result.last_date && (!total.last_date || result.last_date > total.last_date)) total.last_date = result.last_date;
     onProgress(Math.min(rows.length, start + CHUNK));
@@ -203,6 +204,11 @@ export default function PriceImport({ notify, onImported }) {
                   {check.first_date && <> ({check.first_date} to {check.last_date})</>}.
                   {check.already_recorded > 0 && <> {check.already_recorded.toLocaleString()} already recorded (will be skipped).</>}
                   {check.error_count > 0 && <> {check.error_count.toLocaleString()} rows have problems and will be skipped.</>}
+                  {check.new_fish.length > 0 && (
+                    <p style={{ margin: "6px 0 0" }}>
+                      🐟 <strong>{check.new_fish.length} new fish will be added</strong> to Fish Species: {check.new_fish.join(", ")}.
+                    </p>
+                  )}
                 </div>
               )}
 
@@ -247,6 +253,7 @@ export default function PriceImport({ notify, onImported }) {
               {" "}Wrong file? Undo it under Recent Imports below.
               {done.already_recorded > 0 && <> {done.already_recorded.toLocaleString()} were already recorded and kept.</>}
               {done.error_count > 0 && <> {done.error_count.toLocaleString()} rows with problems were skipped.</>}
+              {done.new_fish?.length > 0 && <> 🐟 Added {done.new_fish.length} new fish to Fish Species: {done.new_fish.join(", ")}. Add their photos there.</>}
             </div>
           )}
         </div>

@@ -86,3 +86,24 @@ def validate_image_upload(file):
             "Only JPG, JPEG, and PNG images are allowed."
         )
     validate_file_contents(file, extension)
+
+def clean_fish_name(raw):
+    """
+    Tidy a fish name the same way everywhere: single spaces, and each word
+    starts with a capital letter. A name typed all in small letters or all in
+    capitals is turned into normal capitals ("bangus" or "BANGUS" -> "Bangus",
+    "dalagang  bukid" -> "Dalagang Bukid", "lapu-lapu" -> "Lapu-lapu"); a name
+    that already mixes capitals keeps them ("LGU Test Fish").
+    """
+    text = " ".join(str(raw or "").split())
+    letters = [ch for ch in text if ch.isalpha()]
+    one_case = letters and (all(ch.islower() for ch in letters) or all(ch.isupper() for ch in letters))
+    tidy = []
+    for word in text.split(" "):
+        word = word.lower() if one_case else word
+        for i, ch in enumerate(word):
+            if ch.isalpha():
+                word = word[:i] + ch.upper() + word[i + 1:]
+                break
+        tidy.append(word)
+    return " ".join(tidy).strip()

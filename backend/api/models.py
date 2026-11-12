@@ -437,6 +437,13 @@ class FishSpecies(models.Model):
 
     name = models.CharField(max_length=100, unique=True)
 
+    # Price class: first-class fish (e.g. Lapu-lapu, Maya-maya) and common
+    # fish (e.g. Galunggong, Tamban) have different allowed price ranges.
+    CLASS_COMMON = "common"
+    CLASS_FIRST = "first_class"
+    PRICE_CLASS_CHOICES = [(CLASS_COMMON, "Common fish"), (CLASS_FIRST, "First-class fish")]
+    price_class = models.CharField(max_length=20, choices=PRICE_CLASS_CHOICES, default=CLASS_COMMON)
+
     # Scientific name, if available.
 
     scientific_name = models.CharField(
@@ -1182,8 +1189,12 @@ class SystemSetting(models.Model):
     """
 
     # Prices per kg outside this range are rejected (UC-4 step 4).
+    # Range for common fish (and fish without a class).
     min_price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=50)
     max_price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=1000)
+    # Range for first-class fish.
+    first_class_min_price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=50)
+    first_class_max_price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=1000)
 
     updated_by = models.ForeignKey(
         "auth.User",
@@ -1193,6 +1204,12 @@ class SystemSetting(models.Model):
         related_name="+",
     )
     updated_at = models.DateTimeField(auto_now=True)
+
+    def bounds_for(self, species=None):
+        """(lowest, highest, label) allowed for this fish's price class."""
+        if species is not None and getattr(species, "price_class", "") == "first_class":
+            return self.first_class_min_price_per_kg, self.first_class_max_price_per_kg, "first-class fish"
+        return self.min_price_per_kg, self.max_price_per_kg, "common fish"
 
     @classmethod
     def load(cls):

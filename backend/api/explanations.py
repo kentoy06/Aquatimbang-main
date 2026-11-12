@@ -126,8 +126,12 @@ def fuel_reasons(ref, coefficients):
         "fuel", "⛽", "up" if up else "down",
         "Diesel price went up" if up else "Diesel price went down",
         f"Diesel is {_peso(float(recent.fuel_price))}/liter, {'up' if up else 'down'} {_peso(abs(change))} "
-        f"({abs(pct):.1f}%) since {_long(earlier.date)}. Fuel is one of the biggest costs of a fishing trip, "
-        f"so {'higher fuel usually means higher' if up else 'cheaper fuel can mean lower'} fish prices."
+        f"({abs(pct):.1f}%) since {_long(earlier.date)}. "
+        + ("Fishers spend more on fuel for each trip, and vendors raise their selling price to cover "
+           "these costs (plus ice and transport), so fish prices usually go up."
+           if up else
+           "Fishing trips and delivery cost less, so vendors can lower their selling price; "
+           "prices may fall more slowly than they rose.")
         + _past_effect(coefficients, "fuel_price", "each ₱1/liter of fuel"),
     )]
 

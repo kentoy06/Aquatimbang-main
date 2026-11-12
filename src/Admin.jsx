@@ -189,6 +189,8 @@ const mapDatabaseSpecies = (fish) => ({
   id: fish.id,
   name: fish.name,
   scientific: fish.scientific_name || "",
+  price_class: fish.price_class || "common",
+  priceClassLabel: fish.price_class === "first_class" ? "First-class" : "Common",
   description: fish.description || "",
   status: fish.is_active ? "Active" : "Inactive",
   hasPhoto: Boolean(fish.has_photo),
@@ -2181,7 +2183,7 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
-  const [form, setForm] = useState({ name: "", scientific: "", description: "", photo_credit: "" });
+  const [form, setForm] = useState({ name: "", scientific: "", price_class: "common", description: "", photo_credit: "" });
   const [photoFile, setPhotoFile] = useState(null);
   const [speciesSaving, setSpeciesSaving] = useState(false);
   const visible = species.filter((s) =>
@@ -2192,7 +2194,7 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
 
   const openAdd = () => {
     setEditing(null);
-    setForm({ name: "", scientific: "", description: "", photo_credit: "" });
+    setForm({ name: "", scientific: "", price_class: "common", description: "", photo_credit: "" });
     setPhotoFile(null);
     setShowForm(true);
   };
@@ -2258,6 +2260,7 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
   const payload = {
     name,
     scientific_name: form.scientific.trim(),
+    price_class: form.price_class || "common",
     description: form.description.trim(),
     photo_credit: (form.photo_credit || "").trim(),
   };
@@ -2398,6 +2401,15 @@ const toggleStatus = async (s) => {
             <div className="form-group">
               <label>Scientific Name</label>
               <input value={form.scientific} onChange={(e) => setForm({ ...form, scientific: e.target.value })} />
+            </div>
+
+            <div className="form-group">
+              <label>Price class</label>
+              <select value={form.price_class || "common"} onChange={(e) => setForm({ ...form, price_class: e.target.value })}>
+                <option value="common">Common fish</option>
+                <option value="first_class">First-class fish</option>
+              </select>
+              <small className="field-help">Decides which allowed price range in System Configuration is used.</small>
             </div>
 
             <div className="form-group">
@@ -3098,7 +3110,8 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
 
 function SystemConfiguration({ notify }) {
   const [saved, setSaved] = useState(null);
-  const [form, setForm] = useState({ min_price_per_kg: "", max_price_per_kg: "" });
+  const RANGE_KEYS = ["min_price_per_kg", "max_price_per_kg", "first_class_min_price_per_kg", "first_class_max_price_per_kg"];
+  const [form, setForm] = useState({ min_price_per_kg: "", max_price_per_kg: "", first_class_min_price_per_kg: "", first_class_max_price_per_kg: "" });
   const [errors, setErrors] = useState({});
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -3109,7 +3122,7 @@ function SystemConfiguration({ notify }) {
       .then((data) => {
         if (cancelled) return;
         setSaved(data);
-        setForm({ min_price_per_kg: data.min_price_per_kg, max_price_per_kg: data.max_price_per_kg });
+        setForm(Object.fromEntries(RANGE_KEYS.map((key) => [key, data[key]])));
       })
       .catch((error) => { if (!cancelled) setLoadError(error.message); });
     return () => { cancelled = true; };
@@ -3130,7 +3143,16 @@ function SystemConfiguration({ notify }) {
     }
   };
 
-  const changed = saved && (form.min_price_per_kg !== saved.min_price_per_kg || form.max_price_per_kg !== saved.max_price_per_kg);
+  const changed = saved && RANGE_KEYS.some((key) => String(form[key]) !== String(saved[key]));
+  const rangeInput = (key, id, label) => (
+    <div className="form-group">
+      <label htmlFor={id}>{label}</label>
+      <div className="input-with-unit"><span>₱</span>
+        <input id={id} type="number" min="0.01" step="0.01" value={form[key]} onChange={(e) => setForm({ ...form, [key]: e.target.value })} />
+      </div>
+      {errors[key] && <small className="field-error">{errors[key]}</small>}
+    </div>
+  );
 
   return (
     <>
@@ -3149,29 +3171,25 @@ function SystemConfiguration({ notify }) {
             <div className="config-icon blue">₱</div>
             <div>
               <h3>Price Validation Range</h3>
-              <p>Prices per kg outside this range are rejected when entered or corrected</p>
+              <p>Prices per kg outside the range for the fish's class are rejected when entered, imported or corrected</p>
             </div>
           </div>
 
+          <h4 className="cfg-sub">Common fish <small>(e.g. Galunggong, Tamban, Tulingan)</small></h4>
           <div className="form-row">
-            <div className="form-group">
-              <label htmlFor="cfg-min">Minimum Price per kg</label>
-              <div className="input-with-unit"><span>₱</span>
-                <input id="cfg-min" type="number" min="0.01" step="0.01" value={form.min_price_per_kg} onChange={(e) => setForm({ ...form, min_price_per_kg: e.target.value })} />
-              </div>
-              {errors.min_price_per_kg && <small className="field-error">{errors.min_price_per_kg}</small>}
-            </div>
-            <div className="form-group">
-              <label htmlFor="cfg-max">Maximum Price per kg</label>
-              <div className="input-with-unit"><span>₱</span>
-                <input id="cfg-max" type="number" min="0.01" step="0.01" value={form.max_price_per_kg} onChange={(e) => setForm({ ...form, max_price_per_kg: e.target.value })} />
-              </div>
-              {errors.max_price_per_kg && <small className="field-error">{errors.max_price_per_kg}</small>}
-            </div>
+            {rangeInput("min_price_per_kg", "cfg-min", "Minimum per kg")}
+            {rangeInput("max_price_per_kg", "cfg-max", "Maximum per kg")}
+          </div>
+
+          <h4 className="cfg-sub">First-class fish <small>(e.g. Lapu-lapu, Maya-maya, Tanigue)</small></h4>
+          <div className="form-row">
+            {rangeInput("first_class_min_price_per_kg", "cfg-first-min", "Minimum per kg")}
+            {rangeInput("first_class_max_price_per_kg", "cfg-first-max", "Maximum per kg")}
           </div>
 
           <div className="info-box">
-            Existing prices are not changed. The LGU's Price Anomalies page also uses this range.
+            Each fish is set as Common or First-class in Fish Species. Existing prices are not changed.
+            The LGU's Price Anomalies page uses the common fish range.
           </div>
 
           <button className="primary-btn full-btn" style={{ marginTop: 14 }} onClick={save} disabled={saving || !changed}>

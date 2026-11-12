@@ -464,7 +464,31 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         # go to Review & Publish first.
         send_to_review = bool(request.data.get("send_to_review"))
 
-        species = {fish.name.strip().lower(): fish for fish in FishSpecies.objects.all()}
+        from .validators import clean_fish_name
+        species = {" ".join(fish.name.lower().split()): fish for fish in FishSpecies.objects.all()}
+        # Fish not in AquaTimbang yet are added with a tidy name ("bangus" -> "Bangus").
+        new_fish = {}
+
+        def find_fish(raw):
+            key = " ".join(str(raw or "").lower().split())
+            if not key:
+                return None
+            if key in species:
+                return species[key]
+            if key not in new_fish:
+                name = clean_fish_name(raw)[:100]
+                if len(name) < 2 or not any(ch.isalpha() for ch in name):
+                    return None
+                if dry_run:
+                    fish = FishSpecies(name=name)
+                    fish.id = -(len(new_fish) + 1)  # placeholder until it is saved
+                else:
+                    fish, created = FishSpecies.objects.get_or_create(name=name)
+                    if created:
+                        log_activity(request.user, "created", "FishSpecies", fish.pk, fish.name,
+                                     {"reason": "Added automatically from an imported file"})
+                new_fish[key] = fish
+            return new_fish[key]
         places = {place.name.strip().lower(): place for place in Municipality.objects.all()}
         bounds = SystemSetting.load()
         today = timezone.localdate()
@@ -483,9 +507,9 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             except ValueError:
                 day = None
                 problems.append(f"unreadable date \"{row.get('date', '')}\"")
-            fish = species.get(str(row.get("fish", "")).strip().lower())
+            fish = find_fish(row.get("fish", ""))
             if fish is None:
-                problems.append(f"unknown fish \"{row.get('fish', '')}\" (add it in Fish Species first)")
+                problems.append(f"missing or unreadable fish name \"{row.get('fish', '')}\"")
             place = places.get(str(row.get("municipality", "")).strip().lower())
             if place is None:
                 problems.append(f"unknown municipality \"{row.get('municipality', '')}\"")
@@ -494,10 +518,11 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                 if not price.is_finite():
                     raise InvalidOperation
                 price = price.quantize(Decimal("0.01"))
-                if price < bounds.min_price_per_kg or price > bounds.max_price_per_kg:
+                low, high, label = bounds.bounds_for(fish)
+                if price < low or price > high:
                     problems.append(
-                        f"price ₱{price:,.2f} is outside the allowed ₱{bounds.min_price_per_kg:,.2f}–"
-                        f"₱{bounds.max_price_per_kg:,.2f} (System Configuration)"
+                        f"price ₱{price:,.2f} is outside the allowed ₱{low:,.2f}–₱{high:,.2f} "
+                        f"for {label} (System Configuration)"
                     )
             except (InvalidOperation, ValueError):
                 price = None
@@ -606,6 +631,8 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             "errors": errors[:300],
             "first_date": min(all_dates).isoformat() if all_dates else None,
             "last_date": max(all_dates).isoformat() if all_dates else None,
+            # Fish that were not in AquaTimbang: added (or, on a check, will be added).
+            "new_fish": sorted(f.name for f in new_fish.values()),
         })
     def _log_price(self, action, record, details=None):
         user = self.request.user
@@ -662,10 +689,6 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                 return Response({"price_per_kg": "Enter a valid price."}, status=status.HTTP_400_BAD_REQUEST)
             if new_price <= 0:
                 return Response({"price_per_kg": "Price per kilogram must be greater than zero."}, status=status.HTTP_400_BAD_REQUEST)
-            try:
-                check_price_bounds(new_price)
-            except serializers.ValidationError as error:
-                return Response({"price_per_kg": error.detail[0]}, status=status.HTTP_400_BAD_REQUEST)
 
         new_species = record.fish_species
         if request.data.get("fish_species") not in (None, ""):
@@ -683,6 +706,12 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                                      f"{record.recorded_date:%b %d, %Y}. Correct that record instead."},
                     status=status.HTTP_400_BAD_REQUEST,
                 )
+
+        # The corrected price must fit the range for the (possibly new) fish's class.
+        try:
+            check_price_bounds(new_price, new_species)
+        except serializers.ValidationError as error:
+            return Response({"price_per_kg": error.detail[0]}, status=status.HTTP_400_BAD_REQUEST)
 
         species_changed = new_species.pk != record.fish_species_id
         if new_price == record.price_per_kg and not species_changed:
@@ -1557,6 +1586,15 @@ def list_fisherfolk(request):
 # ============================================================
 # PUBLIC SUMMARY (LANDING PAGE)
 # ============================================================
+def _market_label(source):
+    """The market name from a price's source, or "" for generic sources."""
+    text = (source or "").strip()
+    generic = {"", "lgu price entry", "imported price history", "dvfm historical data", "demo data"}
+    if text.lower() in generic or text.lower().startswith(("imported", "simulated", "demo")):
+        return ""
+    return text[:80]
+
+
 @api_view(["GET"])
 @permission_classes([AllowAny])
 def public_summary(request):
@@ -1600,8 +1638,9 @@ def public_summary(request):
                 "recorded_date": record.recorded_date,
                 "weekly_change_percent": change,
             })
-    # Latest official price per fish and municipality (last 30 days of
-    # publishing), for the public "Today's Prices" board.
+    # Latest official price per fish and municipality, for the public
+    # "Today's Prices" board. Every active fish with a published price is
+    # shown (with its date), however old the price is.
     today_prices = []
     if latest:
         from datetime import timedelta
@@ -1609,7 +1648,6 @@ def public_summary(request):
         recent = (
             PriceRecord.objects.filter(
                 status=PriceRecord.STATUS_PUBLISHED,
-                recorded_date__gte=latest - timedelta(days=30),
                 fish_species__is_active=True,
             )
             .select_related("fish_species", "municipality")
@@ -1631,8 +1669,11 @@ def public_summary(request):
                 "municipality_name": record.municipality.name,
                 "price_per_kg": record.price_per_kg,
                 "recorded_date": record.recorded_date,
+                # Market the LGU checked (e.g. Pasil Fish Market), when one was given.
+                "market": _market_label(record.source),
+                "stalls_checked": len(record.sampled_prices or []),
             })
-            if len(today_prices) >= 60:
+            if len(today_prices) >= 500:
                 break
         today_prices.sort(key=lambda row: (row["fish_name"], row["municipality_name"]))
     return Response(
@@ -3483,7 +3524,7 @@ def system_settings(request):
         after = SystemSettingSerializer(settings_row).data
         changes = {
             field: {"from": before[field], "to": after[field]}
-            for field in ("min_price_per_kg", "max_price_per_kg")
+            for field in ("min_price_per_kg", "max_price_per_kg", "first_class_min_price_per_kg", "first_class_max_price_per_kg")
             if before[field] != after[field]
         }
         if changes:
