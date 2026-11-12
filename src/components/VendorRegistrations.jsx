@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from "react";
 import { apiUrl, authHeaders } from "../api/config.js";
 import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFor } from "./ApplicantReview.jsx";
+import PagedTable from "./PagedTable.jsx";
 
 const DOCUMENTS = [
   { key: "profile_photo", type: "profile-photo", label: "Profile photo" },
@@ -144,7 +145,7 @@ function VendorRegistrations({ notify, onReviewed }) {
 
       <div className="panel">
         <div style={{ overflowX: "auto" }}>
-          <table>
+          <PagedTable>
             <thead>
               <tr>
                 <th>VENDOR</th>
@@ -198,7 +199,7 @@ function VendorRegistrations({ notify, onReviewed }) {
                 })
               )}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
       </div>
     </>

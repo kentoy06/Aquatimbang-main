@@ -29,6 +29,7 @@ import {
 import AccountProfile from "./components/AccountProfile.jsx";
 import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import PriceImport from "./components/PriceImport.jsx";
+import PagedTable from "./components/PagedTable.jsx";
 
 // Loaded only when a chart is shown (the chart library is large).
 const TrendChart = lazy(() => import("./components/TrendChart.jsx"));
@@ -899,7 +900,7 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
             <button className="text-button" onClick={() => goTo("Price Entry")}>Go to Price Entry →</button>
           </div>
 
-          <table>
+          <PagedTable>
             <thead>
               <tr>
                 <th>SPECIES</th>
@@ -932,7 +933,7 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
                 </tr>
               )}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
 
         <div className="panel">
@@ -1117,7 +1118,7 @@ function LGUFishSpeciesManagement({ notify }) {
         </div>
         {error && <div className="info-box" role="alert">{error} <button className="secondary-btn" onClick={loadSpecies}>Retry</button></div>}
         <div style={{ overflowX: "auto" }}>
-          <table style={{ width: "100%" }}>
+          <PagedTable style={{ width: "100%" }}>
             <thead><tr><th>COMMON NAME</th><th>SCIENTIFIC NAME</th><th>STATUS</th><th>ACTIONS</th></tr></thead>
             <tbody>
               {loading ? <tr><td colSpan="4">Loading fish species...</td></tr>
@@ -1162,7 +1163,7 @@ function LGUFishSpeciesManagement({ notify }) {
                   </tr>
                 ))}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
         <div className="info-box">
           <strong>Deactivate</strong> a fish that is no longer sold (its price history is kept).
@@ -2080,7 +2081,7 @@ function PriceEntry({
             </div>
           </div>
 
-          <table className="inner-table">
+          <PagedTable className="inner-table">
             <thead>
               <tr>
                 <th>SPECIES</th>
@@ -2179,7 +2180,7 @@ function PriceEntry({
                 ))
               )}
             </tbody>
-          </table>
+          </PagedTable>
 
           <div className="info-box">
             These records are stored in the
@@ -2616,7 +2617,7 @@ console.log("Bangus #8 comparison:", {
           </div>
         </div>
 
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>SPECIES</th>
@@ -2747,7 +2748,7 @@ console.log("Bangus #8 comparison:", {
               })
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -2834,7 +2835,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
           </div>
         </div>
 
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>NAME</th>
@@ -2878,7 +2879,7 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -3115,7 +3116,7 @@ function PriceSuggestions({ notify, onUsePrice }) {
           </div>
         </div>
 
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>SPECIES</th>
@@ -3147,7 +3148,7 @@ function PriceSuggestions({ notify, onUsePrice }) {
               );
             })}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
 
       <div
@@ -3203,7 +3204,7 @@ function PriceSuggestions({ notify, onUsePrice }) {
           </button>
         </div>
 
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>DATE</th>
@@ -3337,7 +3338,7 @@ function PriceSuggestions({ notify, onUsePrice }) {
               })
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -3368,7 +3369,7 @@ function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
       </div>
 
       <div className="panel">
-        <table>
+        <PagedTable>
           <thead>
             <tr><th>SPECIES</th><th>MUNICIPALITY</th><th>REFERENCE PRICE</th><th>PRICE DATE</th><th>PUBLISHED BY</th></tr>
           </thead>
@@ -3391,7 +3392,7 @@ function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -3499,7 +3500,7 @@ function PriceTrends({ priceRecords: recentRecords, loading: recentLoading, erro
           <div className="panel-header">
             <div><h3>All Species — Percentage Change</h3><p>Over the selected range</p></div>
           </div>
-          <table>
+          <PagedTable>
             <thead><tr><th>SPECIES</th><th>START PRICE</th><th>CURRENT PRICE</th><th>CHANGE</th><th>% CHANGE</th></tr></thead>
             <tbody>
               {species.map((sp) => {
@@ -3518,7 +3519,7 @@ function PriceTrends({ priceRecords: recentRecords, loading: recentLoading, erro
                 );
               })}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
       )}
     </>
@@ -3564,7 +3565,7 @@ function PriceComparison({ priceRecords, loading, error }) {
         <div className="panel-header">
           <div><h3>{current || "—"} — Price by Municipality</h3><p>{asOf ? `Latest published rates on or before ${fmtDate(asOf)}` : "Latest published rates"}</p></div>
         </div>
-        <table>
+        <PagedTable>
           <thead><tr><th>MARKET</th><th>PRICE / KG</th><th>PRICE DATE</th><th>VS. HIGHEST</th><th>NOTE</th></tr></thead>
           <tbody>
             {loading ? (
@@ -3590,7 +3591,7 @@ function PriceComparison({ priceRecords, loading, error }) {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -3651,7 +3652,7 @@ function PriceAnomalies({ priceRecords, suggestions }) {
         <div className="panel-header">
           <div><h3>Unusual Price Entries</h3><p>Flagged entries, or prices outside the {peso(range.min)} – {peso(range.max)} range set in System Configuration</p></div>
         </div>
-        <table>
+        <PagedTable>
           <thead><tr><th>DATE</th><th>SPECIES</th><th>PRICE</th><th>MUNICIPALITY</th><th>STATUS</th></tr></thead>
           <tbody>
             {anomalousEntries.length === 0 ? (
@@ -3668,14 +3669,14 @@ function PriceAnomalies({ priceRecords, suggestions }) {
               ))
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
 
       <div className="panel" style={{ marginTop: 18 }}>
         <div className="panel-header">
           <div><h3>Unusual Vendor Suggestions</h3><p>More than 30% away from that species' community average</p></div>
         </div>
-        <table>
+        <PagedTable>
           <thead><tr><th>SPECIES</th><th>SUGGESTED PRICE</th><th>COMMUNITY AVERAGE</th><th>SUBMITTED BY</th><th>DEVIATION</th></tr></thead>
           <tbody>
             {suggestionAnomalies.length === 0 ? (
@@ -3695,7 +3696,7 @@ function PriceAnomalies({ priceRecords, suggestions }) {
               })
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -3859,20 +3860,20 @@ function Reports({ priceRecords: recentRecords, notify }) {
         </div>
 
         <div style={{ overflowX: "auto" }}>
-          <table>
+          <PagedTable>
             <thead><tr>{columns.map((c) => <th key={c}>{c.toUpperCase()}</th>)}</tr></thead>
             <tbody>
               {rows.length === 0 ? (
                 <tr><td colSpan={columns.length} className="empty-row">No records found for the selected parameters.</td></tr>
               ) : (
-                rows.slice(0, 200).map((row, i) => (
+                rows.slice(0, 1000).map((row, i) => (
                   <tr key={i}>{row.map((cell, ci) => <td key={ci}>{ci === 1 ? <strong>{cell}</strong> : cell}</td>)}</tr>
                 ))
               )}
             </tbody>
-          </table>
+          </PagedTable>
         </div>
-        {rows.length > 200 && <p className="chart-note">Showing 200 of {rows.length} rows. Exports include every row.</p>}
+        {rows.length > 1000 && <p className="chart-note">Showing 1,000 of {rows.length} rows. Exports include every row.</p>}
       </div>
     </>
   );
@@ -3916,7 +3917,7 @@ function ValidationHistory({ notify }) {
           </div>
         </div>
 
-        <table>
+        <PagedTable>
           <thead><tr><th>DATE</th><th>USER</th><th>DECISION</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE / KG</th><th>DETAILS</th></tr></thead>
           <tbody>
             {loading ? (
@@ -3942,7 +3943,7 @@ function ValidationHistory({ notify }) {
               })
             )}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </>
   );
@@ -3979,9 +3980,9 @@ function AuditLog({ notify }) {
     </div>
     {loading && <p style={{padding:20}}>Loading your audit history...</p>}
     {error && <p role="alert" style={{padding:20,color:"#b91c1c"}}>{error}</p>}
-    {!loading && !error && <div style={{overflowX:"auto"}}><table><thead><tr><th>DATE &amp; TIME</th><th>ACTION</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE / KG</th><th>DETAILS</th></tr></thead><tbody>
+    {!loading && !error && <div style={{overflowX:"auto"}}><PagedTable><thead><tr><th>DATE &amp; TIME</th><th>ACTION</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE / KG</th><th>DETAILS</th></tr></thead><tbody>
       {visible.length===0 ? <tr><td colSpan="6" className="empty-row">No recorded activities found.</td></tr> : visible.map(l=>{ const parts = logRecordParts(l); return <tr key={l.id}><td>{formatAuditTimestamp(l.created_at)}</td><td><AuditActionBadge action={l.action}/></td><td><FishCell parts={parts} lookup={fishLookup}/></td><td>{parts.municipality||"—"}</td><td><PriceCell parts={parts}/></td><td style={{maxWidth:420,overflowWrap:"anywhere"}}><div style={{display:"flex",flexDirection:"column",alignItems:"flex-start",gap:6}}><span>{auditSummary(l)}</span><button type="button" className="secondary-btn" onClick={()=>setSelectedLog(l)} style={{padding:"5px 10px",fontSize:12}}>View Details</button></div></td></tr>; })}
-    </tbody></table></div>}
+    </tbody></PagedTable></div>}
     </div>
     <AuditDetailsDialog log={selectedLog} onClose={() => setSelectedLog(null)}/>
   </>;

@@ -22,6 +22,7 @@ import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
 import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
 import { LANGUAGES, LanguageContext, translate, useLanguageSetting, useT } from "./i18n/vendor.js";
+import PagedTable from "./components/PagedTable.jsx";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -644,9 +645,9 @@ function PriceTrends({ registeredSpecies = [], myFish = [], speciesLoadError = "
               </Suspense>
               <p className="chart-note" style={{ textAlign: "center" }}>{t("Hover or tap a point to see that day's price.")}</p>
             </div>
-            <div style={{ overflowX: "auto", marginTop: 16 }}><table><thead><tr><th>DATE</th><th>AVERAGE PRICE / KG</th><th>PUBLISHED RECORDS</th></tr></thead><tbody>
+            <div style={{ overflowX: "auto", marginTop: 16 }}><PagedTable><thead><tr><th>DATE</th><th>AVERAGE PRICE / KG</th><th>PUBLISHED RECORDS</th></tr></thead><tbody>
               {rows.slice().reverse().map((r) => <tr key={r.date}><td>{r.date}</td><td><strong>{peso(r.price)}</strong></td><td>{r.count}</td></tr>)}
-            </tbody></table></div>
+            </tbody></PagedTable></div>
           </div>
         </>}
     </>
@@ -932,7 +933,7 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
       </div>
 
       <div className="panel" style={{ overflowX: "auto" }}>
-        <table>
+        <PagedTable>
           <thead>
             <tr>
               <th>{t("DATE")}</th>
@@ -1005,7 +1006,7 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
               })
             )}
           </tbody>
-        </table>
+        </PagedTable>
         <p className="chart-note" style={{ padding: "0 16px 12px" }}>{t("You can edit or withdraw a suggestion until the LGU reviews it.")}</p>
       </div>
     </>
@@ -1051,7 +1052,7 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
       {loading ? <div className="panel" style={{ padding: 20 }}>Loading community averages...</div> :
        error ? <div className="panel" style={{ padding: 20, color: "#b91c1c" }}>Unable to load community averages: {error}</div> :
        <div className="panel" style={{ overflowX: "auto" }}>
-        <table><thead><tr>
+        <PagedTable><thead><tr>
           <th>MUNICIPALITY</th><th>SPECIES</th><th>LATEST OFFICIAL PRICE / KG</th>
           <th>COMMUNITY AVERAGE / KG</th><th>DIFFERENCE</th><th>ADOPTED BY LGU</th><th>REVIEWED ONLY</th>
         </tr></thead><tbody>
@@ -1080,7 +1081,7 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
                 <td>{row.reviewed_count ?? row.submission_count}</td>
               </tr>;
             })}
-        </tbody></table>
+        </tbody></PagedTable>
       </div>}
     </>
   );
@@ -1487,10 +1488,10 @@ function LivePublishedPrices({ records, loading, error, municipality, onMunicipa
     <div className="page-title"><div><h2>{t("Current Fish Prices")}</h2><p>{t("Latest official LGU prices. Tap a fish to see its photo.")}{municipality ? ` · ${municipality}` : ""}</p></div></div>
     <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
     <PublishedState loading={loading} error={error} records={records} municipality={municipality} />
-    {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><table>
+    {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><PagedTable>
       <thead><tr><th>{t("FISH SPECIES")}</th><th>{t("MUNICIPALITY")}</th><th>{t("OFFICIAL PRICE / KG")}</th><th>{t("RECORDED DATE")}</th><th>{t("STATUS")}</th></tr></thead>
       <tbody>{rows.map((r) => <tr key={`${r.fish_species}-${r.municipality}-${r.market || ""}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} /></td><td>{r.municipality_name || "—"}{r.market_name ? <small className="market-tag">{r.market_name}</small> : null}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td><td><span className="badge success">{t("Published")}</span></td></tr>)}</tbody>
-    </table></div>}
+    </PagedTable></div>}
   </>;
 }
 function LiveVendorDashboard({ records, loading, error, municipality, onMunicipalityChange, availableMunicipalities, defaultMunicipality, vendorName, goTo, mySuggestions, species = [], myFish = [], onFishClick, announcements = [] }) {
@@ -1534,7 +1535,7 @@ function LiveVendorDashboard({ records, loading, error, municipality, onMunicipa
       <div className="config-card"><h3>{t("My Pending Suggestions")}</h3><h2>{pending}</h2></div>
     </div>
     <PublishedState loading={loading} error={error} records={records} municipality={municipality} />
-    {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><div className="panel-header"><div><h3>{t("Latest Official Fish Prices")}</h3><p>{t("Only LGU-published records")}</p></div><button className="primary-btn" onClick={() => goTo("Current Fish Prices")}>{t("View All Prices")}</button></div><table><thead><tr><th>{t("SPECIES")}</th><th>{t("PRICE / KG")}</th><th>{t("AS OF")}</th></tr></thead><tbody>{rows.slice(0, 8).map((r) => <tr key={`${r.fish_species}-${r.municipality}-${r.market || ""}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} />{r.market_name ? <small className="market-tag">{r.market_name}</small> : null}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td></tr>)}</tbody></table></div>}
+    {!loading && !error && rows.length > 0 && <div className="panel" style={{ overflowX: "auto" }}><div className="panel-header"><div><h3>{t("Latest Official Fish Prices")}</h3><p>{t("Only LGU-published records")}</p></div><button className="primary-btn" onClick={() => goTo("Current Fish Prices")}>{t("View All Prices")}</button></div><PagedTable><thead><tr><th>{t("SPECIES")}</th><th>{t("PRICE / KG")}</th><th>{t("AS OF")}</th></tr></thead><tbody>{rows.slice(0, 8).map((r) => <tr key={`${r.fish_species}-${r.municipality}-${r.market || ""}`}><td><FishName row={r} species={species} myFish={myFish} onFishClick={onFishClick} />{r.market_name ? <small className="market-tag">{r.market_name}</small> : null}</td><td><strong>{peso(r.price_per_kg)}</strong></td><td>{r.recorded_date}</td></tr>)}</tbody></PagedTable></div>}
   </>;
 }
 

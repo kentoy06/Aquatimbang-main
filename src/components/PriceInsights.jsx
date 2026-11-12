@@ -1,5 +1,6 @@
 import React, { useEffect, useState } from "react";
 import { apiUrl, authHeaders } from "../api/config.js";
+import PagedTable from "./PagedTable.jsx";
 
 /**
  * Learned price check: asks the server whether a price is unusual for this
@@ -81,7 +82,7 @@ export function LearnedOutliers({ title = "Unusual prices (learned)" }) {
       </div>
       {error && <div className="warn-box" style={{ margin: "0 18px 18px" }}>{error}</div>}
       <div style={{ overflowX: "auto" }}>
-        <table>
+        <PagedTable>
           <thead><tr><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE / KG</th><th>USUAL RANGE</th><th>DIFFERENCE</th><th>LEVEL</th><th>STATUS</th></tr></thead>
           <tbody>
             {!data && !error && <tr><td colSpan="8" className="empty-row">Checking prices…</td></tr>}
@@ -99,7 +100,7 @@ export function LearnedOutliers({ title = "Unusual prices (learned)" }) {
               </tr>
             ))}
           </tbody>
-        </table>
+        </PagedTable>
       </div>
     </div>
   );

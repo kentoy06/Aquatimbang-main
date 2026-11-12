@@ -14,6 +14,7 @@ import { FACTOR_LABELS, getForecast } from "../api/forecast.js";
 import PriceExplanation from "./PriceExplanation.jsx";
 import "./Forecast.css";
 import { useT } from "../i18n/vendor.js";
+import PagedTable from "./PagedTable.jsx";
 
 const peso = (n) =>
   n === null || n === undefined || Number.isNaN(Number(n))
@@ -289,7 +290,7 @@ function ForecastView({ species = [], municipalities = [], defaultMunicipalityId
           <div className="panel">
             <div className="panel-header"><div><h3>{t("Daily Forecast")}</h3><p>{t("Most likely price and 95% range per day")}</p></div></div>
             <div style={{ overflowX: "auto" }}>
-              <table>
+              <PagedTable>
                 <thead><tr><th>{t("DATE")}</th><th>{t("FORECAST / KG")}</th><th>{t("95% RANGE")}</th></tr></thead>
                 <tbody>
                   {result.forecast.map((p) => (
@@ -300,7 +301,7 @@ function ForecastView({ species = [], municipalities = [], defaultMunicipalityId
                     </tr>
                   ))}
                 </tbody>
-              </table>
+              </PagedTable>
             </div>
           </div>
         </>

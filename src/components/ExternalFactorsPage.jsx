@@ -2,6 +2,7 @@ import React, { useEffect, useState } from "react";
 import { askConfirm } from "./ConfirmDialog.jsx";
 import { deleteExternalFactor, listExternalFactors, saveExternalFactor } from "../api/forecast.js";
 import ClosedSeasonsSection from "./ClosedSeasonsSection.jsx";
+import PagedTable from "./PagedTable.jsx";
 
 const peso = (n) =>
   n === null || n === undefined || n === "" ? "—" : `₱${Number(n).toLocaleString("en-PH", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
@@ -155,7 +156,7 @@ function ExternalFactorsPage({ notify }) {
 
           {error && <div className="warn-box" role="alert">{error}</div>}
           <div style={{ overflowX: "auto", maxHeight: 460, overflowY: "auto" }}>
-            <table className="inner-table">
+            <PagedTable className="inner-table">
               <thead><tr><th>DATE</th><th>FUEL</th><th>WEATHER</th><th>HOLIDAY</th><th>ACTIONS</th></tr></thead>
               <tbody>
                 {loading ? (
@@ -177,7 +178,7 @@ function ExternalFactorsPage({ notify }) {
                   </tr>
                 ))}
               </tbody>
-            </table>
+            </PagedTable>
           </div>
         </div>
       </div>
