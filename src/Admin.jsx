@@ -24,7 +24,7 @@ import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import FishScanReview from "./components/FishScanReview.jsx";
 import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFor } from "./components/ApplicantReview.jsx";
 import { useProtectedImage } from "./api/images.js";
-import { FishPhotoInput, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
+import { FishPhotoPanel, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 import { AnnouncementsManager } from "./components/Announcements.jsx";
 import PagedTable from "./components/PagedTable.jsx";
 import FishNameField from "./components/FishNameField.jsx";
@@ -2377,47 +2377,57 @@ const toggleStatus = async (s) => {
 
       {showForm && (
         <div className="modal-backdrop" onClick={() => setShowForm(false)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal profile-modal fish-form-modal" role="dialog" aria-modal="true" aria-labelledby="admin-species-title" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>{editing ? "Edit Species" : "Add New Species"}</h3>
-              <button className="modal-close" onClick={() => setShowForm(false)}>✕</button>
+              <div>
+                <h3 id="admin-species-title">{editing ? "Edit Species" : "Add New Species"}</h3>
+                <p>Changes are saved directly to AquaTimbang's database.</p>
+              </div>
+              <button className="modal-close" onClick={() => setShowForm(false)} aria-label="Close">✕</button>
             </div>
 
-            <div className="form-group">
-              <label htmlFor="admin-species-name">Common Name</label>
-              <FishNameField id="admin-species-name" value={form.name}
-                onChange={(name) => setForm((old) => ({ ...old, name }))}
-                onPick={(fish) => setForm((old) => ({ ...old, scientific: fish.scientific_name || old.scientific }))} />
+            <div className="pm-body">
+              <div className="pm-side">
+                <FishPhotoPanel
+                  fish={editing}
+                  name={form.name}
+                  file={photoFile}
+                  onChange={setPhotoFile}
+                  credit={form.photo_credit}
+                  onCreditChange={(value) => setForm((old) => ({ ...old, photo_credit: value }))}
+                />
+              </div>
+
+              <div className="pm-main">
+                <div className="form-group">
+                  <label htmlFor="admin-species-name">Common Name</label>
+                  <FishNameField id="admin-species-name" value={form.name} currentName={editing?.name}
+                    onChange={(name) => setForm((old) => ({ ...old, name }))}
+                    onPick={(fish) => setForm((old) => ({ ...old, scientific: fish.scientific_name || old.scientific }))} />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="admin-species-scientific">Scientific Name</label>
+                  <input id="admin-species-scientific" value={form.scientific} placeholder="Leave blank to fill in automatically for known fish" onChange={(e) => setForm({ ...form, scientific: e.target.value })} />
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="admin-species-class">Price class</label>
+                  <select id="admin-species-class" value={form.price_class || "common"} onChange={(e) => setForm({ ...form, price_class: e.target.value })}>
+                    <option value="common">Common fish</option>
+                    <option value="first_class">First-class fish</option>
+                  </select>
+                  <small className="field-help">Decides which allowed price range in System Configuration is used.</small>
+                </div>
+
+                <div className="form-group">
+                  <label htmlFor="admin-species-description">Description</label>
+                  <textarea id="admin-species-description" rows={5} value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+                </div>
+              </div>
             </div>
 
-            <div className="form-group">
-              <label>Scientific Name</label>
-              <input value={form.scientific} placeholder="Leave blank to fill in automatically for known fish" onChange={(e) => setForm({ ...form, scientific: e.target.value })} />
-            </div>
-
-            <div className="form-group">
-              <label>Price class</label>
-              <select value={form.price_class || "common"} onChange={(e) => setForm({ ...form, price_class: e.target.value })}>
-                <option value="common">Common fish</option>
-                <option value="first_class">First-class fish</option>
-              </select>
-              <small className="field-help">Decides which allowed price range in System Configuration is used.</small>
-            </div>
-
-            <div className="form-group">
-              <label>Description</label>
-              <input value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
-            </div>
-
-            <FishPhotoInput
-              fish={editing}
-              file={photoFile}
-              onChange={setPhotoFile}
-              credit={form.photo_credit}
-              onCreditChange={(value) => setForm({ ...form, photo_credit: value })}
-            />
-
-            <div className="button-row">
+            <div className="button-row pm-actions">
               <button className="secondary-btn" onClick={() => setShowForm(false)}>Cancel</button>
               <button className="primary-btn" onClick={save} disabled={speciesSaving}>{speciesSaving ? "Saving..." : editing ? "Save Changes" : "Add Species"}</button>
             </div>

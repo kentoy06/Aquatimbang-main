@@ -38,7 +38,7 @@ import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import FishScanReview from "./components/FishScanReview.jsx";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
 import { listExternalFactors } from "./api/forecast.js";
-import { FishPhotoInput, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
+import { FishPhotoPanel, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 import { useRemoveFish } from "./components/RemoveFish.jsx";
 import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
 import { describeFilters, exportReport } from "./api/reportExport.js";
@@ -1184,60 +1184,61 @@ function LGUFishSpeciesManagement({ notify }) {
             padding: 16, overflowY: "auto",
           }}
         >
-          <div role="dialog" aria-modal="true" aria-labelledby="lgu-species-modal-title"
-            style={{ width: "100%", maxWidth: 540, maxHeight: "calc(100vh - 32px)", overflowY: "auto", background: "#fff", borderRadius: 16, boxShadow: "0 24px 70px rgba(0,0,0,.28)", padding: 26, margin: "auto" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, marginBottom: 20 }}>
+          <form role="dialog" aria-modal="true" aria-labelledby="lgu-species-modal-title" onSubmit={save}
+            className="modal profile-modal fish-form-modal" style={{ margin: "auto" }}>
+            <div className="modal-head">
               <div>
-                <h2 id="lgu-species-modal-title" style={{ margin: 0, fontSize: 21, color: "#0f172a" }}>
-                  {editing ? "Edit Fish Species" : "Add Fish Species"}
-                </h2>
-                <p style={{ margin: "6px 0 0", color: "#64748b", fontSize: 13 }}>Changes are saved directly to AquaTimbang's database.</p>
+                <h3 id="lgu-species-modal-title">{editing ? "Edit Fish Species" : "Add Fish Species"}</h3>
+                <p>Changes are saved directly to AquaTimbang's database.</p>
               </div>
-              <button type="button" aria-label="Close form" disabled={busy} onClick={() => setShowForm(false)}
-                className="dialog-close-btn">✕</button>
+              <button type="button" aria-label="Close form" disabled={busy} onClick={() => setShowForm(false)} className="modal-close">✕</button>
             </div>
-            <form onSubmit={save}>
-              <div className="form-group">
-                <label htmlFor="lgu-species-name">Common Name *</label>
-                <FishNameField id="lgu-species-name" autoFocus required value={form.name}
-                  onChange={(name) => setForm((old) => ({ ...old, name }))}
-                  onPick={(fish) => setForm((old) => ({ ...old, scientific_name: fish.scientific_name || old.scientific_name }))} />
+            <div className="pm-body">
+              <div className="pm-side">
+                <FishPhotoPanel
+                  fish={editing}
+                  name={form.name}
+                  file={photoFile}
+                  onChange={setPhotoFile}
+                  credit={form.photo_credit}
+                  onCreditChange={(value) => setForm((old) => ({ ...old, photo_credit: value }))}
+                />
               </div>
-              <div className="form-group">
-                <label htmlFor="lgu-species-scientific">Scientific Name</label>
-                <input id="lgu-species-scientific" maxLength={150} value={form.scientific_name} placeholder="Leave blank to fill in automatically for known fish"
-                  onChange={(event) => setForm((old) => ({ ...old, scientific_name: event.target.value }))} />
+              <div className="pm-main">
+                <div className="form-group">
+                  <label htmlFor="lgu-species-name">Common Name *</label>
+                  <FishNameField id="lgu-species-name" autoFocus required value={form.name} currentName={editing?.name}
+                    onChange={(name) => setForm((old) => ({ ...old, name }))}
+                    onPick={(fish) => setForm((old) => ({ ...old, scientific_name: fish.scientific_name || old.scientific_name }))} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="lgu-species-scientific">Scientific Name</label>
+                  <input id="lgu-species-scientific" maxLength={150} value={form.scientific_name} placeholder="Leave blank to fill in automatically for known fish"
+                    onChange={(event) => setForm((old) => ({ ...old, scientific_name: event.target.value }))} />
+                </div>
+                <div className="form-group">
+                  <label htmlFor="lgu-species-class">Price class</label>
+                  <select id="lgu-species-class" value={form.price_class || "common"}
+                    onChange={(event) => setForm((old) => ({ ...old, price_class: event.target.value }))}>
+                    <option value="common">Common fish</option>
+                    <option value="first_class">First-class fish</option>
+                  </select>
+                  <small className="field-help">Decides which allowed price range in System Configuration is used.</small>
+                </div>
+                <div className="form-group">
+                  <label htmlFor="lgu-species-description">Description</label>
+                  <textarea id="lgu-species-description" rows={5} value={form.description}
+                    onChange={(event) => setForm((old) => ({ ...old, description: event.target.value }))} />
+                </div>
               </div>
-              <div className="form-group">
-                <label htmlFor="lgu-species-class">Price class</label>
-                <select id="lgu-species-class" value={form.price_class || "common"}
-                  onChange={(event) => setForm((old) => ({ ...old, price_class: event.target.value }))}>
-                  <option value="common">Common fish</option>
-                  <option value="first_class">First-class fish</option>
-                </select>
-                <small className="field-help">Decides which allowed price range in System Configuration is used.</small>
-              </div>
-              <div className="form-group">
-                <label htmlFor="lgu-species-description">Description</label>
-                <textarea id="lgu-species-description" rows={4} value={form.description}
-                  onChange={(event) => setForm((old) => ({ ...old, description: event.target.value }))} />
-              </div>
-              <FishPhotoInput
-                fish={editing}
-                file={photoFile}
-                onChange={setPhotoFile}
-                credit={form.photo_credit}
-                onCreditChange={(value) => setForm((old) => ({ ...old, photo_credit: value }))}
-              />
-              <div style={{ display: "flex", justifyContent: "flex-end", gap: 10, flexWrap: "wrap", marginTop: 22 }}>
-                <button type="button" disabled={busy} onClick={() => setShowForm(false)}
-                  style={{ padding: "10px 18px", borderRadius: 8, border: "1px solid #cbd5e1", background: "#fff", color: "#334155", fontWeight: 600, cursor: "pointer" }}>Cancel</button>
-                <button type="submit" className="primary-btn" disabled={busy}>
-                  {busy ? "Saving..." : editing ? "Save Changes" : "Add Species"}
-                </button>
-              </div>
-            </form>
-          </div>
+            </div>
+            <div className="button-row pm-actions">
+              <button type="button" className="secondary-btn" disabled={busy} onClick={() => setShowForm(false)}>Cancel</button>
+              <button type="submit" className="primary-btn" disabled={busy}>
+                {busy ? "Saving..." : editing ? "Save Changes" : "Add Species"}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </>

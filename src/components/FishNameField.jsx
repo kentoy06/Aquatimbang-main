@@ -10,10 +10,12 @@ let cached = null; // shown at once next time; refreshed every time the form ope
  * pick from fish commonly sold in Cebu markets. Picking one also passes its
  * scientific name. Fish already in the list are shown too, marked, so a duplicate is easy to spot.
  *
+ * currentName  when editing: the fish's saved name (not reported as a duplicate)
+ *
  *   <FishNameField id="…" value={name} onChange={setName}
  *     onPick={(fish) => setScientific(fish.scientific_name)} />
  */
-export default function FishNameField({ id, value, onChange, onPick, autoFocus, required, placeholder }) {
+export default function FishNameField({ id, value, onChange, onPick, autoFocus, required, placeholder, currentName }) {
   const [known, setKnown] = useState(cached || []);
   const [open, setOpen] = useState(false);
   const [active, setActive] = useState(-1);
@@ -59,7 +61,8 @@ export default function FishNameField({ id, value, onChange, onPick, autoFocus, 
     else if (e.key === "Escape" && open) { e.stopPropagation(); setOpen(false); }
   };
 
-  const exact = known.find((f) => key(f.name) === typed && f.registered);
+  // When editing, the fish's own name is not a duplicate.
+  const exact = typed !== key(currentName) && known.find((f) => key(f.name) === typed && f.registered);
 
   return (
     <div className="fish-name-field" ref={box}>
