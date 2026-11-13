@@ -1196,6 +1196,10 @@ class SystemSetting(models.Model):
     # Range for first-class fish.
     first_class_min_price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=50)
     first_class_max_price_per_kg = models.DecimalField(max_digits=10, decimal_places=2, default=1000)
+    # Public price board: a fish's price counts as current when it was checked
+    # within this many days of the LGU's latest update; older prices move to
+    # "Older prices".
+    landing_fresh_days = models.PositiveSmallIntegerField(default=15)
 
     updated_by = models.ForeignKey(
         "auth.User",

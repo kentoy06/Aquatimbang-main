@@ -2685,6 +2685,23 @@ class MarketPriceTests(StallSampleTests):
         self.assertEqual([(r["fish_name"], str(r["price_per_kg"])) for r in rows],
                          [("Newer Fish", "90.00"), ("Sample Fish", "110.00")])  # newest first, no duplicate
 
+    def test_landing_splits_current_and_older_prices(self):
+        from .models import SystemSetting
+        fresh = FishSpecies.objects.create(name="Fresh Fish")
+        PriceRecord.objects.create(fish_species=fresh, municipality=self.place, market=self.pasil,
+                                   price_per_kg=Decimal("90"), recorded_date=datetime.date(2026, 11, 6), status="published")
+        PriceRecord.objects.create(fish_species=self.fish, municipality=self.place, market=self.pasil,
+                                   price_per_kg=Decimal("110"), recorded_date=datetime.date(2026, 10, 1), status="published")
+        data = APIClient().get("/api/public/summary/").data
+        self.assertEqual(data["fresh_days"], 15)
+        # Counted from the latest update (Nov 6), not from today.
+        self.assertEqual({r["fish_name"]: r["current"] for r in data["today_prices"]}, {"Fresh Fish": True, "Sample Fish": False})
+        setting = SystemSetting.load()
+        setting.landing_fresh_days = 60
+        setting.save()
+        rows = APIClient().get("/api/public/summary/").data["today_prices"]
+        self.assertTrue(all(r["current"] for r in rows))
+
     def test_import_by_market(self):
         rows = [
             {"row": 2, "date": "2026-01-05", "fish": "Sample Fish", "municipality": "Sample City", "market": "pasil fish market", "price": "180"},
