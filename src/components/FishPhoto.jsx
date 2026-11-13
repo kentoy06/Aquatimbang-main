@@ -150,3 +150,57 @@ export function FishPhotoInput({ fish, file, onChange, credit, onCreditChange })
     </div>
   );
 }
+
+/**
+ * Photo panel for the left side of the wide species form: a large square
+ * preview (the chosen file, the current photo, or the fish's initials), a
+ * button to choose a photo, and the photo credit.
+ */
+export function FishPhotoPanel({ fish, name, file, onChange, credit, onCreditChange }) {
+  const [error, setError] = useState("");
+  const [failed, setFailed] = useState("");
+  const [preview, setPreview] = useState("");
+  React.useEffect(() => {
+    if (!file) { setPreview(""); return undefined; }
+    const url = URL.createObjectURL(file);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [file]);
+  const current = photoUrl(fish);
+  const shown = preview || (current && failed !== current ? current : "");
+  const inputId = `fish-photo-${fish?.id || "new"}`;
+  return (
+    <div className="fish-photo-panel">
+      <div className="fish-photo-frame">
+        {shown
+          ? <img src={shown} alt={name || fish?.name || "Fish photo"} onError={() => !preview && setFailed(current)} />
+          : (name || fish?.name)
+            ? <span>{initialsOf({ name: name || fish?.name })}</span>
+            : <span className="fish-photo-empty"><b aria-hidden="true">🐟</b>No photo yet</span>}
+      </div>
+      <div className="fish-photo-actions">
+        <label htmlFor={inputId} className="secondary-btn fish-photo-choose">{shown ? "Change photo" : "Choose photo"}</label>
+        {file && <button type="button" className="text-btn" onClick={() => { onChange(null); setError(""); }}>Undo</button>}
+        <input id={inputId} type="file" accept=".jpg,.jpeg,.png" hidden
+          onChange={(event) => {
+            const chosen = event.target.files?.[0] || null;
+            const problem = chosen && !/\.(jpe?g|png)$/i.test(chosen.name) ? "Only JPG or PNG photos are allowed." : "";
+            setError(problem);
+            onChange(problem ? null : chosen);
+            event.target.value = "";
+          }} />
+      </div>
+      {file && <small className="fish-photo-file">{file.name}</small>}
+      <small className={`fish-photo-help${error ? " is-error" : ""}`}>
+        {error || "A clear photo of the whole fish helps vendors recognise it. JPG or PNG; large photos are reduced automatically."}
+      </small>
+      {onCreditChange && (
+        <div className="form-group" style={{ marginTop: 12, marginBottom: 0 }}>
+          <label htmlFor={`${inputId}-credit`}>Photo credit <span className="optional">(optional)</span></label>
+          <input id={`${inputId}-credit`} type="text" maxLength={200} value={credit || ""}
+            onChange={(event) => onCreditChange(event.target.value)} placeholder="e.g. Juan Dela Cruz, CC BY-SA 4.0" />
+        </div>
+      )}
+    </div>
+  );
+}
