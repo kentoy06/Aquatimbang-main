@@ -81,6 +81,8 @@ function Landing({ onGetStarted, onRegister }) {
   const [photoOk, setPhotoOk] = useState(true);
   // "current": checked recently; "older": not checked recently.
   const [priceView, setPriceView] = useState("current");
+  const [pricePage, setPricePage] = useState(1);
+  const [priceSearch, setPriceSearch] = useState("");
 
   useEffect(() => {
     fetch(apiUrl("/public/summary/"))
@@ -109,7 +111,19 @@ function Landing({ onGetStarted, onRegister }) {
   // Older servers do not send "current": treat every price as current then.
   const currentPrices = allPrices.filter((p) => p.current !== false);
   const olderPrices = allPrices.filter((p) => p.current === false);
-  const prices = priceView === "older" ? olderPrices : currentPrices;
+  const tabPrices = priceView === "older" ? olderPrices : currentPrices;
+  const searchKey = priceSearch.trim().toLowerCase();
+  const prices = searchKey
+    ? tabPrices.filter((p) => `${p.fish_name} ${p.scientific_name || ""} ${p.municipality_name} ${p.market || ""}`.toLowerCase().includes(searchKey))
+    : tabPrices;
+  const PRICES_PER_PAGE = 12;
+  const pricePages = Math.max(1, Math.ceil(prices.length / PRICES_PER_PAGE));
+  const pricePageNow = Math.min(pricePage, pricePages);
+  const pagePrices = prices.slice((pricePageNow - 1) * PRICES_PER_PAGE, pricePageNow * PRICES_PER_PAGE);
+  const goPricePage = (next) => {
+    setPricePage(next);
+    document.getElementById("price-board-top")?.scrollIntoView({ behavior: "smooth", block: "start" });
+  };
 
   const audiences = [
     { icon: "🐟", title: "Fish Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price when the market looks different." },
@@ -200,14 +214,19 @@ function Landing({ onGetStarted, onRegister }) {
           of the latest update{latestDate ? ` (${formatDate(latestDate)})` : ""} are shown here; fish not checked
           since then are under Older prices. Tap a fish for its details.
         </p>
+        <div id="price-board-top" />
         {latestDate && allPrices.length > 0 && (
+          <div className="price-toolbar">
           <div className="price-view-toggle" role="group" aria-label="Which prices to show">
-            <button type="button" className={priceView === "current" ? "active" : ""} onClick={() => setPriceView("current")}>
+            <button type="button" className={priceView === "current" ? "active" : ""} onClick={() => { setPriceView("current"); setPricePage(1); }}>
               Current prices <small>{currentPrices.length}</small>
             </button>
-            <button type="button" className={priceView === "older" ? "active" : ""} onClick={() => setPriceView("older")} disabled={!olderPrices.length}>
+            <button type="button" className={priceView === "older" ? "active" : ""} onClick={() => { setPriceView("older"); setPricePage(1); }} disabled={!olderPrices.length}>
               Older prices <small>{olderPrices.length}</small>
             </button>
+          </div>
+          <input type="search" className="price-search" placeholder="Search a fish…" aria-label="Search a fish"
+            value={priceSearch} onChange={(e) => { setPriceSearch(e.target.value); setPricePage(1); }} />
           </div>
         )}
         {priceView === "older" && olderPrices.length > 0 && (
@@ -217,14 +236,14 @@ function Landing({ onGetStarted, onRegister }) {
           </p>
         )}
         {prices.length === 0 ? (
-          <div className="landing-empty">{!summary ? "Loading prices…" : allPrices.length ? "No prices in this list." : "No official prices have been published yet."}</div>
+          <div className="landing-empty">{!summary ? "Loading prices…" : searchKey ? `No fish matching "${priceSearch.trim()}" in this list.` : allPrices.length ? "No prices in this list." : "No official prices have been published yet."}</div>
         ) : (
           <div className="price-board">
-            {prices.map((p) => (
+            {pagePrices.map((p) => (
               <button
                 type="button"
                 className="price-tile"
-                key={`${p.fish_id}-${p.municipality_name}`}
+                key={`${p.fish_id}-${p.municipality_name}-${p.market || ""}`}
                 onClick={() => setProfile(p)}
                 aria-label={`${p.fish_name} in ${p.municipality_name}: ${peso(p.price_per_kg)} per kilo. Show details`}
               >
@@ -239,6 +258,18 @@ function Landing({ onGetStarted, onRegister }) {
                 <b>{peso(p.price_per_kg)}<small>/kg</small></b>
               </button>
             ))}
+          </div>
+        )}
+        {prices.length > 0 && (
+          <div className="price-pager">
+            <span>Showing {(pricePageNow - 1) * PRICES_PER_PAGE + 1}–{Math.min(prices.length, pricePageNow * PRICES_PER_PAGE)} of {prices.length}</span>
+            {pricePages > 1 && (
+              <div>
+                <button type="button" onClick={() => goPricePage(pricePageNow - 1)} disabled={pricePageNow <= 1}>‹ Previous</button>
+                <span>Page {pricePageNow} of {pricePages}</span>
+                <button type="button" onClick={() => goPricePage(pricePageNow + 1)} disabled={pricePageNow >= pricePages}>Next ›</button>
+              </div>
+            )}
           </div>
         )}
         <div className="section-cta">
