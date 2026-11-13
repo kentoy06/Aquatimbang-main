@@ -15,6 +15,7 @@ import PriceExplanation from "./PriceExplanation.jsx";
 import "./Forecast.css";
 import { useT } from "../i18n/vendor.js";
 import PagedTable from "./PagedTable.jsx";
+import { buildXlsx } from "../api/reportExport.js";
 
 const peso = (n) =>
   n === null || n === undefined || Number.isNaN(Number(n))
@@ -67,18 +68,14 @@ function factorEffect(t, name, value) {
 }
 
 function exportCsv(result) {
-  const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-  const rows = [
-    ["Date", "Forecast price per kg", "Lower (95%)", "Upper (95%)", "Model"],
-    ...result.forecast.map((p) => [p.date, p.price.toFixed(2), p.lower.toFixed(2), p.upper.toFixed(2), result.model_used]),
-  ];
-  const blob = new Blob(["﻿" + rows.map((r) => r.map(quote).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8" });
-  const url = URL.createObjectURL(blob);
-  const link = document.createElement("a");
-  link.href = url;
-  link.download = `${result.fish_name}_forecast.csv`.replace(/\s+/g, "_");
-  link.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+  return buildXlsx({
+    title: `${result.fish_name} Price Forecast`,
+    subtitle: `Model: ${result.model_used}`,
+    columns: ["Date", "Forecast price per kg", "Lower price (95%)", "Upper price (95%)"],
+    rows: result.forecast.map((p) => [p.date, p.price, p.lower, p.upper]),
+    filename: `${result.fish_name}_forecast.xlsx`.replace(/\s+/g, "_"),
+    sheetName: "Forecast",
+  });
 }
 
 /**
@@ -216,7 +213,7 @@ function ForecastView({ species = [], municipalities = [], defaultMunicipalityId
                 <h3>{result.fish_name} — {municipalityName}</h3>
                 <p>{t("Last {past} days of published prices and the next {next} days", { past: result.history.length, next: result.forecast.length })}</p>
               </div>
-              <button className="secondary-btn" onClick={() => { exportCsv(result); notify?.(t("Forecast exported.")); }}>↓ {t("Export CSV")}</button>
+              <button className="secondary-btn" onClick={async () => { await exportCsv(result); notify?.(t("Forecast exported.")); }}>↓ {t("Export Excel")}</button>
             </div>
             <div className="forecast-chart" role="img" aria-label={`Price chart for ${result.fish_name}: published prices and forecast with 95% range`}>
               <ResponsiveContainer width="100%" height={320}>

@@ -467,6 +467,10 @@ class FishSpecies(models.Model):
 
     # Who took the photo and its licence, shown under the picture.
     photo_credit = models.CharField(max_length=200, blank=True, default="")
+    # Other spellings of the same fish (e.g. "Andohaw" for "Anduhaw"). Imports
+    # and searches match them to this fish. Filled in automatically when a
+    # misspelled fish is merged into this one.
+    aliases = models.JSONField(default=list, blank=True)
 
     # Determines whether the species can currently be used.
 
@@ -1316,7 +1320,8 @@ class ReportLog(models.Model):
 
     FORMAT_PDF = "PDF"
     FORMAT_CSV = "CSV"
-    FORMAT_CHOICES = [(FORMAT_PDF, "PDF"), (FORMAT_CSV, "CSV")]
+    FORMAT_XLSX = "XLSX"
+    FORMAT_CHOICES = [(FORMAT_PDF, "PDF"), (FORMAT_CSV, "CSV"), (FORMAT_XLSX, "Excel")]
 
     generated_by = models.ForeignKey(
         "auth.User",
@@ -1327,7 +1332,7 @@ class ReportLog(models.Model):
     report_type = models.CharField(max_length=100)
     # Filters used, e.g. {"species": "Galunggong", "from": "2026-10-01"}.
     parameters = models.JSONField(default=dict, blank=True)
-    format = models.CharField(max_length=3, choices=FORMAT_CHOICES)
+    format = models.CharField(max_length=4, choices=FORMAT_CHOICES)
     row_count = models.PositiveIntegerField(default=0)
     generated_at = models.DateTimeField(auto_now_add=True)
 

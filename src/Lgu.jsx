@@ -1,5 +1,7 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import FishNameField from "./components/FishNameField.jsx";
+import SimilarFishNames from "./components/SimilarFishNames.jsx";
+import { OtherNamesField, splitNames } from "./components/FishNameField.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { LearnedOutliers, PriceCheckNote, usePriceCheck } from "./components/PriceInsights.jsx";
@@ -27,7 +29,7 @@ import {
   municipalityNames,
   speciesNames as recordSpeciesNames,
 } from "./api/priceData.js";
-import AccountProfile from "./components/AccountProfile.jsx";
+import AccountProfile, { ProfileProgress } from "./components/AccountProfile.jsx";
 import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import PriceImport from "./components/PriceImport.jsx";
 import PagedTable from "./components/PagedTable.jsx";
@@ -42,7 +44,7 @@ import { listExternalFactors } from "./api/forecast.js";
 import { FishPhotoPanel, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 import { useRemoveFish } from "./components/RemoveFish.jsx";
 import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
-import { describeFilters, exportReport } from "./api/reportExport.js";
+import { buildXlsx, describeFilters, exportReport } from "./api/reportExport.js";
 import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
@@ -168,17 +170,14 @@ function AuditDetailsDialog({ log, onClose }) {
   </div>;
 }
 
-function exportAuditCsv(records, filename) {
-  const cols = ["Date", "User", "Role", "Action", "Target", "Details"];
-  const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-  const rows = records.map(l => [formatAuditTimestamp(l.created_at), l.actor_username, l.actor_role, l.action, l.target_name, formatAuditDetails(l.details)]);
-  const csv = "\uFEFF" + [cols, ...rows].map(row => row.map(quote).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+async function exportAuditCsv(records, filename) {
+  await buildXlsx({
+    title: "Audit Log",
+    columns: ["Date & Time", "User", "Role", "Action", "Affected Record", "Details"],
+    rows: records.map((l) => [formatAuditTimestamp(l.created_at), l.actor_username, l.actor_role, l.action, l.target_name, formatAuditDetails(l.details)]),
+    filename,
+    sheetName: "Audit Log",
+  });
 }
 
 /* ================================================================
@@ -642,7 +641,10 @@ useEffect(() => {
           </div>
         </header>
 
-        <section className="content">{renderPage()}</section>
+        <section className="content">
+          {activePage === "Dashboard" && <ProfileProgress compact profile={account.profile} onOpen={() => setActivePage("My Profile")} />}
+          {renderPage()}
+        </section>
         <AnnouncementPopup announcements={announcements} />
       </main>
 
@@ -1049,6 +1051,7 @@ function LGUFishSpeciesManagement({ notify }) {
       price_class: item.price_class || "common",
       description: item.description || "",
       photo_credit: item.photo_credit || "",
+      aliases: Array.isArray(item.aliases) ? item.aliases.join(", ") : "",
     });
     setShowForm(true);
   };
@@ -1062,6 +1065,7 @@ function LGUFishSpeciesManagement({ notify }) {
       price_class: form.price_class || "common",
       description: form.description.trim(),
       photo_credit: (form.photo_credit || "").trim(),
+      aliases: splitNames(form.aliases),
     };
     if (!payload.name) { notify("Fish species name is required."); return; }
     setBusy(true);
@@ -1108,6 +1112,8 @@ function LGUFishSpeciesManagement({ notify }) {
         </div>
         <button className="primary-btn" onClick={openAdd} disabled={busy}>+ Add Fish Species</button>
       </div>
+
+      <SimilarFishNames notify={notify} refreshKey={species.length} onMerged={() => loadSpecies()} />
 
       <div className="panel" style={{ marginTop: 18 }}>
         <div className="panel-header" style={{ gap: 12, flexWrap: "wrap" }}>
@@ -1212,6 +1218,8 @@ function LGUFishSpeciesManagement({ notify }) {
                     onChange={(name) => setForm((old) => ({ ...old, name }))}
                     onPick={(fish) => setForm((old) => ({ ...old, scientific_name: fish.scientific_name || old.scientific_name }))} />
                 </div>
+                <OtherNamesField id="lgu-species-aliases" value={form.aliases || ""}
+                  onChange={(aliases) => setForm((old) => ({ ...old, aliases }))} />
                 <div className="form-group">
                   <label htmlFor="lgu-species-scientific">Scientific Name</label>
                   <input id="lgu-species-scientific" maxLength={150} value={form.scientific_name} placeholder="Leave blank to fill in automatically for known fish"
@@ -3820,7 +3828,8 @@ function Reports({ priceRecords: recentRecords, notify }) {
       <div className="page-title">
         <div><h2>Reports</h2><p>Generate and export price history, validation log, and external factor reports.</p></div>
         <div className="filter-row">
-          <button className="secondary-btn" onClick={() => exportAs("CSV")} disabled={!rows.length || exporting !== ""}>{exporting === "CSV" ? "Exporting…" : "↓ Export CSV"}</button>
+          <button className="secondary-btn" onClick={() => exportAs("CSV")} disabled={!rows.length || exporting !== ""}>{exporting === "CSV" ? "Exporting…" : "↓ CSV"}</button>
+          <button className="secondary-btn" onClick={() => exportAs("XLSX")} disabled={!rows.length || exporting !== ""}>{exporting === "XLSX" ? "Exporting…" : "↓ Export Excel"}</button>
           <button className="primary-btn" onClick={() => exportAs("PDF")} disabled={!rows.length || exporting !== ""}>{exporting === "PDF" ? "Exporting…" : "↓ Export PDF"}</button>
         </div>
       </div>
@@ -3915,7 +3924,7 @@ function ValidationHistory({ notify }) {
         </div>
         <div className="filter-row">
           <button className="secondary-btn" onClick={refresh}>↻ Refresh</button>
-          <button className="secondary-btn" disabled={!visible.length} onClick={() => { exportAuditCsv(visible, "validation_history.csv"); notify("Validation history exported."); }}>↓ Export</button>
+          <button className="secondary-btn" disabled={!visible.length} onClick={async () => { await exportAuditCsv(visible, "validation_history.xlsx"); notify("Validation history exported to Excel."); }}>↓ Export Excel</button>
         </div>
       </div>
 
@@ -3980,7 +3989,7 @@ function AuditLog({ notify }) {
   });
   return <>
     <div className="page-title"><div><h2>My Audit Log</h2><p>Everything you did with prices and fish species, with the fish, municipality and price of each record.</p></div>
-      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="secondary-btn" onClick={refresh}>↻ Refresh</button><button className="secondary-btn" disabled={!visible.length} onClick={()=>{exportAuditCsv(visible,"my_aquatimbang_audit_log.csv");notify("Audit log exported.");}}>↓ Export CSV</button></div>
+      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}><button className="secondary-btn" onClick={refresh}>↻ Refresh</button><button className="secondary-btn" disabled={!visible.length} onClick={async()=>{await exportAuditCsv(visible,"my_aquatimbang_audit_log.xlsx");notify("Audit log exported to Excel.");}}>↓ Export Excel</button></div>
     </div>
     <div className="panel"><div className="table-tools" style={{display:"flex",gap:12,flexWrap:"wrap",alignItems:"center"}}>
       <div className="search-box">🔍 <input placeholder="Search actions or fish species..." value={search} onChange={e=>setSearch(e.target.value)}/></div>

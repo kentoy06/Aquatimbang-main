@@ -576,7 +576,26 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
         same = next((fish for fish in others if name_key(fish.name) == name_key(name)), None)
         if same:
             raise serializers.ValidationError(f"{same.name} is already in the fish list.")
+        # Another spelling of a fish in the list ("Andohaw" for "Anduhaw").
+        from .species_tools import find_same_fish
+        how, similar = find_same_fish(name, list(others))
+        if similar is not None and how in ("alias", "spelling"):
+            raise serializers.ValidationError(
+                f"\"{name}\" looks like another spelling of {similar.name}, which is already in the fish list. "
+                f"Use {similar.name}, or add \"{name}\" as another name of {similar.name}."
+            )
         return name
+
+    def validate_aliases(self, value):
+        from .validators import clean_fish_name
+        if not isinstance(value, list):
+            raise serializers.ValidationError("Send a list of names.")
+        cleaned = []
+        for item in value:
+            name = clean_fish_name(item)[:100]
+            if len(name) >= 2 and name.lower() not in (c.lower() for c in cleaned):
+                cleaned.append(name)
+        return cleaned[:20]
 
     def validate(self, attrs):
         """Fill in the scientific name of a well-known fish when it is left blank."""
@@ -603,6 +622,7 @@ class FishSpeciesSerializer(serializers.ModelSerializer):
             "name",
 
             "price_class",
+            "aliases",
             "scientific_name",
 
             "description",

@@ -15,10 +15,11 @@ import {
 import { API_BASE_URL } from "./api/config.js";
 import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
 import { fullName, useMyProfile } from "./api/account.js";
-import AccountProfile from "./components/AccountProfile.jsx";
+import AccountProfile, { ProfileProgress } from "./components/AccountProfile.jsx";
 import ProfitHelper from "./components/ProfitHelper.jsx";
 import { ScanFishButton } from "./components/ScanFish.jsx";
 import { FISH_SCANNER } from "./features.js";
+import { buildXlsx } from "./api/reportExport.js";
 import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
 import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
@@ -419,7 +420,10 @@ useEffect(() => {
           </div>
         </header>
 
-        <section className="content">{renderPage()}</section>
+        <section className="content">
+          {activePage === "Dashboard" && <ProfileProgress compact profile={account.profile} onOpen={() => setActivePage("My Profile")} />}
+          {renderPage()}
+        </section>
         <AnnouncementPopup announcements={announcements} />
       </main>
 
@@ -488,7 +492,7 @@ function MyFishCard({ account, species, notify }) {
     }
   };
   return (
-    <div className="config-card">
+    <div className="config-card" id="profile-species_sold" tabIndex={-1}>
       <div className="config-header">
         <div className="config-icon green">🐟</div>
         <div><h3>{t("Fish I Sell")}</h3><p>{t("These appear first on your dashboard.")}</p></div>
@@ -1293,31 +1297,23 @@ function ExportReportsPage({ title, mySuggestions = [], suggestionsLoading, sugg
   const busy = isOfficial ? loading : suggestionsLoading;
   const loadError = isOfficial ? error : suggestionsError;
 
-  // Quote every CSV cell and prevent spreadsheet formula execution from untrusted comments/names.
-  const csvCell = (value) => {
-    let content = value === null || value === undefined ? "" : String(value);
-    if (/^[\s\u0000-\u001f]*[=+@\-]/.test(content) && !/^-[0-9]+(?:\.[0-9]+)?$/.test(content)) content = "'" + content;
-    return '"' + content.replace(/"/g, '""') + '"';
-  };
-  const exportCSV = () => {
+  // Formatted Excel file: prices as numbers with ₱, dates as dates.
+  const exportCSV = async () => {
     if (busy || loadError || invalidDates || selectedRows.length === 0) return;
     const columns = isOfficial
-      ? ["Record ID", "Recorded Date", "Municipality", "Fish Species", "Price per KG (PHP)", "Status", "Source", "Published At"]
-      : ["Submission ID", "Submitted Date", "Municipality", "Fish Species", "Suggested Price per KG (PHP)", "Status", "Comment", "LGU Feedback"];
+      ? [t("Recorded Date"), t("Fish Species"), t("Municipality"), t("Market"), t("Price per kg"), t("Source"), t("Published At")]
+      : [t("Submitted Date"), t("Fish Species"), t("Municipality"), t("Suggested Price per kg"), t("Status"), t("Comment"), t("LGU Feedback")];
     const data = isOfficial
-      ? filteredOfficial.map((r) => [r.id, r.recorded_date, r.municipality_name, r.fish_name, r.price_per_kg, r.status || "published", r.source, r.published_at])
-      : filteredSuggestions.map((s) => [s.id, s.date, s.municipalityName, s.species, s.suggestedPrice, s.status, s.comment, s.lguFeedback || s.feedback]);
-    const csv = [columns, ...data].map((row) => row.map(csvCell).join(",")).join("\r\n") + "\r\n";
-    const blob = new Blob(["\uFEFF", csv], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const link = document.createElement("a");
-    link.href = url;
-    link.download = `${isOfficial ? "aquatimbang_published_lgu_prices" : "aquatimbang_my_suggestions"}_${new Date().toISOString().slice(0, 10)}.csv`;
-    document.body.appendChild(link);
-    link.click();
-    link.remove();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-    notify(`Exported ${selectedRows.length} ${isOfficial ? "published price" : "suggestion"} record(s) to CSV.`);
+      ? filteredOfficial.map((r) => [r.recorded_date, r.fish_name, r.municipality_name, r.market_name || "", r.price_per_kg, r.source, String(r.published_at || "").slice(0, 16).replace("T", " ")])
+      : filteredSuggestions.map((s) => [s.date, s.species, s.municipalityName, s.suggestedPrice, s.status, s.comment, s.lguFeedback || s.feedback]);
+    await buildXlsx({
+      title: isOfficial ? t("Published LGU Prices") : t("My Suggested Prices"),
+      columns,
+      rows: data,
+      filename: `${isOfficial ? "aquatimbang_published_lgu_prices" : "aquatimbang_my_suggestions"}_${new Date().toLocaleDateString("en-CA")}.xlsx`,
+      sheetName: isOfficial ? "Published Prices" : "My Suggestions",
+    });
+    notify(`Exported ${selectedRows.length} ${isOfficial ? "published price" : "suggestion"} record(s) to Excel.`);
   };
 
   const fieldStyle = { minWidth: 180, maxWidth: "100%", padding: "10px 12px", border: "1px solid #cbd5e1", borderRadius: 8, background: "white" };
@@ -1359,7 +1355,7 @@ function ExportReportsPage({ title, mySuggestions = [], suggestionsLoading, sugg
          loadError ? <p style={{ color: "#b91c1c", marginTop: 18 }}>Could not load report data: {loadError}</p> :
          <p style={{ marginTop: 18, color: "#64748b" }}>{selectedRows.length} matching {isOfficial ? "published LGU price" : "your suggestion"} record(s). {selectedRows.length === 0 ? "Adjust your filters to find records." : "Ready to export."}</p>}
         <button className="primary-btn" type="button" onClick={exportCSV} disabled={busy || Boolean(loadError) || invalidDates || selectedRows.length === 0} style={{ marginTop: 12 }}>
-          ↓ Export {selectedRows.length} Record(s) as CSV
+          ↓ Export {selectedRows.length} Record(s) to Excel
         </button>
       </div>
     </>

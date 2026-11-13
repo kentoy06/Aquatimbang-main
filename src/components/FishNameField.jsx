@@ -3,6 +3,24 @@ import { apiUrl, authHeaders } from "../api/config.js";
 
 const key = (text) => String(text || "").toLowerCase().replace(/[^a-z0-9]/g, "");
 
+// Same rule as the server: "Andohaw" and "Anduhaw", "Lagao" and "Lagaw"
+// read the same (ao = aw, o = u, e = i, repeated letters count once).
+export const spellingKey = (text) => key(text).replace(/ao/g, "aw").replace(/o/g, "u").replace(/e/g, "i").replace(/(.)\1+/g, "$1");
+
+// "Andohaw, Andoaw" -> ["Andohaw", "Andoaw"]
+export const splitNames = (text) => String(text || "").split(/[,;\n]/).map((n) => n.trim()).filter(Boolean);
+
+/** Other names or spellings of a fish, separated by commas. */
+export function OtherNamesField({ id, value, onChange }) {
+  return (
+    <div className="form-group">
+      <label htmlFor={id}>Other names or spellings <span className="optional">(optional)</span></label>
+      <input id={id} value={value} maxLength={400} placeholder="e.g. Andohaw, Indian mackerel" onChange={(e) => onChange(e.target.value)} />
+      <small className="field-help">Separate with commas. Imports that use these names are matched to this fish.</small>
+    </div>
+  );
+}
+
 let cached = null; // shown at once next time; refreshed every time the form opens
 
 /**
@@ -63,6 +81,9 @@ export default function FishNameField({ id, value, onChange, onPick, autoFocus, 
 
   // When editing, the fish's own name is not a duplicate.
   const exact = typed !== key(currentName) && known.find((f) => key(f.name) === typed && f.registered);
+  // Another spelling of a fish already saved ("Andohaw" for "Anduhaw").
+  const sameSpelling = !exact && typed.length >= 3 && spellingKey(value) !== spellingKey(currentName)
+    && known.find((f) => f.registered && [f.name, ...(f.aliases || [])].some((n) => spellingKey(n) === spellingKey(value)));
 
   return (
     <div className="fish-name-field" ref={box}>
@@ -88,6 +109,12 @@ export default function FishNameField({ id, value, onChange, onPick, autoFocus, 
         </ul>
       )}
       {exact && <p className="field-hint warn">{exact.name} is already in the fish list.</p>}
+      {sameSpelling && (
+        <p className="field-hint warn">
+          "{value.trim()}" looks like another spelling of <strong>{sameSpelling.name}</strong>, which is already in the list.
+          Edit {sameSpelling.name} and add this spelling under Other names instead.
+        </p>
+      )}
     </div>
   );
 }
