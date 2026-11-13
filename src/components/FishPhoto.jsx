@@ -171,9 +171,13 @@ export function FishPhotoPanel({ fish, name, file, onChange, credit, onCreditCha
   const inputId = `fish-photo-${fish?.id || "new"}`;
   return (
     <div className="fish-photo-panel">
-      <div className="fish-photo-frame">
+      <div className={`fish-photo-frame${shown ? " has-photo" : ""}`}>
         {shown
-          ? <img src={shown} alt={name || fish?.name || "Fish photo"} onError={() => !preview && setFailed(current)} />
+          ? (
+            <a href={shown} target="_blank" rel="noopener noreferrer" title="Open the full photo">
+              <img src={shown} alt={name || fish?.name || "Fish photo"} onError={() => !preview && setFailed(current)} />
+            </a>
+          )
           : (name || fish?.name)
             ? <span>{initialsOf({ name: name || fish?.name })}</span>
             : <span className="fish-photo-empty"><b aria-hidden="true">🐟</b>No photo yet</span>}

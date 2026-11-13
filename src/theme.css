@@ -2057,3 +2057,7 @@ table th {
   .fish-photo-empty { font-size: 11.5px; }
   .fish-photo-empty b { font-size: 28px; }
 }
+/* Show the whole photo in its own shape (no square crop or zoom). */
+.fish-photo-frame.has-photo { aspect-ratio: auto; background: #fff; padding: 6px; }
+.fish-photo-frame.has-photo a { display: block; width: 100%; cursor: zoom-in; }
+.fish-photo-frame.has-photo img { display: block; width: 100%; height: auto; max-height: 360px; object-fit: contain; border-radius: 10px; }
