@@ -1799,11 +1799,26 @@ def public_summary(request):
                 "recorded_date": record.recorded_date,
                 # Market the LGU checked (e.g. Pasil Fish Market), when one was given.
                 "market": record.market.name if record.market_id else _market_label(record.source),
+                "market_id": record.market_id,
                 "stalls_checked": len(record.sampled_prices or []),
             })
             if len(today_prices) >= 500:
                 break
-        today_prices.sort(key=lambda row: (row["fish_name"], row["municipality_name"]))
+        # An older price saved without a market is hidden when the same fish
+        # and municipality has a newer price for a market (e.g. Pasil).
+        with_market = {}
+        for row in today_prices:
+            if row["market_id"]:
+                key = (row["fish_id"], row["municipality_id"])
+                with_market[key] = max(with_market.get(key, row["recorded_date"]), row["recorded_date"])
+        today_prices = [
+            row for row in today_prices
+            if row["market_id"]
+            or (row["fish_id"], row["municipality_id"]) not in with_market
+            or row["recorded_date"] > with_market[(row["fish_id"], row["municipality_id"])]
+        ]
+        # Newest prices first, then by fish name.
+        today_prices.sort(key=lambda row: (-row["recorded_date"].toordinal(), row["fish_name"], row["municipality_name"]))
     return Response(
         {
             "featured_prices": featured,

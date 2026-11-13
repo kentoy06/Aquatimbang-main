@@ -79,6 +79,8 @@ function Landing({ onGetStarted, onRegister }) {
   const [profile, setProfile] = useState(null);
   const [summary, setSummary] = useState(null);
   const [photoOk, setPhotoOk] = useState(true);
+  // "latest": only prices from the newest update; "all": every fish.
+  const [priceView, setPriceView] = useState("all");
 
   useEffect(() => {
     fetch(apiUrl("/public/summary/"))
@@ -97,7 +99,10 @@ function Landing({ onGetStarted, onRegister }) {
     { value: count(summary?.municipality_count), label: "Municipalities" },
     { value: count(summary?.published_price_count), label: "Official prices" },
   ];
-  const prices = summary?.today_prices || [];
+  const allPrices = summary?.today_prices || [];
+  const latestDate = summary?.latest_published_date;
+  const latestCount = allPrices.filter((p) => p.recorded_date === latestDate).length;
+  const prices = priceView === "latest" ? allPrices.filter((p) => p.recorded_date === latestDate) : allPrices;
 
   const audiences = [
     { icon: "🐟", title: "Fish Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price when the market looks different." },
@@ -181,9 +186,19 @@ function Landing({ onGetStarted, onRegister }) {
         <span className="section-eyebrow">Today's market</span>
         <h2>Official Fish Prices</h2>
         <p className="section-lead">
-          The latest price per kilo published by the LGU for each fish and municipality. Tap a fish for its details.
-          {summary?.latest_published_date && <> Last updated {formatDate(summary.latest_published_date)}.</>}
+          The most recent price per kilo published by the LGU for each fish, newest first. A fish the LGU has not
+          checked lately keeps its last official price, with its date. Tap a fish for its details.
         </p>
+        {latestDate && allPrices.length > 0 && (
+          <div className="price-view-toggle" role="group" aria-label="Which prices to show">
+            <button type="button" className={priceView === "all" ? "active" : ""} onClick={() => setPriceView("all")}>
+              All fish <small>{allPrices.length}</small>
+            </button>
+            <button type="button" className={priceView === "latest" ? "active" : ""} onClick={() => setPriceView("latest")}>
+              Latest update · {formatDate(latestDate)} <small>{latestCount}</small>
+            </button>
+          </div>
+        )}
         {prices.length === 0 ? (
           <div className="landing-empty">{summary ? "No official prices have been published yet." : "Loading prices…"}</div>
         ) : (
@@ -200,7 +215,9 @@ function Landing({ onGetStarted, onRegister }) {
                 <div>
                   <strong>{p.fish_name}</strong>
                   <span>{p.municipality_name}{p.market ? ` · ${p.market}` : ""}</span>
-                  <span className="price-date">{formatDate(p.recorded_date)}</span>
+                  <span className={`price-date${p.recorded_date === latestDate ? " is-latest" : ""}`}>
+                    {p.recorded_date === latestDate ? `Latest · ${formatDate(p.recorded_date)}` : `Last checked ${formatDate(p.recorded_date)}`}
+                  </span>
                 </div>
                 <b>{peso(p.price_per_kg)}<small>/kg</small></b>
               </button>

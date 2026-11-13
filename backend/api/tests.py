@@ -2671,6 +2671,20 @@ class MarketPriceTests(StallSampleTests):
         rows = listed["results"] if isinstance(listed, dict) else listed
         self.assertEqual([(r["market_name"], r["price_per_kg"]) for r in rows], [("Carbon Market", "200.00")])
 
+    def test_landing_hides_older_price_without_market(self):
+        old = datetime.date(2026, 9, 1)
+        new = datetime.date(2026, 9, 29)
+        PriceRecord.objects.create(fish_species=self.fish, municipality=self.place, price_per_kg=Decimal("100"),
+                                   recorded_date=old, status="published")
+        PriceRecord.objects.create(fish_species=self.fish, municipality=self.place, market=self.pasil,
+                                   price_per_kg=Decimal("110"), recorded_date=new, status="published")
+        other = FishSpecies.objects.create(name="Newer Fish")
+        PriceRecord.objects.create(fish_species=other, municipality=self.place, market=self.pasil,
+                                   price_per_kg=Decimal("90"), recorded_date=datetime.date(2026, 11, 6), status="published")
+        rows = APIClient().get("/api/public/summary/").data["today_prices"]
+        self.assertEqual([(r["fish_name"], str(r["price_per_kg"])) for r in rows],
+                         [("Newer Fish", "90.00"), ("Sample Fish", "110.00")])  # newest first, no duplicate
+
     def test_import_by_market(self):
         rows = [
             {"row": 2, "date": "2026-01-05", "fish": "Sample Fish", "municipality": "Sample City", "market": "pasil fish market", "price": "180"},
