@@ -94,12 +94,16 @@ function Landing({ onGetStarted, onRegister }) {
   const show = (name) => setSection(name);
 
   const count = (value) => (summary ? Number(value ?? 0).toLocaleString() : "—");
-  const stats = [
-    { value: count(summary?.species_count), label: "Fish species" },
-    { value: count(summary?.municipality_count), label: "Municipalities" },
-    { value: count(summary?.published_price_count), label: "Official prices" },
-  ];
   const allPrices = summary?.today_prices || [];
+  // Fish shown under "Current prices" (checked recently), counted once each.
+  const currentFish = new Set(allPrices.filter((p) => p.current !== false).map((p) => p.fish_id)).size;
+  const stats = [
+    { value: summary ? count(currentFish) : count(null), label: "Fish with current prices",
+      title: `Fish the LGU checked within ${summary?.fresh_days || 15} days of its latest update` },
+    { value: count(summary?.municipality_count), label: "Municipalities" },
+    { value: count(summary?.published_price_count), label: "Prices recorded", note: "all dates",
+      title: "Every official price the LGU has published, on every date. This history is used for trends and forecasts." },
+  ];
   const latestDate = summary?.latest_published_date;
   const freshDays = summary?.fresh_days || 15;
   // Older servers do not send "current": treat every price as current then.
@@ -157,7 +161,10 @@ function Landing({ onGetStarted, onRegister }) {
           </div>
           <div className="hero-stats">
             {stats.map((s) => (
-              <div key={s.label}><strong>{s.value}</strong><span>{s.label}</span></div>
+              <div key={s.label} title={s.title}>
+                <strong>{s.value}</strong>
+                <span>{s.label}{s.note && <small className="hero-stat-note"> · {s.note}</small>}</span>
+              </div>
             ))}
           </div>
         </div>
