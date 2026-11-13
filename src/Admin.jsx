@@ -25,7 +25,7 @@ import FishScanReview from "./components/FishScanReview.jsx";
 import { FISH_SCANNER } from "./features.js";
 import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFor } from "./components/ApplicantReview.jsx";
 import { useProtectedImage } from "./api/images.js";
-import { FishPhotoPanel, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
+import { FishPhotoPanel, FishPhotoView, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
 import { AnnouncementsManager } from "./components/Announcements.jsx";
 import PagedTable from "./components/PagedTable.jsx";
 import FishNameField from "./components/FishNameField.jsx";
@@ -2438,58 +2438,61 @@ const toggleStatus = async (s) => {
 
       {viewing && (
         <div className="modal-backdrop" onClick={() => setViewing(null)}>
-          <div className="modal profile-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal profile-modal fish-form-modal" role="dialog" aria-modal="true" aria-labelledby="species-details-title" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>Species Details</h3>
-              <button className="modal-close" onClick={() => setViewing(null)}>✕</button>
+              <h3 id="species-details-title">Species Details</h3>
+              <button className="modal-close" onClick={() => setViewing(null)} aria-label="Close">✕</button>
             </div>
 
-            <div className="profile-head">
-              <FishThumb fish={viewing} size={64} />
-              <div>
-                <strong>{viewing.name}</strong>
-                <p>{viewing.scientific}</p>
-                <div className="profile-badges">
-                  <span className={`badge ${viewing.status === "Active" ? "success" : "inactive"}`}>
-                    {viewing.status}
-                  </span>
+            <div className="pm-body">
+              <aside className="pm-side">
+                <FishPhotoView fish={viewing} />
+                <div className="species-side-info">
+                  <strong>{viewing.name}</strong>
+                  {viewing.scientific && <em>{viewing.scientific}</em>}
+                  <div className="profile-badges">
+                    <span className={`badge ${viewing.status === "Active" ? "success" : "inactive"}`}>{viewing.status}</span>
+                    {viewing.price_class === "first_class" && <span className="badge pending">First-class</span>}
+                  </div>
+                  {viewing.photo_credit && <small className="fish-credit">Photo: {viewing.photo_credit}</small>}
+                </div>
+              </aside>
+
+              <div className="pm-main">
+                <div className="mini-head" style={{ marginTop: 0 }}>Description</div>
+                <div className="info-box">{viewing.description || "No description yet."}</div>
+
+                <div className="profile-grid" style={{ marginTop: 14 }}>
+                  <div className="profile-field">
+                    <span>Date Added</span>
+                    <strong>{viewing.dateAdded}</strong>
+                  </div>
+                  <div className="profile-field">
+                    <span>Price Records</span>
+                    <strong>{recordsFor(viewing.name).length}</strong>
+                  </div>
+                </div>
+
+                <div className="mini-head">Recent Price History</div>
+                <div className="history-list">
+                  {recordsFor(viewing.name).slice(0, 6).length === 0 ? (
+                    <p className="empty-row">No price records for this species yet.</p>
+                  ) : (
+                    recordsFor(viewing.name).slice(0, 6).map((r) => (
+                      <div className="history-item" key={r.id}>
+                        <div>
+                          <strong>{peso(r.price)} / kg</strong>
+                          <p>{r.municipality}{r.market ? ` · ${r.market}` : ""}{r.status === "Corrected" ? " · corrected" : ""}</p>
+                        </div>
+                        <small>{fmtDate(r.date)}</small>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
 
-            <FishPicture fish={viewing} />
-
-            <div className="info-box">{viewing.description || "No description yet."}</div>
-
-            <div className="profile-grid" style={{ marginTop: 14 }}>
-              <div className="profile-field">
-                <span>Date Added</span>
-                <strong>{viewing.dateAdded}</strong>
-              </div>
-              <div className="profile-field">
-                <span>Price Records</span>
-                <strong>{recordsFor(viewing.name).length}</strong>
-              </div>
-            </div>
-
-            <div className="mini-head">Recent Price History</div>
-            <div className="history-list">
-              {recordsFor(viewing.name).slice(0, 6).length === 0 ? (
-                <p className="empty-row">No price records for this species yet.</p>
-              ) : (
-                recordsFor(viewing.name).slice(0, 6).map((r) => (
-                  <div className="history-item" key={r.id}>
-                    <div>
-                      <strong>{peso(r.price)} / kg</strong>
-                      <p>{r.municipality}{r.market ? ` · ${r.market}` : ""}{r.status === "Corrected" ? " · corrected" : ""}</p>
-                    </div>
-                    <small>{fmtDate(r.date)}</small>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="button-row">
+            <div className="button-row pm-actions">
               <button className="secondary-btn" onClick={() => { setViewing(null); openEdit(viewing); }}>
                 Edit Species
               </button>

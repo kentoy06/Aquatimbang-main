@@ -208,3 +208,21 @@ export function FishPhotoPanel({ fish, name, file, onChange, credit, onCreditCha
     </div>
   );
 }
+
+// The whole photo in its own shape (click for full size), or "No photo yet".
+export function FishPhotoView({ fish }) {
+  const url = photoUrl(fish);
+  const [failed, setFailed] = useState("");
+  const shown = url && failed !== url ? url : "";
+  return (
+    <div className={`fish-photo-frame${shown ? " has-photo" : ""}`}>
+      {shown ? (
+        <a href={shown} target="_blank" rel="noopener noreferrer" title="Open the full photo">
+          <img src={shown} alt={fish?.name || "Fish photo"} onError={() => setFailed(url)} />
+        </a>
+      ) : (
+        <span className="fish-photo-empty"><b aria-hidden="true">🐟</b>No photo yet</span>
+      )}
+    </div>
+  );
+}
