@@ -2061,3 +2061,7 @@ table th {
 .fish-photo-frame.has-photo { aspect-ratio: auto; background: #fff; padding: 6px; }
 .fish-photo-frame.has-photo a { display: block; width: 100%; cursor: zoom-in; }
 .fish-photo-frame.has-photo img { display: block; width: 100%; height: auto; max-height: 360px; object-fit: contain; border-radius: 10px; }
+.species-side-info { display: grid; gap: 4px; margin-top: 14px; }
+.species-side-info strong { font-size: 18px; color: var(--navy-900); }
+.species-side-info em { font-size: 13px; color: #667085; }
+.species-side-info .profile-badges { margin-top: 6px; }

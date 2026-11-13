@@ -2785,47 +2785,53 @@ function FisherfolkManagement({ fisherfolk, suggestions, loading, error }) {
 
       {viewing && (
         <div className="modal-backdrop" onClick={() => setViewing(null)}>
-          <div className="modal profile-modal" onClick={(e) => e.stopPropagation()}>
+          <div className="modal profile-modal" role="dialog" aria-modal="true" aria-labelledby="vendor-profile-title" onClick={(e) => e.stopPropagation()}>
             <div className="modal-head">
-              <h3>Vendor Profile</h3>
-              <button className="modal-close" onClick={() => setViewing(null)}>✕</button>
+              <h3 id="vendor-profile-title">Vendor Profile</h3>
+              <button className="modal-close" onClick={() => setViewing(null)} aria-label="Close">✕</button>
             </div>
 
-            <div className="profile-head">
-              <div className="table-avatar profile-avatar">{initials(viewing.name)}</div>
-              <div>
-                <strong>{viewing.name}</strong>
-                <p>{viewing.municipality || "—"}</p>
-                <div className="profile-badges">
-                  <span className={`badge ${statusLabel(viewing).toLowerCase()}`}>{statusLabel(viewing)}</span>
+            <div className="pm-body">
+              <aside className="pm-side">
+                <div className="profile-head">
+                  <div className="table-avatar profile-avatar">{initials(viewing.name)}</div>
+                  <div>
+                    <strong>{viewing.name}</strong>
+                    <p>{viewing.municipality || "—"}</p>
+                    <div className="profile-badges">
+                      <span className={`badge ${statusLabel(viewing).toLowerCase()}`}>{statusLabel(viewing)}</span>
+                      <Presence online={viewing.is_online} lastSeen={viewing.last_seen} />
+                    </div>
+                  </div>
+                </div>
+              </aside>
+
+              <div className="pm-main">
+                <div className="profile-grid">
+                  <div className="profile-field"><span>Registration Date</span><strong>{formatDay(viewing.date_joined)}</strong></div>
+                  <div className="profile-field"><span>Market / Stall</span><strong>{viewing.market_name || "—"}{viewing.stall_number ? ` · ${viewing.stall_number}` : ""}</strong></div>
+                  <div className="profile-field"><span>Price Suggestions</span><strong>{viewing.suggestion_count}</strong></div>
+                  <div className="profile-field"><span>Last Submission</span><strong>{formatDay(viewing.last_submission)}</strong></div>
+                </div>
+
+                <div className="mini-head">Recent Suggestions</div>
+                <div className="history-list">
+                  {vendorSuggestions.length === 0 ? (
+                    <p className="empty-row">No suggestions submitted yet.</p>
+                  ) : (
+                    vendorSuggestions.slice(0, 10).map((s) => (
+                      <div className="history-item" key={s.id}>
+                        <div><strong>{s.species} — {peso(s.suggestedPrice)}</strong> <span className="badge pending">{s.status}</span></div>
+                        <small>{s.date}</small>
+                      </div>
+                    ))
+                  )}
                 </div>
               </div>
             </div>
 
-            <div className="profile-grid">
-              <div className="profile-field"><span>Registration Date</span><strong>{formatDay(viewing.date_joined)}</strong></div>
-              <div className="profile-field"><span>Market / Stall</span><strong>{viewing.market_name || "—"}{viewing.stall_number ? ` · ${viewing.stall_number}` : ""}</strong></div>
-              <div className="profile-field"><span>Price Suggestions</span><strong>{viewing.suggestion_count}</strong></div>
-              <div className="profile-field"><span>Online</span><strong><Presence online={viewing.is_online} lastSeen={viewing.last_seen} /></strong></div>
-              <div className="profile-field"><span>Last Submission</span><strong>{formatDay(viewing.last_submission)}</strong></div>
-            </div>
-
-            <div className="mini-head">Recent Suggestions</div>
-            <div className="history-list">
-              {vendorSuggestions.length === 0 ? (
-                <p className="empty-row">No suggestions submitted yet.</p>
-              ) : (
-                vendorSuggestions.slice(0, 10).map((s) => (
-                  <div className="history-item" key={s.id}>
-                    <div><strong>{s.species} — {peso(s.suggestedPrice)}</strong> <span className="badge pending">{s.status}</span></div>
-                    <small>{s.date}</small>
-                  </div>
-                ))
-              )}
-            </div>
-
-            <div className="button-row">
-              <button className="primary-btn full-btn" onClick={() => setViewing(null)}>Close</button>
+            <div className="button-row pm-actions">
+              <button className="primary-btn" onClick={() => setViewing(null)}>Close</button>
             </div>
           </div>
         </div>
