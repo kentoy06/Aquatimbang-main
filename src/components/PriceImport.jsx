@@ -288,13 +288,13 @@ export default function PriceImport({ notify, onImported }) {
 
               <div style={{ overflowX: "auto", marginTop: 12 }}>
                 <PagedTable className="inner-table">
-                  <thead><tr>{isList ? <><th>IMPORT</th><th>LINE</th><th>FISH</th><th>PRICE / KG</th></> : <><th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></>}</tr></thead>
+                  <thead><tr>{isList && <th>IMPORT</th>}<th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></tr></thead>
                   <tbody>
                     {(isList ? parsed.rows : parsed.rows.slice(0, 8)).map((r, i) => isList ? (
                       <tr key={i} className={skipped.has(r.row) ? "import-skipped" : ""}>
                         <td><input type="checkbox" checked={!skipped.has(r.row)} onChange={() => toggleSkip(r.row)} aria-label={`Import ${r.fish}`} /></td>
-                        <td>{r.row}</td><td><strong>{r.fish}</strong></td>
-                        <td>₱{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td>
+                        <td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td>
+                        <td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td>
                       </tr>
                     ) : (
                       <tr key={i}><td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td><td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td></tr>
