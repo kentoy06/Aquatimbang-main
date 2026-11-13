@@ -887,3 +887,8 @@ button.price-tile:focus-visible { outline: 3px solid rgba(255, 122, 26, 0.7); ou
   .price-view-toggle { display: flex; }
   .price-view-toggle button { flex: 1; padding: 8px 10px; font-size: 12.5px; }
 }
+.price-view-toggle button:disabled { opacity: 0.45; cursor: default; }
+.older-note {
+  margin: -8px 0 20px; max-width: 760px; padding: 10px 14px; border-radius: 12px; font-size: 13px; line-height: 1.5;
+  color: #ffd9b8; background: rgba(255, 138, 61, 0.1); border: 1px solid rgba(255, 138, 61, 0.3);
+}

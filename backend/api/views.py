@@ -1729,6 +1729,8 @@ def public_summary(request):
     """
     Return live counts shown on the public landing page.
     """
+    from .models import SystemSetting
+    fresh_days = SystemSetting.load().landing_fresh_days
     latest = (
         PriceRecord.objects.filter(status=PriceRecord.STATUS_PUBLISHED)
         .order_by("-recorded_date")
@@ -1817,6 +1819,12 @@ def public_summary(request):
             or (row["fish_id"], row["municipality_id"]) not in with_market
             or row["recorded_date"] > with_market[(row["fish_id"], row["municipality_id"])]
         ]
+        # Current prices were checked within N days of the latest update;
+        # older ones are listed separately as "Older prices".
+        from datetime import timedelta
+        fresh_from = latest - timedelta(days=fresh_days)
+        for row in today_prices:
+            row["current"] = row["recorded_date"] >= fresh_from
         # Newest prices first, then by fish name.
         today_prices.sort(key=lambda row: (-row["recorded_date"].toordinal(), row["fish_name"], row["municipality_name"]))
     return Response(
@@ -1829,6 +1837,7 @@ def public_summary(request):
                 status=PriceRecord.STATUS_PUBLISHED
             ).count(),
             "latest_published_date": latest,
+            "fresh_days": fresh_days,
         },
         status=status.HTTP_200_OK,
     )

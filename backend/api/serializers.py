@@ -1326,6 +1326,7 @@ class SystemSettingSerializer(serializers.ModelSerializer):
         fields = [
             "min_price_per_kg", "max_price_per_kg",
             "first_class_min_price_per_kg", "first_class_max_price_per_kg",
+            "landing_fresh_days",
             "updated_by_name", "updated_at",
         ]
         read_only_fields = ["updated_by_name", "updated_at"]
@@ -1343,6 +1344,9 @@ class SystemSettingSerializer(serializers.ModelSerializer):
             raise serializers.ValidationError({"first_class_min_price_per_kg": "The minimum must be greater than zero."})
         if first_low is not None and first_high is not None and first_high <= first_low:
             raise serializers.ValidationError({"first_class_max_price_per_kg": "The maximum must be higher than the minimum."})
+        days = attrs.get("landing_fresh_days")
+        if days is not None and not 1 <= days <= 365:
+            raise serializers.ValidationError({"landing_fresh_days": "Enter a number of days from 1 to 365."})
         return attrs
 
 

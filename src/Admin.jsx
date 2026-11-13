@@ -3107,6 +3107,23 @@ function SystemConfiguration({ notify }) {
   const [errors, setErrors] = useState({});
   const [loadError, setLoadError] = useState("");
   const [saving, setSaving] = useState(false);
+  const [freshDays, setFreshDays] = useState("");
+  const [savingDays, setSavingDays] = useState(false);
+
+  const saveDays = async () => {
+    setSavingDays(true);
+    setErrors({});
+    try {
+      const data = await sendJson("/system-settings/", "PATCH", { landing_fresh_days: Number(freshDays) });
+      setSaved(data);
+      notify(`Saved. The public price board now shows prices checked within ${data.landing_fresh_days} days of the latest update.`);
+    } catch (error) {
+      setErrors(error.fields || {});
+      if (!error.fields || !Object.keys(error.fields).length) notify(error.message);
+    } finally {
+      setSavingDays(false);
+    }
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -3115,6 +3132,7 @@ function SystemConfiguration({ notify }) {
         if (cancelled) return;
         setSaved(data);
         setForm(Object.fromEntries(RANGE_KEYS.map((key) => [key, data[key]])));
+        setFreshDays(String(data.landing_fresh_days ?? 15));
       })
       .catch((error) => { if (!cancelled) setLoadError(error.message); });
     return () => { cancelled = true; };
@@ -3192,6 +3210,32 @@ function SystemConfiguration({ notify }) {
               Last changed by {saved.updated_by_name} on {formatAuditTimestamp(saved.updated_at)}.
             </p>
           )}
+        </div>
+
+        <div className="config-card">
+          <div className="config-header">
+            <div className="config-icon blue">🗓</div>
+            <div>
+              <h3>Public Price Board</h3>
+              <p>How long a fish's price stays under Current prices on the public landing page</p>
+            </div>
+          </div>
+          <div className="form-group">
+            <label htmlFor="cfg-fresh-days">Show prices checked within</label>
+            <div className="input-with-unit input-with-unit-after">
+              <input id="cfg-fresh-days" type="number" min="1" max="365" step="1" value={freshDays} onChange={(e) => setFreshDays(e.target.value)} />
+              <span>days of the latest update</span>
+            </div>
+            {errors.landing_fresh_days && <small className="field-error">{errors.landing_fresh_days}</small>}
+          </div>
+          <div className="info-box">
+            Counted from the day of the LGU's latest published price, not from today, so the board never goes empty
+            when prices are not encoded for a while. Fish not checked within this time move to Older prices, with their date.
+          </div>
+          <button className="primary-btn full-btn" style={{ marginTop: 14 }} onClick={saveDays}
+            disabled={savingDays || !saved || String(freshDays) === String(saved.landing_fresh_days) || !(Number(freshDays) >= 1)}>
+            {savingDays ? "Saving…" : "Save"}
+          </button>
         </div>
 
         <div className="config-card">

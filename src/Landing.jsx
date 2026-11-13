@@ -79,8 +79,8 @@ function Landing({ onGetStarted, onRegister }) {
   const [profile, setProfile] = useState(null);
   const [summary, setSummary] = useState(null);
   const [photoOk, setPhotoOk] = useState(true);
-  // "latest": only prices from the newest update; "all": every fish.
-  const [priceView, setPriceView] = useState("all");
+  // "current": checked recently; "older": not checked recently.
+  const [priceView, setPriceView] = useState("current");
 
   useEffect(() => {
     fetch(apiUrl("/public/summary/"))
@@ -101,8 +101,11 @@ function Landing({ onGetStarted, onRegister }) {
   ];
   const allPrices = summary?.today_prices || [];
   const latestDate = summary?.latest_published_date;
-  const latestCount = allPrices.filter((p) => p.recorded_date === latestDate).length;
-  const prices = priceView === "latest" ? allPrices.filter((p) => p.recorded_date === latestDate) : allPrices;
+  const freshDays = summary?.fresh_days || 15;
+  // Older servers do not send "current": treat every price as current then.
+  const currentPrices = allPrices.filter((p) => p.current !== false);
+  const olderPrices = allPrices.filter((p) => p.current === false);
+  const prices = priceView === "older" ? olderPrices : currentPrices;
 
   const audiences = [
     { icon: "🐟", title: "Fish Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price when the market looks different." },
@@ -186,21 +189,28 @@ function Landing({ onGetStarted, onRegister }) {
         <span className="section-eyebrow">Today's market</span>
         <h2>Official Fish Prices</h2>
         <p className="section-lead">
-          The most recent price per kilo published by the LGU for each fish, newest first. A fish the LGU has not
-          checked lately keeps its last official price, with its date. Tap a fish for its details.
+          Official prices per kilo published by the LGU, newest first. Only prices checked within {freshDays} days
+          of the latest update{latestDate ? ` (${formatDate(latestDate)})` : ""} are shown here; fish not checked
+          since then are under Older prices. Tap a fish for its details.
         </p>
         {latestDate && allPrices.length > 0 && (
           <div className="price-view-toggle" role="group" aria-label="Which prices to show">
-            <button type="button" className={priceView === "all" ? "active" : ""} onClick={() => setPriceView("all")}>
-              All fish <small>{allPrices.length}</small>
+            <button type="button" className={priceView === "current" ? "active" : ""} onClick={() => setPriceView("current")}>
+              Current prices <small>{currentPrices.length}</small>
             </button>
-            <button type="button" className={priceView === "latest" ? "active" : ""} onClick={() => setPriceView("latest")}>
-              Latest update · {formatDate(latestDate)} <small>{latestCount}</small>
+            <button type="button" className={priceView === "older" ? "active" : ""} onClick={() => setPriceView("older")} disabled={!olderPrices.length}>
+              Older prices <small>{olderPrices.length}</small>
             </button>
           </div>
         )}
+        {priceView === "older" && olderPrices.length > 0 && (
+          <p className="older-note">
+            These fish have not been checked by the LGU for more than {freshDays} days before the latest update.
+            Their last official price is shown for reference only and may not match today's market.
+          </p>
+        )}
         {prices.length === 0 ? (
-          <div className="landing-empty">{summary ? "No official prices have been published yet." : "Loading prices…"}</div>
+          <div className="landing-empty">{!summary ? "Loading prices…" : allPrices.length ? "No prices in this list." : "No official prices have been published yet."}</div>
         ) : (
           <div className="price-board">
             {prices.map((p) => (
