@@ -36,6 +36,7 @@ import PagedTable from "./components/PagedTable.jsx";
 const TrendChart = lazy(() => import("./components/TrendChart.jsx"));
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import FishScanReview from "./components/FishScanReview.jsx";
+import { FISH_SCANNER } from "./features.js";
 import VendorRegistrations from "./components/VendorRegistrations.jsx";
 import { listExternalFactors } from "./api/forecast.js";
 import { FishPhotoPanel, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
@@ -426,7 +427,7 @@ useEffect(() => {
         { name: "Vendor Registrations", icon: "☑" },
         { name: "Vendor Management", icon: "👥" },
         { name: "Price Suggestions", icon: "📥" },
-        { name: "Fish Scanner Photos", icon: "◉" },
+        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "◉" }] : []),
       ],
     },
     {

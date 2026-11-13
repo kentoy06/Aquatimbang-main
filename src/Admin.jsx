@@ -22,6 +22,7 @@ import PriceImport from "./components/PriceImport.jsx";
 import { withRecentWindow } from "./api/prices.js";
 import ExternalFactorsPage from "./components/ExternalFactorsPage.jsx";
 import FishScanReview from "./components/FishScanReview.jsx";
+import { FISH_SCANNER } from "./features.js";
 import { ApplicantSummary, ApprovalGuidelines, VerificationChecklist, criteriaFor } from "./components/ApplicantReview.jsx";
 import { useProtectedImage } from "./api/images.js";
 import { FishPhotoPanel, FishPicture, FishThumb, uploadSpeciesPhoto } from "./components/FishPhoto.jsx";
@@ -617,7 +618,7 @@ useEffect(() => {
         { name: "Dashboard", icon: "▦" },
         { name: "User Management", icon: "♙" },
         { name: "Fish Species", icon: "🐟" },
-        { name: "Fish Scanner Photos", icon: "◉" },
+        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "◉" }] : []),
         { name: "Municipality & Market", icon: "⚑" },
         { name: "Price Records", icon: "₱" },
         { name: "Import Price History", icon: "⇪" },
