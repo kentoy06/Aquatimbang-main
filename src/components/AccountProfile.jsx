@@ -116,7 +116,7 @@ function ProfilePhotoCard({ account, photo, notify }) {
   };
 
   return (
-    <div className="config-card profile-photo-card">
+    <div className="config-card profile-photo-card" id="profile-photo-input" tabIndex={-1}>
       <div className="config-header">
         <div className="config-icon blue">📷</div>
         <div><h3>Profile Photo</h3><p>Shown beside your name in AquaTimbang</p></div>
@@ -139,6 +139,104 @@ function ProfilePhotoCard({ account, photo, notify }) {
 
 // Profile page shared by the Administrator, LGU Officer and Fish Vendor
 // dashboards. Reads and saves the logged-in user's own record in Django.
+// Registration details each role can complete on the profile page.
+const ROLE_FIELDS = {
+  "Fish Vendor": [["market_name", "Market"], ["stall_number", "Stall number"], ["permit_number", "Permit number"]],
+  "LGU Officer": [["department", "Department / Office"], ["position", "Position"], ["employee_id", "Employee ID"], ["official_email", "Work email", "email"]],
+};
+const roleDetails = (profile) => {
+  const details = profile.verification?.details || {};
+  return Object.fromEntries((ROLE_FIELDS[profile.role] || []).map(([key]) => [key, details[key] || ""]));
+};
+
+/**
+ * How complete a user's profile is, from the details they can fill in
+ * themselves. Uploaded documents are checked at registration, so they are
+ * not counted here. Email is optional for Fish Vendors.
+ */
+export function profileCompletion(profile) {
+  if (!profile) return { percent: 0, missing: [], total: 0 };
+  const details = profile.verification?.details || {};
+  const isVendor = profile.role === "Fish Vendor";
+  const isOfficer = profile.role === "LGU Officer";
+  const items = [
+    ["photo", "Profile photo", Boolean(profile.has_photo)],
+    ["first_name", "First name", Boolean(profile.first_name)],
+    ["last_name", "Last name", Boolean(profile.last_name)],
+    ...(isVendor ? [] : [["email", "Email address", Boolean(profile.email)]]),
+    ["contact_number", "Contact number", Boolean(profile.contact_number)],
+    ["date_of_birth", "Date of birth", Boolean(profile.date_of_birth)],
+    ["sex", "Sex", Boolean(profile.sex)],
+    ...(isVendor ? [
+      ["market_name", "Market", Boolean(details.market_name)],
+      ["stall_number", "Stall number", Boolean(details.stall_number)],
+      ["permit_number", "Permit number", Boolean(details.permit_number)],
+      ["species_sold", "Fish you sell", (profile.verification?.species_sold || []).length > 0],
+    ] : []),
+    ...(isOfficer ? [
+      ["department", "Department / Office", Boolean(details.department)],
+      ["position", "Position", Boolean(details.position)],
+      ["employee_id", "Employee ID", Boolean(details.employee_id)],
+      ["official_email", "Work email", Boolean(details.official_email)],
+    ] : []),
+  ];
+  const done = items.filter(([, , ok]) => ok).length;
+  return {
+    percent: Math.round((done / items.length) * 100),
+    total: items.length,
+    done,
+    missing: items.filter(([, , ok]) => !ok).map(([key, label]) => ({ key, label })),
+  };
+}
+
+// The progress bar and what is still missing; clicking an item goes to its field.
+export function ProfileProgress({ profile, compact = false, onOpen }) {
+  const { percent, missing, done, total } = profileCompletion(profile);
+  if (!profile) return null;
+  const complete = percent >= 100;
+  const focus = (key) => {
+    if (onOpen) { onOpen(); return; }
+    const target = document.getElementById(key === "photo" ? "profile-photo-input" : `profile-${key}`);
+    target?.scrollIntoView({ behavior: "smooth", block: "center" });
+    target?.focus?.();
+  };
+  if (compact) {
+    if (complete) return null;
+    return (
+      <div className="profile-nudge" role="status">
+        <div className="profile-nudge-text">
+          <strong>Your profile is {percent}% complete</strong>
+          <span>Add your {missing.slice(0, 3).map((m) => m.label.toLowerCase()).join(", ")}{missing.length > 3 ? ", and more" : ""}.</span>
+        </div>
+        <div className="profile-meter" aria-hidden="true"><span style={{ width: `${percent}%` }} /></div>
+        <button type="button" className="secondary-btn" onClick={() => onOpen?.()}>Complete profile</button>
+      </div>
+    );
+  }
+  return (
+    <div className={`config-card profile-progress${complete ? " is-complete" : ""}`}>
+      <div className="profile-progress-head">
+        <div>
+          <h3>{complete ? "Your profile is complete" : "Complete your profile"}</h3>
+          <p>{complete ? "Thank you. Complete details help the LGU verify and contact you." : `${done} of ${total} details filled in.`}</p>
+        </div>
+        <strong className="profile-progress-percent">{percent}%</strong>
+      </div>
+      <div className="profile-meter" role="progressbar" aria-valuenow={percent} aria-valuemin={0} aria-valuemax={100} aria-label="Profile completion">
+        <span style={{ width: `${percent}%` }} />
+      </div>
+      {!complete && (
+        <div className="profile-missing">
+          <span>Still missing:</span>
+          {missing.map((m) => (
+            <button type="button" key={m.key} className="profile-missing-chip" onClick={() => focus(m.key)}>+ {m.label}</button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AccountProfile({ account, notify, description = "Manage your account details and see your recent activity.", children }) {
   const { profile, loading, error, save } = account;
   const photo = useProtectedImage(profile?.has_photo ? `/auth/me/photo/?v=${encodeURIComponent(profile.photo_version || "")}` : "");
@@ -155,6 +253,9 @@ function AccountProfile({ account, notify, description = "Manage your account de
         last_name: profile.last_name || "",
         email: profile.email || "",
         contact_number: profile.contact_number || "",
+        date_of_birth: profile.date_of_birth || "",
+        sex: profile.sex ? profile.sex.charAt(0).toUpperCase() + profile.sex.slice(1) : "",
+        ...roleDetails(profile),
       });
     }
   }, [profile]);
@@ -162,8 +263,9 @@ function AccountProfile({ account, notify, description = "Manage your account de
   const update = (key, value) => setDraft((prev) => ({ ...prev, [key]: value }));
 
   const submit = async () => {
-    if (!draft.first_name.trim() || !draft.email.trim()) {
-      setSaveError("First name and email are required.");
+    const emailOptional = profile.role === "Fish Vendor";
+    if (!draft.first_name.trim() || (!emailOptional && !draft.email.trim())) {
+      setSaveError(emailOptional ? "First name is required." : "First name and email are required.");
       return;
     }
     setSaving(true);
@@ -194,6 +296,8 @@ function AccountProfile({ account, notify, description = "Manage your account de
           {saving ? "Saving…" : "Save Changes"}
         </button>
       </div>
+
+      <ProfileProgress profile={profile} />
 
       {/* Two independent columns, so a short card never leaves a gap. */}
       <div className="profile-columns">
@@ -239,21 +343,50 @@ function AccountProfile({ account, notify, description = "Manage your account de
           </div>
 
           <div className="form-group">
-            <label>First Name</label>
-            <input value={draft.first_name} onChange={(e) => update("first_name", e.target.value)} />
+            <label htmlFor="profile-first_name">First Name</label>
+            <input id="profile-first_name" value={draft.first_name} onChange={(e) => update("first_name", e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Last Name</label>
-            <input value={draft.last_name} onChange={(e) => update("last_name", e.target.value)} />
+            <label htmlFor="profile-last_name">Last Name</label>
+            <input id="profile-last_name" value={draft.last_name} onChange={(e) => update("last_name", e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Email Address</label>
-            <input type="email" value={draft.email} onChange={(e) => update("email", e.target.value)} />
+            <label htmlFor="profile-email">Email Address{profile.role === "Fish Vendor" && <span className="optional"> (optional)</span>}</label>
+            <input id="profile-email" type="email" value={draft.email} onChange={(e) => update("email", e.target.value)} />
           </div>
           <div className="form-group">
-            <label>Contact Number</label>
-            <input value={draft.contact_number} onChange={(e) => update("contact_number", e.target.value)} />
+            <label htmlFor="profile-contact_number">Contact Number</label>
+            <input id="profile-contact_number" value={draft.contact_number} onChange={(e) => update("contact_number", e.target.value)} />
           </div>
+          <div className="form-row">
+            <div className="form-group">
+              <label htmlFor="profile-date_of_birth">Date of Birth</label>
+              <input id="profile-date_of_birth" type="date" value={draft.date_of_birth} max={new Date().toLocaleDateString("en-CA")}
+                onChange={(e) => update("date_of_birth", e.target.value)} />
+            </div>
+            <div className="form-group">
+              <label htmlFor="profile-sex">Sex</label>
+              <select id="profile-sex" value={draft.sex} onChange={(e) => update("sex", e.target.value)}>
+                <option value="">Select</option>
+                <option>Male</option>
+                <option>Female</option>
+                <option>Prefer not to say</option>
+              </select>
+            </div>
+          </div>
+          {ROLE_FIELDS[profile.role] && (
+            <>
+              <h4 className="cfg-sub">{profile.role === "Fish Vendor" ? "Your stall" : "Your office"}</h4>
+              <div className="form-row form-row-wrap">
+                {ROLE_FIELDS[profile.role].map(([key, label, type]) => (
+                  <div className="form-group" key={key}>
+                    <label htmlFor={`profile-${key}`}>{label}</label>
+                    <input id={`profile-${key}`} type={type || "text"} value={draft[key] || ""} onChange={(e) => update(key, e.target.value)} />
+                  </div>
+                ))}
+              </div>
+            </>
+          )}
 
           {saveError && <div className="warn-box" role="alert">{saveError}</div>}
 

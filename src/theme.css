@@ -2065,3 +2065,47 @@ table th {
 .species-side-info strong { font-size: 18px; color: var(--navy-900); }
 .species-side-info em { font-size: 13px; color: #667085; }
 .species-side-info .profile-badges { margin-top: 6px; }
+
+/* Possible duplicate fish names (different spellings) */
+.similar-names { border: 1px solid #fedf89; background: #fffaeb; border-radius: 14px; padding: 14px 16px; margin: 0 0 16px; }
+.similar-names-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
+.similar-names-head strong { color: #93370d; font-size: 14px; }
+.similar-names-head p { margin: 2px 0 0; font-size: 13px; color: #7a2e0e; }
+.similar-names ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
+.similar-names li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: #fff; border: 1px solid #fef0c7; border-radius: 10px; padding: 8px 12px; font-size: 13.5px; }
+.similar-names li small { color: #667085; }
+.similar-names-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.similar-names-actions .secondary-btn { padding: 6px 12px; font-size: 12.5px; }
+.similar-names-note { margin: 8px 0 0; font-size: 12px; color: #7a2e0e; }
+.import-matched { margin: 6px 0 0; }
+.import-matched li { margin: 2px 0; }
+
+/* Profile completion */
+.profile-progress { margin-bottom: 18px; }
+.profile-progress-head { display: flex; justify-content: space-between; align-items: flex-start; gap: 12px; }
+.profile-progress-head h3 { margin: 0; font-size: 16px; color: var(--navy-900); }
+.profile-progress-head p { margin: 2px 0 0; font-size: 13px; color: #667085; }
+.profile-progress-percent { font-size: 24px; color: var(--ocean); line-height: 1; }
+.profile-progress.is-complete .profile-progress-percent { color: #039855; }
+.profile-meter { height: 10px; border-radius: 999px; background: #e4e7ec; overflow: hidden; margin: 12px 0 0; }
+.profile-meter span { display: block; height: 100%; border-radius: 999px; background: linear-gradient(90deg, #0e7c86, #3fc1d9); transition: width 0.4s ease; }
+.profile-progress.is-complete .profile-meter span { background: linear-gradient(90deg, #039855, #32d583); }
+.profile-missing { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 8px; margin-top: 12px; font-size: 13px; color: #475467; }
+.profile-missing-chip {
+  border: 1px dashed #98a2b3; background: #fff; color: #344054; border-radius: 999px; padding: 4px 12px;
+  font: inherit; font-size: 12.5px; cursor: pointer;
+}
+.profile-missing-chip:hover { border-color: var(--ocean); color: var(--ocean); border-style: solid; }
+.profile-nudge {
+  display: grid; grid-template-columns: 1fr minmax(120px, 220px) auto; align-items: center; gap: 14px;
+  margin-bottom: 16px; padding: 12px 16px; border-radius: 14px; background: #f0f9ff; border: 1px solid #b9e6fe;
+}
+.profile-nudge-text { display: grid; gap: 2px; min-width: 0; }
+.profile-nudge-text strong { font-size: 14px; color: #0b4a6f; }
+.profile-nudge-text span { font-size: 12.5px; color: #475467; }
+.profile-nudge .profile-meter { margin: 0; }
+.profile-nudge .secondary-btn { white-space: nowrap; }
+.form-row-wrap { flex-wrap: wrap; }
+@media (max-width: 640px) {
+  .profile-nudge { grid-template-columns: 1fr; }
+}

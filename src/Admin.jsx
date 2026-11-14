@@ -15,8 +15,8 @@ import { API_BASE_URL, apiUrl, authHeaders, fetchAll } from "./api/config.js";
 import { fullName as profileName, useMyProfile } from "./api/account.js";
 import { listVendorSuggestions, reviewVendorSuggestion } from "./api/vendorSuggestions.js";
 import { getForecastHistory, listExternalFactors } from "./api/forecast.js";
-import { describeFilters, exportReport } from "./api/reportExport.js";
-import AccountProfile from "./components/AccountProfile.jsx";
+import { buildXlsx, describeFilters, exportReport } from "./api/reportExport.js";
+import AccountProfile, { ProfileProgress } from "./components/AccountProfile.jsx";
 import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import PriceImport from "./components/PriceImport.jsx";
 import { withRecentWindow } from "./api/prices.js";
@@ -29,6 +29,8 @@ import { FishPhotoPanel, FishPhotoView, FishPicture, FishThumb, uploadSpeciesPho
 import { AnnouncementsManager } from "./components/Announcements.jsx";
 import PagedTable from "./components/PagedTable.jsx";
 import FishNameField from "./components/FishNameField.jsx";
+import SimilarFishNames from "./components/SimilarFishNames.jsx";
+import { OtherNamesField, splitNames } from "./components/FishNameField.jsx";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -167,17 +169,14 @@ function AuditDetailsDialog({ log, onClose }) {
   </div>;
 }
 
-function exportAuditCsv(records, filename) {
-  const cols = ["Date", "User", "Role", "Module", "Action", "Affected Record", "Details"];
-  const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-  const rows = records.map(l => [formatAuditTimestamp(l.created_at), l.actor_username, l.actor_role, auditModule(l), l.action, l.target_name, formatAuditDetails(l.details)]);
-  const csv = "\uFEFF" + [cols, ...rows].map(row => row.map(quote).join(",")).join("\r\n");
-  const url = URL.createObjectURL(new Blob([csv], { type: "text/csv;charset=utf-8" }));
-  const anchor = document.createElement("a");
-  anchor.href = url;
-  anchor.download = filename;
-  anchor.click();
-  setTimeout(() => URL.revokeObjectURL(url), 1000);
+async function exportAuditCsv(records, filename) {
+  await buildXlsx({
+    title: "Activity Logs",
+    columns: ["Date & Time", "User", "Role", "Module", "Action", "Affected Record", "Details"],
+    rows: records.map((l) => [formatAuditTimestamp(l.created_at), l.actor_username, l.actor_role, auditModule(l), l.action, l.target_name, formatAuditDetails(l.details)]),
+    filename,
+    sheetName: "Activity Logs",
+  });
 }
 
 /* ================================================================
@@ -199,6 +198,7 @@ const mapDatabaseSpecies = (fish) => ({
   status: fish.is_active ? "Active" : "Inactive",
   hasPhoto: Boolean(fish.has_photo),
   photo_credit: fish.photo_credit || "",
+  aliases: Array.isArray(fish.aliases) ? fish.aliases.join(", ") : "",
   photoVersion: fish.updated_at || "",
   dateAdded: fish.created_at
     ? new Date(fish.created_at).toLocaleDateString("en-PH")
@@ -858,7 +858,10 @@ useEffect(() => {
           </div>
         </header>
 
-        <section className="content">{renderPage()}</section>
+        <section className="content">
+          {activePage === "Dashboard" && <ProfileProgress compact profile={account.profile} onOpen={() => setActivePage("Admin Profile")} />}
+          {renderPage()}
+        </section>
 
       </main>
 
@@ -2278,6 +2281,7 @@ function FishSpecies({ species, setSpecies, priceRecords, notify }) {
     price_class: form.price_class || "common",
     description: form.description.trim(),
     photo_credit: (form.photo_credit || "").trim(),
+    aliases: splitNames(form.aliases),
   };
 
   setSpeciesSaving(true);
@@ -2376,6 +2380,9 @@ const toggleStatus = async (s) => {
         <button className="primary-btn" onClick={openAdd}>+ Add Species</button>
       </div>
 
+      <SimilarFishNames notify={notify} refreshKey={species.length}
+        onMerged={() => fetchAll("/fish-species/").then((rows) => setSpecies(rows.map(mapDatabaseSpecies))).catch(() => {})} />
+
       {showForm && (
         <div className="modal-backdrop" onClick={() => setShowForm(false)}>
           <div className="modal profile-modal fish-form-modal" role="dialog" aria-modal="true" aria-labelledby="admin-species-title" onClick={(e) => e.stopPropagation()}>
@@ -2406,6 +2413,9 @@ const toggleStatus = async (s) => {
                     onChange={(name) => setForm((old) => ({ ...old, name }))}
                     onPick={(fish) => setForm((old) => ({ ...old, scientific: fish.scientific_name || old.scientific }))} />
                 </div>
+
+                <OtherNamesField id="admin-species-aliases" value={form.aliases || ""}
+                  onChange={(aliases) => setForm((old) => ({ ...old, aliases }))} />
 
                 <div className="form-group">
                   <label htmlFor="admin-species-scientific">Scientific Name</label>
@@ -2959,21 +2969,15 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
     }
   };
 
-  const exportCSV = () => {
-    const quote = (value) => `"${String(value ?? "").replaceAll('"', '""')}"`;
-    const rows = [
-      ["Date", "Species", "Municipality", "Price", "Entered By", "Status"],
-      ...visible.map((r) => [r.date, r.species, r.municipality, r.price.toFixed(2), r.enteredBy, r.status]),
-    ];
-    const blob = new Blob(["﻿" + rows.map((row) => row.map(quote).join(",")).join("\r\n")], { type: "text/csv;charset=utf-8;" });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    a.href = url;
-    a.download = "price_records.csv";
-    a.click();
-    setTimeout(() => URL.revokeObjectURL(url), 1000);
-
-    notify("Price records exported.");
+  const exportCSV = async () => {
+    await buildXlsx({
+      title: "Price Records",
+      columns: ["Date", "Fish Species", "Municipality", "Price per kg", "Entered By", "Status"],
+      rows: visible.map((r) => [r.date, r.species, r.municipality, r.price, r.enteredBy, r.status]),
+      filename: `aquatimbang_price_records_${new Date().toLocaleDateString("en-CA")}.xlsx`,
+      sheetName: "Price Records",
+    });
+    notify("Price records exported to Excel.");
   };
 
   const badgeFor = (status) => ({ Published: "success", Flagged: "flagged", Rejected: "deleted", Approved: "approved" }[status] || "pending");
@@ -2996,7 +3000,7 @@ function PriceRecords({ priceRecords, error, species, municipalities, onChanged,
           <h2>Price Records</h2>
           <p>View, filter, and audit price entries. Published prices from the last 12 months are shown; older history appears in Price Trends and Reports when you choose an older date range.</p>
         </div>
-        <button className="secondary-btn" onClick={exportCSV} disabled={!visible.length}>↓ Export CSV</button>
+        <button className="secondary-btn" onClick={exportCSV} disabled={!visible.length}>↓ Export Excel</button>
       </div>
 
       {error && <div className="warn-box" role="alert">{error}</div>}
@@ -3310,10 +3314,10 @@ function ActivityLogs({ notify }) {
         </div>
         <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
           <button className="secondary-btn" onClick={refresh} disabled={loading}>↻ Refresh</button>
-          <button className="secondary-btn" disabled={!visible.length} onClick={() => {
-            exportAuditCsv(visible, "aquatimbang_activity_logs.csv");
-            notify("Activity logs exported.");
-          }}>↓ Export CSV</button>
+          <button className="secondary-btn" disabled={!visible.length} onClick={async () => {
+            await exportAuditCsv(visible, `aquatimbang_activity_logs_${new Date().toLocaleDateString("en-CA")}.xlsx`);
+            notify("Activity logs exported to Excel.");
+          }}>↓ Export Excel</button>
         </div>
       </div>
       <div className="log-summary">
@@ -3883,7 +3887,8 @@ function ReportsManagement({ users, species, logs, priceRecords, notify }) {
           <p>Generate reports across users, species, system activity, price data, and external factors.</p>
         </div>
         <div className="filter-row">
-          <button className="secondary-btn" onClick={() => exportAs("CSV")} disabled={!rows.length || exporting !== ""}>{exporting === "CSV" ? "Exporting…" : "↓ Export CSV"}</button>
+          <button className="secondary-btn" onClick={() => exportAs("CSV")} disabled={!rows.length || exporting !== ""}>{exporting === "CSV" ? "Exporting…" : "↓ CSV"}</button>
+          <button className="secondary-btn" onClick={() => exportAs("XLSX")} disabled={!rows.length || exporting !== ""}>{exporting === "XLSX" ? "Exporting…" : "↓ Export Excel"}</button>
           <button className="primary-btn" onClick={() => exportAs("PDF")} disabled={!rows.length || exporting !== ""}>{exporting === "PDF" ? "Exporting…" : "↓ Export PDF"}</button>
         </div>
       </div>

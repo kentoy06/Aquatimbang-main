@@ -469,7 +469,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         send_to_review = bool(request.data.get("send_to_review"))
 
         from .validators import clean_fish_name
-        from .species_tools import known_scientific_name, name_key as plain_key
+        from .species_tools import add_alias, find_same_fish, known_scientific_name, name_key as plain_key
 
         # Match names after tidying them, ignoring capitals, spaces and
         # hyphens: "lapu lapu", "Lapu-lapu", "LAPULAPU" and "lapu2x" are all
@@ -477,7 +477,10 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         def name_key(value):
             return plain_key(clean_fish_name(value))
 
-        species = {name_key(fish.name): fish for fish in FishSpecies.objects.all()}
+        all_fish = list(FishSpecies.objects.all())
+        species = {name_key(fish.name): fish for fish in all_fish}
+        matched_fish = {}
+        matched_names = {}
         # Fish not in AquaTimbang yet are added with a tidy name ("bangus" -> "Bangus").
         new_fish = {}
 
@@ -487,7 +490,20 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                 return None
             if key in species:
                 return species[key]
+            if key in matched_fish:
+                return matched_fish[key]
             if key not in new_fish:
+                # Another spelling of a fish already in the list (or added
+                # earlier in this import), e.g. "Andohaw" for "Anduhaw".
+                how, same = find_same_fish(raw, all_fish + list(new_fish.values()))
+                if same is not None:
+                    matched_fish[key] = same
+                    matched_names[str(raw).strip()] = {"fish": same.name, "how": how}
+                    if not dry_run and same.pk and same.pk > 0:
+                        # Remember this spelling so the next import matches it at once.
+                        add_alias(same, clean_fish_name(raw)[:100])
+                        same.save(update_fields=["aliases"])
+                    return same
                 name = clean_fish_name(raw)[:100]
                 if len(name) < 2 or not any(ch.isalpha() for ch in name):
                     return None
@@ -666,6 +682,8 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             "last_date": max(all_dates).isoformat() if all_dates else None,
             # Fish that were not in AquaTimbang: added (or, on a check, will be added).
             "new_fish": sorted(f.name for f in new_fish.values()),
+            # Names read as another spelling of a fish already in the list.
+            "matched_names": [{"from": raw, **info} for raw, info in sorted(matched_names.items())],
         })
     def _log_price(self, action, record, details=None):
         user = self.request.user
@@ -1359,11 +1377,31 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
         """
         from .species_tools import KNOWN_FISH, name_key
         rows = {}
-        for name, scientific in FishSpecies.objects.values_list("name", "scientific_name"):
-            rows[name_key(name)] = {"name": name, "scientific_name": scientific or "", "registered": True}
+        for name, scientific, aliases in FishSpecies.objects.values_list("name", "scientific_name", "aliases"):
+            rows[name_key(name)] = {"name": name, "scientific_name": scientific or "", "registered": True, "aliases": aliases or []}
         for name, scientific in KNOWN_FISH:
             rows.setdefault(name_key(name), {"name": name, "scientific_name": scientific, "registered": False})
         return Response(sorted(rows.values(), key=lambda row: row["name"].lower()))
+
+    @action(detail=False, methods=["get"], url_path="similar-names")
+    def similar_names(self, request):
+        """
+        Pairs of fish whose names look like spellings of one name (e.g.
+        "Anduhaw" and "Andohaw"), with their price counts, so the LGU can merge
+        them. The fish with more prices is suggested as the one to keep.
+        """
+        from django.db.models import Count
+        from .species_tools import similar_pairs
+        fishes = list(FishSpecies.objects.annotate(price_total=Count("price_records")))
+        pairs = []
+        for a, b, ratio in similar_pairs(fishes):
+            keep, other = (a, b) if (a.price_total, -a.pk) >= (b.price_total, -b.pk) else (b, a)
+            pairs.append({
+                "keep": {"id": keep.pk, "name": keep.name, "prices": keep.price_total},
+                "other": {"id": other.pk, "name": other.name, "prices": other.price_total},
+                "similarity": ratio,
+            })
+        return Response(pairs[:50])
 
     @action(detail=True, methods=["get"], url_path="usage")
     def usage(self, request, pk=None):
@@ -1554,8 +1592,9 @@ def update_species_sold(profile, value):
 @transaction.atomic
 def my_profile(request):
     """
-    Read or update the logged-in user's own profile.
-    Only names, email and contact number can be changed here.
+    Read or update the logged-in user's own profile: names, email (optional
+    for Fish Vendors), contact number, date of birth, sex, and the vendor's or
+    LGU officer's registration details. Uploaded documents are not changed here.
     """
     user = request.user
     profile = getattr(user, "aquatimbang_profile", None)
@@ -1574,7 +1613,10 @@ def my_profile(request):
                 errors[field] = "Must be text."
                 continue
             value = value.strip()
-            if field in ("first_name", "email") and not value:
+            email_optional = field == "email" and profile.role and profile.role.name == "Fish Vendor"
+            if field == "email" and not value and email_optional:
+                user.email = ""
+            elif field in ("first_name", "email") and not value:
                 errors[field] = "This field is required."
             elif field == "email":
                 from django.core.validators import validate_email
@@ -1602,11 +1644,61 @@ def my_profile(request):
             error = update_species_sold(profile, request.data.get("species_sold"))
             if error:
                 errors["species_sold"] = error
+        # Personal details the user can complete later.
+        if "date_of_birth" in request.data:
+            from datetime import date as date_cls
+            raw = str(request.data.get("date_of_birth") or "").strip()
+            if not raw:
+                profile.date_of_birth = None
+            else:
+                try:
+                    born = date_cls.fromisoformat(raw)
+                    today = timezone.localdate()
+                    age = today.year - born.year - ((today.month, today.day) < (born.month, born.day))
+                    if not 15 <= age <= 100:
+                        errors["date_of_birth"] = "Enter a valid date of birth."
+                    else:
+                        profile.date_of_birth = born
+                except ValueError:
+                    errors["date_of_birth"] = "Enter a valid date of birth."
+        if "sex" in request.data:
+            choices = {"": "", "male": "Male", "female": "Female", "prefer not to say": "Prefer not to say"}
+            sex = str(request.data.get("sex") or "").strip().lower()
+            if sex not in choices:
+                errors["sex"] = "Choose Male, Female, or Prefer not to say."
+            else:
+                profile.sex = choices[sex]
+        # Registration details of a vendor or an LGU officer.
+        detail_fields = {
+            "Fish Vendor": ("vendor_verification", FishVendorVerification, {"market_name": 150, "stall_number": 50, "permit_number": 100}),
+            "LGU Officer": ("lgu_verification", LGUOfficerVerification, {"department": 150, "position": 150, "employee_id": 100, "official_email": 254}),
+        }.get(profile.role.name if profile.role else "")
+        if detail_fields:
+            related, model, limits = detail_fields
+            sent = {k: request.data[k] for k in limits if k in request.data}
+            if sent:
+                record = getattr(profile, related, None) or model(profile=profile)
+                for name, value in sent.items():
+                    value = str(value or "").strip()
+                    if len(value) > limits[name]:
+                        errors[name] = f"Must be at most {limits[name]} characters."
+                    elif name == "official_email" and value:
+                        from django.core.validators import validate_email
+                        from django.core.exceptions import ValidationError as DjangoValidationError
+                        try:
+                            validate_email(value)
+                            setattr(record, name, value)
+                        except DjangoValidationError:
+                            errors[name] = "Enter a valid email address."
+                    else:
+                        setattr(record, name, value)
+                if not errors:
+                    record.save()
         if errors:
             transaction.set_rollback(True)
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)
         user.save(update_fields=["first_name", "last_name", "email"])
-        profile.save(update_fields=["contact_number", "updated_at"])
+        profile.save(update_fields=["contact_number", "date_of_birth", "sex", "updated_at"])
     return Response(serialize_own_profile(user, profile), status=status.HTTP_200_OK)
 @api_view(["GET", "POST", "DELETE"])
 @permission_classes([IsAuthenticated])
@@ -3820,8 +3912,10 @@ def reports(request):
         row_count = 0
     if not isinstance(report_type, str) or not report_type.strip() or len(report_type) > 100:
         return Response({"report_type": "Give the report type."}, status=status.HTTP_400_BAD_REQUEST)
-    if fmt not in (ReportLog.FORMAT_PDF, ReportLog.FORMAT_CSV):
-        return Response({"format": "Format must be PDF or CSV."}, status=status.HTTP_400_BAD_REQUEST)
+    if fmt in ("EXCEL", "XLS"):
+        fmt = ReportLog.FORMAT_XLSX
+    if fmt not in (ReportLog.FORMAT_PDF, ReportLog.FORMAT_CSV, ReportLog.FORMAT_XLSX):
+        return Response({"format": "Format must be PDF, CSV or XLSX."}, status=status.HTTP_400_BAD_REQUEST)
     if not isinstance(parameters, dict):
         return Response({"parameters": "Parameters must be an object."}, status=status.HTTP_400_BAD_REQUEST)
 

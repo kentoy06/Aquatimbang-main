@@ -2633,6 +2633,36 @@ class FishNameVariantTests(StallSampleTests):
         self.assertFalse(rows["Bolinaw"]["registered"])
         self.assertEqual(rows["Bolinaw"]["scientific_name"], "Stolephorus spp.")
 
+    def test_spelling_variants_map_to_the_same_fish(self):
+        anduhaw = FishSpecies.objects.create(name="Anduhaw")
+        rows = [
+            {"row": 2, "date": "2026-01-05", "fish": "Andohaw", "municipality": "Sample City", "price": "150"},
+            {"row": 3, "date": "2026-01-05", "fish": "Bolinao", "municipality": "Sample City", "price": "120"},
+            {"row": 4, "date": "2026-01-06", "fish": "Bolinaw", "municipality": "Sample City", "price": "121"},
+        ]
+        check = self.client.post("/api/prices/import/", {"rows": rows, "dry_run": True}, format="json").data
+        self.assertIn({"from": "Andohaw", "fish": "Anduhaw", "how": "spelling"}, check["matched_names"])
+        done = self.client.post("/api/prices/import/", {"rows": rows}, format="json").data
+        self.assertEqual(done["imported"], 3, done)
+        self.assertEqual(PriceRecord.objects.filter(fish_species=anduhaw).count(), 1)
+        self.assertEqual(FishSpecies.objects.filter(name__in=["Bolinao", "Bolinaw"]).count(), 1)  # one fish, not two
+        self.assertIn("Andohaw", FishSpecies.objects.get(pk=anduhaw.pk).aliases)  # remembered
+        # Adding the variant by hand is refused with a clear message.
+        response = self.client.post("/api/fish-species/", {"name": "andohaw"}, format="json")
+        self.assertEqual(response.status_code, 400)
+        self.assertIn("another spelling of Anduhaw", str(response.data))
+
+    def test_similar_names_and_merge_keeps_the_spelling(self):
+        keep = FishSpecies.objects.create(name="Timbongan")
+        other = FishSpecies.objects.create(name="Timbungan")
+        PriceRecord.objects.create(fish_species=keep, municipality=self.place, price_per_kg=Decimal("150"),
+                                   recorded_date=datetime.date(2026, 1, 5), status="published")
+        pairs = self.client.get("/api/fish-species/similar-names/").data
+        self.assertEqual((pairs[0]["keep"]["name"], pairs[0]["other"]["name"]), ("Timbongan", "Timbungan"))
+        self.assertEqual(self.client.post(f"/api/fish-species/{other.pk}/merge/", {"into": keep.pk}, format="json").status_code, 200)
+        self.assertIn("Timbungan", FishSpecies.objects.get(pk=keep.pk).aliases)
+        self.assertEqual(self.client.get("/api/fish-species/similar-names/").data, [])
+
     def test_cleanup_merges_spelling_variants(self):
         from importlib import import_module
         from django.apps import apps as django_apps
@@ -2714,3 +2744,18 @@ class MarketPriceTests(StallSampleTests):
         self.assertEqual([e["row"] for e in done["errors"]], [5])
         self.assertEqual(PriceRecord.objects.filter(market=self.pasil).count(), 2)
         self.assertEqual(PriceRecord.objects.filter(market=self.carbon).count(), 1)
+
+
+class ProfileCompletionTests(StallSampleTests):
+    """Users can complete their own profile details later."""
+
+    def test_officer_completes_details(self):
+        response = self.client.patch("/api/auth/me/", {
+            "date_of_birth": "1990-05-04", "sex": "female",
+            "department": "DVMF", "position": "Market Inspector", "official_email": "officer@cebucity.gov.ph",
+        }, format="json")
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertEqual(response.data["date_of_birth"], "1990-05-04")
+        self.assertEqual(response.data["verification"]["details"]["department"], "DVMF")
+        self.assertEqual(self.client.patch("/api/auth/me/", {"date_of_birth": "2024-01-01"}, format="json").status_code, 400)
+        self.assertEqual(self.client.patch("/api/auth/me/", {"official_email": "not-an-email"}, format="json").status_code, 400)

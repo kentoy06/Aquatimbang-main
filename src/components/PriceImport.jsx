@@ -19,7 +19,7 @@ async function sendChunk(rows, source, dryRun, options) {
 
 // Send all rows in chunks and add up the results.
 async function runImport(rows, source, dryRun, onProgress, options = {}) {
-  const total = { ready: 0, imported: 0, already_recorded: 0, error_count: 0, errors: [], first_date: null, last_date: null, new_fish: [] };
+  const total = { ready: 0, imported: 0, already_recorded: 0, error_count: 0, errors: [], first_date: null, last_date: null, new_fish: [], matched_names: [] };
   for (let start = 0; start < rows.length; start += CHUNK) {
     const result = await sendChunk(rows.slice(start, start + CHUNK), source, dryRun, options);
     total.ready += result.ready;
@@ -28,6 +28,7 @@ async function runImport(rows, source, dryRun, onProgress, options = {}) {
     total.error_count += result.error_count;
     total.errors.push(...result.errors);
     (result.new_fish || []).forEach((name) => { if (!total.new_fish.includes(name)) total.new_fish.push(name); });
+    (result.matched_names || []).forEach((m) => { if (!total.matched_names.some((x) => x.from === m.from)) total.matched_names.push(m); });
     if (result.first_date && (!total.first_date || result.first_date < total.first_date)) total.first_date = result.first_date;
     if (result.last_date && (!total.last_date || result.last_date > total.last_date)) total.last_date = result.last_date;
     onProgress(Math.min(rows.length, start + CHUNK));
@@ -325,6 +326,15 @@ export default function PriceImport({ notify, onImported }) {
                     <p style={{ margin: "6px 0 0" }}>
                       🐟 <strong>{check.new_fish.length} new fish will be added</strong> to Fish Species: {check.new_fish.join(", ")}.
                     </p>
+                  )}
+                  {check.matched_names?.length > 0 && (
+                    <div style={{ margin: "6px 0 0" }}>
+                      🔤 <strong>{check.matched_names.length} name{check.matched_names.length === 1 ? " was" : "s were"} read as another spelling</strong> of a fish already in the list:
+                      <ul className="import-matched">
+                        {check.matched_names.map((m) => <li key={m.from}>"{m.from}" → <strong>{m.fish}</strong></li>)}
+                      </ul>
+                      <small>If one of these is really a different fish, untick it, then add it in Fish Species first.</small>
+                    </div>
                   )}
                 </div>
               )}

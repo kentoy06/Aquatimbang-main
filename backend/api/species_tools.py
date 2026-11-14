@@ -61,6 +61,86 @@ KNOWN_FISH = [
 KNOWN_SCIENTIFIC_NAMES = {name_key(name): scientific for name, scientific in KNOWN_FISH}
 
 
+def spelling_key(value):
+    """
+    Key that ignores common Cebuano/Filipino spelling differences, so that
+    "Anduhaw" and "Andohaw", "Bisugo" and "Bisogo", or "Tulingan" and
+    "Tolingan", or "Lagao" and "Lagaw" are recognized as the same fish: a
+    final or inner "ao" is read as "aw", o as u, e as i, and repeated letters
+    count once.
+    """
+    key = name_key(value).replace("ao", "aw").replace("o", "u").replace("e", "i")
+    out = []
+    for ch in key:
+        if not out or out[-1] != ch:
+            out.append(ch)
+    return "".join(out)
+
+
+def similarity(a, b):
+    from difflib import SequenceMatcher
+    return SequenceMatcher(None, spelling_key(a), spelling_key(b)).ratio()
+
+
+# Names this similar (after spelling_key) are probably the same fish.
+SIMILAR_RATIO = 0.86
+
+
+def names_of(fish):
+    return [fish.name, *[a for a in (fish.aliases or []) if a]]
+
+
+def find_same_fish(name, fishes):
+    """
+    The existing fish that `name` most likely refers to, and how it matched:
+    ("exact" | "alias" | "spelling" | "similar", fish), or (None, None).
+    """
+    key = name_key(name)
+    if not key:
+        return None, None
+    for fish in fishes:
+        if name_key(fish.name) == key:
+            return "exact", fish
+    for fish in fishes:
+        if any(name_key(a) == key for a in (fish.aliases or [])):
+            return "alias", fish
+    folded = spelling_key(name)
+    same = [f for f in fishes if any(spelling_key(n) == folded for n in names_of(f))]
+    if len(same) == 1:
+        return "spelling", same[0]
+    if len(key) >= 5:
+        scored = sorted(
+            ((max(similarity(name, n) for n in names_of(f)), f) for f in fishes),
+            key=lambda pair: -pair[0],
+        )
+        if scored and scored[0][0] >= SIMILAR_RATIO and (len(scored) == 1 or scored[1][0] < scored[0][0]):
+            return "similar", scored[0][1]
+    return None, None
+
+
+def similar_pairs(fishes):
+    """Pairs of different fish whose names look like spellings of one name."""
+    pairs = []
+    fishes = list(fishes)
+    for i, a in enumerate(fishes):
+        for b in fishes[i + 1:]:
+            ratio = max(similarity(x, y) for x in names_of(a) for y in names_of(b))
+            if spelling_key(a.name) == spelling_key(b.name) or ratio >= SIMILAR_RATIO:
+                pairs.append((a, b, round(ratio, 2)))
+    return sorted(pairs, key=lambda p: -p[2])
+
+
+def add_alias(fish, *names):
+    """Remember other spellings of a fish (no duplicates, not its own name)."""
+    current = list(fish.aliases or [])
+    keys = {name_key(fish.name), *(name_key(a) for a in current)}
+    for name in names:
+        if name and name_key(name) not in keys:
+            current.append(name)
+            keys.add(name_key(name))
+    fish.aliases = current
+
+
 def known_scientific_name(common_name):
     return KNOWN_SCIENTIFIC_NAMES.get(name_key(common_name), "")
 
@@ -90,7 +170,8 @@ def merge_species(source, target, PriceRecord, VendorPriceSuggestion, WeightEntr
         vendor.species_sold.add(target)
     for season in ClosedFishingSeason.objects.filter(species=source):
         season.species.add(target)
-    changed = []
+    changed = ["aliases"]
+    add_alias(target, source.name, *(source.aliases or []))
     if not target.scientific_name and source.scientific_name:
         target.scientific_name = source.scientific_name
         changed.append("scientific_name")
