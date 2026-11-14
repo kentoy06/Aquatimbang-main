@@ -3,6 +3,7 @@ import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
 import FishNameField from "./components/FishNameField.jsx";
 import PriceRecommendations from "./components/PriceRecommendations.jsx";
 import SimilarFishNames from "./components/SimilarFishNames.jsx";
+import SpeciesFilterBar, { sortSpecies } from "./components/SpeciesFilterBar.jsx";
 import { OtherNamesField, splitNames } from "./components/FishNameField.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
@@ -963,6 +964,8 @@ function LGUFishSpeciesManagement({ notify }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("name");
   const [editing, setEditing] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [form, setForm] = useState({ name: "", scientific_name: "", price_class: "common", description: "", photo_credit: "" });
@@ -1074,8 +1077,13 @@ function LGUFishSpeciesManagement({ notify }) {
     }
   };
 
-  const filtered = species.filter((item) =>
-    `${item.name} ${item.scientific_name || ""}`.toLowerCase().includes(search.toLowerCase())
+  const filtered = sortSpecies(
+    species.filter((item) =>
+      (statusFilter === "all" || (statusFilter === "Active") === Boolean(item.is_active)) &&
+      `${item.name} ${item.scientific_name || ""}`.toLowerCase().includes(search.toLowerCase())
+    ),
+    sortBy,
+    { name: (s) => s.name, created: (s) => s.created_at || "", prices: (s) => s.price_count ?? s.prices ?? 0 },
   );
 
   return (
@@ -1096,8 +1104,12 @@ function LGUFishSpeciesManagement({ notify }) {
             <h3>Registered Fish Species</h3>
             <p>{species.length} species · {species.filter((item) => item.is_active).length} active</p>
           </div>
-          <input aria-label="Search fish species" placeholder="Search species..." value={search}
-            onChange={(event) => setSearch(event.target.value)} style={{ padding: 10, maxWidth: 260, width: "100%" }} />
+          <div className="species-tools">
+            <input aria-label="Search fish species" placeholder="Search species..." value={search}
+              onChange={(event) => setSearch(event.target.value)} style={{ padding: 10, maxWidth: 260, width: "100%" }} />
+            <SpeciesFilterBar status={statusFilter} onStatus={setStatusFilter} sort={sortBy} onSort={setSortBy} showPrices={false}
+              counts={{ all: species.length, Active: species.filter((s) => s.is_active).length, Inactive: species.filter((s) => !s.is_active).length }} />
+          </div>
         </div>
         {error && <div className="info-box" role="alert">{error} <button className="secondary-btn" onClick={loadSpecies}>Retry</button></div>}
         <div style={{ overflowX: "auto" }}>

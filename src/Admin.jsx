@@ -31,6 +31,7 @@ import { AnnouncementsManager } from "./components/Announcements.jsx";
 import PagedTable from "./components/PagedTable.jsx";
 import FishNameField from "./components/FishNameField.jsx";
 import SimilarFishNames from "./components/SimilarFishNames.jsx";
+import SpeciesFilterBar, { sortSpecies } from "./components/SpeciesFilterBar.jsx";
 import { OtherNamesField, splitNames } from "./components/FishNameField.jsx";
 
 // Loaded only when the forecast page opens (the chart library is large).
@@ -204,6 +205,7 @@ const mapDatabaseSpecies = (fish) => ({
   dateAdded: fish.created_at
     ? new Date(fish.created_at).toLocaleDateString("en-PH")
     : "—",
+  createdAt: fish.created_at || "",
 });
 
 const fmtDate = (isoStr) => {
@@ -2189,17 +2191,24 @@ const submitReview = async () => {
 
 function FishSpecies({ species, setSpecies, priceRecords, notify }) {
   const [search, setSearch] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [sortBy, setSortBy] = useState("name");
   const [showForm, setShowForm] = useState(false);
   const [editing, setEditing] = useState(null);
   const [viewing, setViewing] = useState(null);
   const [form, setForm] = useState({ name: "", scientific: "", price_class: "common", description: "", photo_credit: "" });
   const [photoFile, setPhotoFile] = useState(null);
   const [speciesSaving, setSpeciesSaving] = useState(false);
-  const visible = species.filter((s) =>
-    [s.name, s.scientific, s.description].join(" ").toLowerCase().includes(search.toLowerCase())
-  );
-
   const recordsFor = (name) => priceRecords.filter((r) => r.species === name && r.status !== "Deleted");
+  const priceCount = Object.fromEntries(species.map((s) => [s.name, recordsFor(s.name).length]));
+  const visible = sortSpecies(
+    species.filter((s) =>
+      (statusFilter === "all" || s.status === statusFilter) &&
+      [s.name, s.scientific, s.description].join(" ").toLowerCase().includes(search.toLowerCase())
+    ),
+    sortBy,
+    { name: (s) => s.name, created: (s) => s.createdAt, prices: (s) => priceCount[s.name] || 0 },
+  );
 
   const openAdd = () => {
     setEditing(null);
@@ -2514,6 +2523,8 @@ const toggleStatus = async (s) => {
               onChange={(e) => setSearch(e.target.value)}
             />
           </div>
+          <SpeciesFilterBar status={statusFilter} onStatus={setStatusFilter} sort={sortBy} onSort={setSortBy}
+            counts={{ all: species.length, Active: species.filter((s) => s.status === "Active").length, Inactive: species.filter((s) => s.status === "Inactive").length }} />
         </div>
 
         <PagedTable>

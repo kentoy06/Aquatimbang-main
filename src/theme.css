@@ -2067,16 +2067,34 @@ table th {
 .species-side-info .profile-badges { margin-top: 6px; }
 
 /* Possible duplicate fish names (different spellings) */
-.similar-names { border: 1px solid #fedf89; background: #fffaeb; border-radius: 14px; padding: 14px 16px; margin: 0 0 16px; }
-.similar-names-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; }
-.similar-names-head strong { color: #93370d; font-size: 14px; }
-.similar-names-head p { margin: 2px 0 0; font-size: 13px; color: #7a2e0e; }
-.similar-names ul { list-style: none; margin: 10px 0 0; padding: 0; display: grid; gap: 8px; }
-.similar-names li { display: flex; justify-content: space-between; align-items: center; gap: 10px; flex-wrap: wrap; background: #fff; border: 1px solid #fef0c7; border-radius: 10px; padding: 8px 12px; font-size: 13.5px; }
-.similar-names li small { color: #667085; }
-.similar-names-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.similar-names { border: 1px solid #fedf89; background: #fffaeb; border-radius: 14px; margin: 0 0 16px; overflow: hidden; }
+.similar-names-bar { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 16px; background: none; border: 0; text-align: left; cursor: pointer; font: inherit; }
+.similar-names-icon { width: 34px; height: 34px; border-radius: 10px; background: #fef0c7; color: #b54708; display: grid; place-items: center; flex: none; font-size: 16px; }
+.similar-names-text { flex: 1; display: grid; gap: 2px; min-width: 0; }
+.similar-names-text strong { color: #93370d; font-size: 14.5px; }
+.similar-names-text small { color: #7a2e0e; font-size: 12.5px; }
+.similar-names-toggle { flex: none; font-weight: 700; font-size: 13px; color: #b54708; background: #fff; border: 1px solid #fedf89; border-radius: 999px; padding: 6px 14px; }
+.similar-names-body { border-top: 1px solid #fedf89; background: #fff; padding: 14px 16px; }
+.similar-names-tools { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-bottom: 10px; }
+.similar-names-tools input { padding: 9px 12px; border: 1px solid #d0d5dd; border-radius: 10px; min-width: 220px; font: inherit; }
+.similar-names-tools .muted-text { font-size: 12.5px; }
+.similar-names-table { border: 1px solid #eaecf0; border-radius: 12px; overflow: hidden; }
+.similar-names-row { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 12px; align-items: center; padding: 10px 14px; border-top: 1px solid #f2f4f7; font-size: 13.5px; }
+.similar-names-row:first-child { border-top: 0; }
+.similar-names-row.head { background: #f8fafc; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #667085; }
+.similar-names-row.empty { display: block; color: #667085; }
+.similar-names-row span { display: grid; gap: 1px; min-width: 0; }
+.similar-names-row small { color: #667085; font-size: 12px; }
+.similar-names-actions { display: flex !important; gap: 8px; flex-wrap: wrap; justify-content: flex-end; }
 .similar-names-actions .secondary-btn { padding: 6px 12px; font-size: 12.5px; }
-.similar-names-note { margin: 8px 0 0; font-size: 12px; color: #7a2e0e; }
+.similar-names-foot { display: flex; justify-content: space-between; align-items: center; gap: 12px; flex-wrap: wrap; margin-top: 10px; font-size: 12.5px; }
+.similar-names-pager { display: flex; align-items: center; gap: 10px; }
+.similar-names-pager .secondary-btn { padding: 6px 12px; font-size: 12.5px; }
+@media (max-width: 720px) {
+  .similar-names-row { grid-template-columns: 1fr 1fr; }
+  .similar-names-row.head span:last-child { display: none; }
+  .similar-names-actions { grid-column: 1 / -1; justify-content: flex-start; }
+}
 .import-matched { margin: 6px 0 0; }
 .import-matched li { margin: 2px 0; }
 
@@ -2157,9 +2175,26 @@ table th {
 .fp-suggesters { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .fp-suggesters li { background: #f1f5f9; border-radius: 999px; padding: 4px 10px; font-size: 13px; color: #334155; }
 
-/* Tabs for pages grouped under one menu item */
-.page-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line, #e2e8f0); margin: 0 0 18px; }
-.page-tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; font: inherit; font-weight: 600; color: var(--muted, #64748b); cursor: pointer; margin-bottom: -1px; }
-.page-tabs button:hover { color: var(--ink, #0f172a); }
-.page-tabs button.active { color: var(--ink, #0f172a); border-bottom-color: var(--accent, #f97316); }
-@media (max-width: 640px) { .page-tabs { flex-wrap: nowrap; overflow-x: auto; } .page-tabs button { white-space: nowrap; } }
+/* Tabs for pages grouped under one menu item: large, labelled buttons
+   with an icon, easy to tap for first-time users. */
+.page-tabs { display: flex; gap: 8px; flex-wrap: wrap; margin: 0 0 20px; padding: 6px; background: #eef2f6; border-radius: 16px; width: fit-content; max-width: 100%; }
+.page-tabs button { display: inline-flex; align-items: center; gap: 8px; min-height: 44px; padding: 8px 16px; border: 0; border-radius: 12px; background: transparent; font: inherit; font-weight: 600; font-size: 14.5px; color: #475467; cursor: pointer; transition: background .15s, color .15s, box-shadow .15s; }
+.page-tabs button:hover { background: rgba(255,255,255,.7); color: #101828; }
+.page-tabs button.active { background: #fff; color: #0b4a6f; box-shadow: 0 1px 3px rgba(16,24,40,.12); }
+.page-tabs button:focus-visible { outline: 3px solid #fdba74; outline-offset: 2px; }
+.page-tab-icon { width: 28px; height: 28px; border-radius: 8px; display: grid; place-items: center; background: #e0f2fe; font-size: 15px; flex: none; }
+.page-tabs button.active .page-tab-icon { background: #f97316; color: #fff; }
+@media (max-width: 640px) {
+  .page-tabs { width: 100%; flex-wrap: nowrap; overflow-x: auto; }
+  .page-tabs button { white-space: nowrap; flex: 1 0 auto; justify-content: center; }
+}
+/* Fish list filters */
+.species-filter-bar { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.species-tools { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
+.segmented { display: inline-flex; background: #eef2f6; border-radius: 12px; padding: 4px; gap: 2px; }
+.segmented button { border: 0; background: transparent; padding: 7px 12px; border-radius: 9px; font: inherit; font-size: 13px; font-weight: 600; color: #475467; cursor: pointer; display: inline-flex; gap: 6px; align-items: center; }
+.segmented button small { background: #fff; border-radius: 999px; padding: 0 7px; font-size: 11px; color: #667085; }
+.segmented button.active { background: #fff; color: #0b4a6f; box-shadow: 0 1px 2px rgba(16,24,40,.1); }
+.segmented button.active small { background: #e0f2fe; color: #0b4a6f; }
+.sort-select { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #475467; font-weight: 600; }
+.sort-select select { padding: 8px 10px; border-radius: 10px; border: 1px solid #d0d5dd; font: inherit; font-weight: 500; background: #fff; }
