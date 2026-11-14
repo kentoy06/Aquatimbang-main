@@ -2824,7 +2824,7 @@ class PriceRecommendationTests(StallSampleTests):
         self.assertEqual((row["history_median"], row["vendor_median"], row["vendor_count"]), (200.0, 240.0, 5))
         self.assertEqual(row["vendor_weight"], 0.5)          # 5 vendors x 0.1
         self.assertEqual(row["recommended_price"], 220.0)    # 0.5 x 200 + 0.5 x 240
-        self.assertIn("100% of 5 vendors", row["basis"])
+        self.assertIn("5 of 5 vendors (100%)", row["basis"])
 
     def submit(self, vendor, price, category, comment=""):
         self.client.force_authenticate(vendor)
@@ -2842,23 +2842,54 @@ class PriceRecommendationTests(StallSampleTests):
     def test_vendor_agreement_publishes_automatically(self):
         self.submit(self.vendors[0], 150, "fuel_price", "Mahal ang krudo")
         self.submit(self.vendors[1], 240, "fuel_price")
-        self.assertFalse(self.auto_records().exists())  # 2 vendors are not enough
         self.submit(self.vendors[2], 240, "fuel_price", "diesel went up")
-        record = self.auto_records().get()
+        # Same reason, but ₱150 is far from the others' ₱240: only 2 agree.
+        self.assertFalse(self.auto_records().exists())
+        self.submit(self.vendors[3], 240, "fuel_price")
+        record = self.auto_records().get()   # 3 of 4 (75%) agree
         self.assertEqual(record.status, "published")
         self.assertEqual(record.market, self.market)
-        # history 200, vendors' median 240, weight 0.3 -> 212
+        # history 200, agreeing vendors' median 240, weight 0.3 -> 212
         self.assertEqual(record.price_per_kg, Decimal("212.00"))
         self.assertIn("Main reason: Higher fuel", record.remarks)
-        # A 4th agreeing vendor updates the same automatic price.
-        self.submit(self.vendors[3], 240, "fuel_price")
+        # A 5th agreeing vendor updates the same automatic price.
+        self.submit(self.vendors[4], 240, "fuel_price")
         record.refresh_from_db()
         self.assertEqual(self.auto_records().count(), 1)
         self.assertEqual(record.price_per_kg, Decimal("216.00"))
         self.assertTrue(ActivityLog.objects.filter(action="auto-published", target_id=record.pk).exists())
         self.assertTrue(ActivityLog.objects.filter(action="auto-updated", target_id=record.pk).exists())
-        # The automatic price is part of the published history the forecast uses.
         self.assertTrue(PriceRecord.objects.filter(status="published", recorded_date=timezone.localdate()).exists())
+
+    def test_admin_settings_change_the_rule(self):
+        from .models import SystemSetting
+        settings = SystemSetting.load()
+        settings.auto_publish_min_vendors = 2
+        settings.save()
+        self.submit(self.vendors[0], 240, "fuel_price")
+        self.submit(self.vendors[1], 245, "fuel_price")
+        self.assertTrue(self.auto_records().exists())   # 2 vendors are enough now
+
+    def test_switched_off_does_not_publish(self):
+        from .models import SystemSetting
+        settings = SystemSetting.load()
+        settings.auto_publish_enabled = False
+        settings.save()
+        for vendor in self.vendors[:4]:
+            self.submit(vendor, 240, "fuel_price")
+        self.assertFalse(self.auto_records().exists())
+
+    def test_settings_are_validated(self):
+        from .models import Role
+        admin = User.objects.create_user("rec_admin", "ra@example.com", "TestPass123!")
+        UserProfile.objects.create(user=admin, role=Role.objects.get_or_create(name="Administrator")[0],
+                                   account_status="approved", is_active=True)
+        self.client.force_authenticate(admin)
+        bad = self.client.patch("/api/system-settings/", {"auto_publish_agreement_percent": 40}, format="json")
+        self.assertEqual(bad.status_code, 400)
+        ok = self.client.patch("/api/system-settings/", {"auto_publish_agreement_percent": 70, "auto_publish_min_vendors": 4}, format="json")
+        self.assertEqual(ok.status_code, 200, ok.data)
+        self.assertEqual(ok.data["auto_publish_agreement_percent"], 70)
 
     def test_mixed_reasons_do_not_publish(self):
         for vendor, reason in zip(self.vendors, ["fuel_price", "weather", "high_demand", "quality_size"]):
@@ -2896,7 +2927,7 @@ class PriceRecommendationTests(StallSampleTests):
         row = self.client.get("/api/price-recommendations/").data["results"][0]
         self.assertEqual(row["vendor_weight"], 0.0)
         self.assertEqual(row["recommended_price"], 200.0)
-        self.assertIn("mixed reasons", row["basis"])
+        self.assertIn("1 of 4 vendors gave the same reason", row["basis"])
 
     def test_publish_recommendation_and_override_needs_reason(self):
         for vendor in self.vendors[:3]:

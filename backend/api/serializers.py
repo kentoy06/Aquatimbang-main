@@ -1362,6 +1362,8 @@ class SystemSettingSerializer(serializers.ModelSerializer):
             "min_price_per_kg", "max_price_per_kg",
             "first_class_min_price_per_kg", "first_class_max_price_per_kg",
             "landing_fresh_days",
+            "auto_publish_enabled", "auto_publish_min_vendors",
+            "auto_publish_agreement_percent", "auto_publish_price_spread_percent",
             "updated_by_name", "updated_at",
         ]
         read_only_fields = ["updated_by_name", "updated_at"]
@@ -1382,6 +1384,15 @@ class SystemSettingSerializer(serializers.ModelSerializer):
         days = attrs.get("landing_fresh_days")
         if days is not None and not 1 <= days <= 365:
             raise serializers.ValidationError({"landing_fresh_days": "Enter a number of days from 1 to 365."})
+        checks = [
+            ("auto_publish_min_vendors", 2, 20, "Enter from 2 to 20 vendors."),
+            ("auto_publish_agreement_percent", 50, 90, "Enter a percentage from 50 to 90."),
+            ("auto_publish_price_spread_percent", 5, 50, "Enter a percentage from 5 to 50."),
+        ]
+        for field, low_value, high_value, message in checks:
+            value = attrs.get(field)
+            if value is not None and not low_value <= value <= high_value:
+                raise serializers.ValidationError({field: message})
         return attrs
 
 
