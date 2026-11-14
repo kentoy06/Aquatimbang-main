@@ -1,4 +1,6 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import { LANGUAGES, useLanguageSetting } from "./i18n/vendor.js";
+import AutoTranslate from "./i18n/AutoTranslate.jsx";
 import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
@@ -620,26 +622,26 @@ useEffect(() => {
     {
       label: "ADMINISTRATION",
       items: [
-        { name: "Dashboard", icon: "▦" },
-        { name: "User Management", icon: "♙" },
-        { name: "Fish Species", icon: "🐟" },
-        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "◉" }] : []),
-        { name: "Municipality & Market", icon: "⚑" },
-        { name: "Prices", icon: "₱", tabs: ["Price Records", "Vendor Suggestions", "Import Price History"] },
+        { name: "Dashboard", icon: "🏠" },
+        { name: "User Management", icon: "👥" },
+        { name: "Fish Species", icon: "🐠" },
+        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "📷" }] : []),
+        { name: "Municipality & Market", icon: "🏪" },
+        { name: "Prices", icon: "🏷️", tabs: ["Price Records", "Vendor Suggestions", "Import Price History"] },
       ],
     },
     {
       label: "MONITORING",
       items: [
-        { name: "Analytics", icon: "∿", tabs: ["Predictive Analytics", "Market Insights", "External Factors", "Data Monitoring"] },
-        { name: "Reports & Logs", icon: "▤", tabs: ["Reports Management", "Activity Logs"] },
+        { name: "Analytics", icon: "📈", tabs: ["Predictive Analytics", "Market Insights", "External Factors", "Data Monitoring"] },
+        { name: "Reports & Logs", icon: "🗂️", tabs: ["Reports Management", "Activity Logs"] },
       ],
     },
     {
       label: "SYSTEM",
       items: [
-        { name: "System", icon: "⚙", tabs: ["System Configuration", "System Announcements"] },
-        { name: "Messages", icon: "✉" },
+        { name: "System", icon: "⚙️", tabs: ["System Configuration", "System Announcements"] },
+        { name: "Messages", icon: "💬" },
         { name: "Admin Profile", icon: "👤" },
       ],
     },
@@ -660,6 +662,8 @@ useEffect(() => {
   };
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
+  // Display language (English, Filipino, Cebuano), remembered on this device.
+  const [language, setLanguage] = useLanguageSetting();
 
   const renderPage = () => {
     switch (activePage) {
@@ -839,6 +843,13 @@ useEffect(() => {
           </div>
 
           <div className="topbar-right">
+            <label className="language-picker" title="Language">
+              <span aria-hidden="true">🌐</span>
+              <select aria-label="Language" value={language} onChange={(e) => setLanguage(e.target.value)} data-no-translate>
+                {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+              </select>
+            </label>
+            <AutoTranslate language={language} />
             <NotificationBell count={unreadNotifs.length} onClick={toggleNotifications} />
             <div className="top-profile">
               <UserAvatar profile={account.profile} initials={adminInitials} small />

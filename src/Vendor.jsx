@@ -1,5 +1,6 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
-import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
+import AutoTranslate from "./i18n/AutoTranslate.jsx";
+import PageTabs, { firstPage, isActiveItem, itemFor } from "./components/PageTabs.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
 import React, { useRef, useEffect, useState, lazy, Suspense } from "react";
 import NotificationList, { useNotificationState } from "./components/NotificationList.jsx";
@@ -250,28 +251,28 @@ useEffect(() => {
     {
       label: "PRICES",
       items: [
-        { name: "Dashboard", icon: "▦" },
-        { name: "Fish Prices", icon: "₱", tabs: ["Current Fish Prices", "Price Trends", "Price Forecast"] },
+        { name: "Dashboard", icon: "🏠" },
+        { name: "Fish Prices", icon: "🐟", tabs: ["Current Fish Prices", "Price Trends", "Price Forecast"] },
       ],
     },
     {
       label: "SUGGESTIONS",
       items: [
-        { name: "Suggested Prices", icon: "✎", tabs: ["Submit Suggested Price", "My Suggested Prices", "Community Average"] },
+        { name: "Suggested Prices", icon: "✍️", tabs: ["Submit Suggested Price", "My Suggested Prices", "Community Average"] },
       ],
     },
     {
       label: "TOOLS",
       items: [
-        { name: "Fair Price Calculator", icon: "⊞" },
-        { name: "Export Reports", icon: "⤓" },
+        { name: "Fair Price Calculator", icon: "🧮" },
+        { name: "Export Reports", icon: "📄" },
       ],
     },
     {
       label: "ACCOUNT",
       items: [
-        { name: "Messages", icon: "✉" },
-        { name: "My Profile", icon: "♙" },
+        { name: "Messages", icon: "💬" },
+        { name: "My Profile", icon: "👤" },
         { name: "Help / How to Use", icon: "❓" },
       ],
     },
@@ -404,10 +405,11 @@ useEffect(() => {
           <div className="topbar-right">
             <label className="language-picker" title={t("Language")}>
               <span aria-hidden="true">🌐</span>
-              <select aria-label={t("Language")} value={language} onChange={(e) => setLanguage(e.target.value)}>
+              <select aria-label={t("Language")} value={language} onChange={(e) => setLanguage(e.target.value)} data-no-translate>
                 {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
               </select>
             </label>
+            <AutoTranslate language={language} />
             <NotificationBell count={unread.length} onClick={toggleNotifications} label={t("Notifications")} />
             <div className="top-profile">
               <UserAvatar profile={account.profile} initials={identity.initials} small />
@@ -424,6 +426,16 @@ useEffect(() => {
           <PageTabs menuGroups={menuGroups} page={activePage} onSelect={setActivePage} translate={t} />
           {renderPage()}
         </section>
+        {/* Phones: the main pages as big buttons at the bottom of the screen. */}
+        <nav className="bottom-nav" aria-label={t("Main menu")}>
+          {[["🏠", "Home", "Dashboard"], ["🐟", "Prices", "Current Fish Prices"], ["✍️", "Suggest", "Submit Suggested Price"], ["🧮", "Calculator", "Fair Price Calculator"], ["☰", "More", null]].map(([icon, label, page]) => (
+            <button key={label} type="button"
+              className={page && (activePage === page || itemFor(menuGroups, activePage)?.tabs?.includes(page)) ? "active" : ""}
+              onClick={() => (page ? setActivePage(page) : setMenuOpen(true))}>
+              <span aria-hidden="true">{icon}</span>{t(label)}
+            </button>
+          ))}
+        </nav>
         <AnnouncementPopup announcements={announcements} />
       </main>
 
@@ -1538,6 +1550,27 @@ function LiveVendorDashboard({ records, loading, error, municipality, onMunicipa
   const pending = mySuggestions.filter((s) => s.status === "Submitted").length;
   return <>
     <div className="welcome-card"><div><span className="eyebrow">{t("FISH VENDOR")}</span><h2>{t("Welcome, {name}!", { name: vendorName.split(" ")[0] })}</h2><p>{t("Official LGU prices for {place}.", { place: municipality || t("all municipalities") })}</p></div><div className="welcome-fish">🐟</div></div>
+
+    {/* Big picture buttons: the main things a vendor does, one tap each. */}
+    <div className="quick-actions" role="navigation" aria-label={t("What do you want to do?")}>
+      <h3>{t("What do you want to do?")}</h3>
+      <div className="quick-grid">
+        {[
+          ["🐟", "Check fish prices", "See today's price of each fish", "Current Fish Prices"],
+          ["✍️", "Suggest a price", "Tell the LGU your price and why", "Submit Suggested Price"],
+          ["🧮", "Compute a fair price", "Enter the weight, get the total", "Fair Price Calculator"],
+          ["📈", "See tomorrow's prices", "Price forecast for the coming days", "Price Forecast"],
+          ["📋", "My suggestions", "See if your price was used", "My Suggested Prices"],
+          ["💬", "Message the LGU", "Ask your LGU officer", "Messages"],
+        ].map(([icon, title, sub, page]) => (
+          <button key={page} type="button" className="quick-card" onClick={() => goTo(page)}>
+            <span className="quick-icon" aria-hidden="true">{icon}</span>
+            <strong>{t(title)}</strong>
+            <small>{t(sub)}</small>
+          </button>
+        ))}
+      </div>
+    </div>
     <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
     <div className="panel my-fish-panel">
       <div className="panel-header"><div><h3>{t("My Fish Today")}</h3><p>{t("Latest official prices of the fish you sell. Tap a fish to see its photo.")}</p></div></div>

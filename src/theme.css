@@ -2198,3 +2198,37 @@ table th {
 .segmented button.active small { background: #e0f2fe; color: #0b4a6f; }
 .sort-select { display: inline-flex; align-items: center; gap: 8px; font-size: 13px; color: #475467; font-weight: 600; }
 .sort-select select { padding: 8px 10px; border-radius: 10px; border: 1px solid #d0d5dd; font: inherit; font-weight: 500; background: #fff; }
+
+/* ---------- Easy navigation for first-time users ---------- */
+.sidebar .nav-icon { font-size: 18px; width: 24px; text-align: center; }
+.page-tab-hint { margin: -10px 0 18px; padding: 10px 14px; background: #fff7ed; border: 1px solid #fed7aa; border-radius: 12px; color: #7c2d12; font-size: 14px; max-width: 760px; }
+.quick-actions { margin: 0 0 22px; }
+.quick-actions h3 { margin: 0 0 12px; font-size: 18px; color: #0f172a; }
+.quick-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 12px; }
+.quick-card { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 16px; min-height: 120px; border: 1px solid #e2e8f0; border-radius: 16px; background: #fff; cursor: pointer; text-align: left; font: inherit; box-shadow: 0 1px 2px rgba(16,24,40,.06); transition: transform .12s, box-shadow .12s, border-color .12s; }
+.quick-card:hover, .quick-card:focus-visible { transform: translateY(-2px); border-color: #fdba74; box-shadow: 0 8px 18px rgba(16,24,40,.10); outline: none; }
+.quick-icon { width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center; font-size: 24px; background: #e0f2fe; margin-bottom: 6px; }
+.quick-card strong { font-size: 16px; color: #0f172a; }
+.quick-card small { font-size: 13px; color: #64748b; line-height: 1.35; }
+.bottom-nav { display: none; }
+@media (max-width: 768px) {
+  .bottom-nav { display: flex; position: fixed; left: 0; right: 0; bottom: 0; z-index: 60; background: #fff; border-top: 1px solid #e2e8f0; box-shadow: 0 -4px 14px rgba(16,24,40,.08); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
+  .bottom-nav button { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; border: 0; background: none; font: inherit; font-size: 12px; font-weight: 600; color: #475467; padding: 6px 2px; border-radius: 12px; min-height: 52px; cursor: pointer; }
+  .bottom-nav button span { font-size: 22px; line-height: 1; }
+  .bottom-nav button.active { color: #0b4a6f; background: #fff7ed; }
+  .main:has(.bottom-nav) .content { padding-bottom: 90px; }
+  .quick-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .quick-card { min-height: 112px; padding: 14px; }
+}
+/* Menu pictures in their own colours on a soft tile: easier to recognise
+   than white silhouettes, and icons with a background stay readable. */
+.sidebar .nav-item .nav-icon {
+  color: inherit !important; text-shadow: none !important; opacity: 1 !important;
+  width: 32px; height: 32px; flex: none; display: inline-grid; place-items: center;
+  border-radius: 9px; background: rgba(255, 255, 255, 0.92); font-size: 17px; line-height: 1;
+}
+.sidebar .nav-item.active .nav-icon { background: #fff7ed; box-shadow: 0 0 0 2px #fb923c; }
+@media (max-width: 520px) {
+  .language-picker select { max-width: 92px; font-size: 13px; }
+  .topbar h1 { font-size: 20px; }
+}

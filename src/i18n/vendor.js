@@ -3,6 +3,7 @@
 // Text without a translation is shown in English.
 
 import { createContext, useContext, useState } from "react";
+import { STAFF_PHRASES } from "./staff.js";
 
 export const LANGUAGES = [
   { code: "en", label: "English" },
@@ -609,9 +610,31 @@ const PHRASES = {
   "All fields here are optional.": ["Opsyonal ang lahat ng field dito.", "Opsyonal ang tanang field dinhi."],
 };
 
-export function translate(language, text, vars = {}) {
+// Translation of one phrase, or undefined when there is none.
+// Same phrases looked up without regard to letter case ("PRICE DATE" = "Price date").
+let caseless = null;
+function caselessIndex() {
+  if (!caseless) {
+    caseless = new Map();
+    for (const table of [STAFF_PHRASES, PHRASES]) {
+      for (const [key, value] of Object.entries(table)) caseless.set(key.toLowerCase(), value);
+    }
+  }
+  return caseless;
+}
+
+export function lookupPhrase(language, text) {
   const index = language === "fil" ? 0 : language === "ceb" ? 1 : -1;
-  const template = index >= 0 ? PHRASES[text]?.[index] ?? text : text;
+  if (index < 0) return undefined;
+  const exact = PHRASES[text]?.[index] ?? STAFF_PHRASES[text]?.[index];
+  if (exact !== undefined) return exact;
+  const found = caselessIndex().get(text.toLowerCase())?.[index];
+  // Keep capitals when the English was written in capitals.
+  return found !== undefined && text === text.toUpperCase() ? found.toUpperCase() : found;
+}
+
+export function translate(language, text, vars = {}) {
+  const template = lookupPhrase(language, text) ?? text;
   return template.replace(/\{(\w+)\}/g, (match, key) => (key in vars ? String(vars[key]) : match));
 }
 
