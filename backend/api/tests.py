@@ -2861,6 +2861,43 @@ class PriceRecommendationTests(StallSampleTests):
         self.assertTrue(ActivityLog.objects.filter(action="auto-updated", target_id=record.pk).exists())
         self.assertTrue(PriceRecord.objects.filter(status="published", recorded_date=timezone.localdate()).exists())
 
+    def test_contributing_vendors_are_recorded_and_told(self):
+        for i, vendor in enumerate(self.vendors[:4]):
+            vendor.first_name, vendor.last_name = f"Vendor{i}", "Santos"
+            vendor.save()
+        outlier = self.submit(self.vendors[0], 150, "fuel_price")
+        ids = [self.submit(v, 240, "fuel_price")["id"] for v in self.vendors[1:4]]
+        record = self.auto_records().get()
+        names = [c["name"] for c in record.suggested_by]
+        self.assertEqual(sorted(names), ["Vendor1 S.", "Vendor2 S.", "Vendor3 S."])
+        # Only the agreeing vendors' suggestions are marked (and notified).
+        for sid in ids:
+            s = self.Suggestion.objects.get(pk=sid)
+            self.assertEqual((s.published_record_id, s.published_price), (record.pk, record.price_per_kg))
+        self.assertIsNone(self.Suggestion.objects.get(pk=outlier["id"]).published_record_id)
+        self.client.force_authenticate(self.vendors[1])
+        mine = self.client.get("/api/vendor-suggestions/").data
+        mine = mine.get("results", mine) if isinstance(mine, dict) else mine
+        self.assertEqual(mine[0]["published_price"], str(record.price_per_kg))
+        # The public fish profile shows who suggested the price and the market.
+        self.client.force_authenticate(None)
+        latest = self.client.get(f"/api/public/fish/{self.fish.pk}/").data["latest"]
+        self.assertTrue(latest["automatic"])
+        self.assertEqual(latest["market"], "Pasil Fish Market")
+        self.assertEqual(len(latest["suggested_by"]), 3)
+        # Withdrawing so they no longer agree removes the links.
+        self.client.force_authenticate(self.vendors[3])
+        self.client.post(f"/api/vendor-suggestions/{ids[2]}/withdraw/")
+        self.assertFalse(self.Suggestion.objects.filter(published_record__isnull=False).exists())
+
+    def test_recommendation_lists_who_suggested(self):
+        self.vendors[0].first_name, self.vendors[0].last_name = "Rio", "Sagaad"
+        self.vendors[0].save()
+        self.suggest(self.vendors[0], 240, "fuel_price", "krudo")
+        row = self.client.get("/api/price-recommendations/").data["results"][0]
+        self.assertEqual(row["suggesters"][0]["vendor"], "Rio Sagaad")
+        self.assertEqual(row["suggesters"][0]["comment"], "krudo")
+
     def test_admin_settings_change_the_rule(self):
         from .models import SystemSetting
         settings = SystemSetting.load()

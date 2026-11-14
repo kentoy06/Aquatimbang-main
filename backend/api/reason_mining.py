@@ -201,6 +201,7 @@ def cluster_reasons(items):
             "top_terms": terms,
             "median_price": round(median(items[i]["price"] for i in members), 2),
             "prices": [items[i]["price"] for i in members],
+            "ids": [items[i].get("id") for i in members],
             "comments": [items[i]["comment"] for i in members if (items[i]["comment"] or "").strip()][:3],
         })
     clusters.sort(key=lambda cl: -cl["size"])
@@ -252,16 +253,21 @@ def recommend_price(fish, municipality, market=None, today=None):
     spread = settings.auto_publish_price_spread_percent / 100
 
     suggestions = latest_suggestions(fish, municipality, today)
-    items = [{"category": s.reason_category, "comment": s.comment, "price": float(s.suggested_price)} for s in suggestions]
+    items = [{"id": s.pk, "category": s.reason_category, "comment": s.comment, "price": float(s.suggested_price),
+              "vendor": vendor_name(s.vendor)} for s in suggestions]
     clusters = cluster_reasons(items)
     vendors = len(items)
     top = clusters[0] if clusters else None
     # Agreeing vendors: same reason (main reason group) AND a similar price,
     # within the allowed spread of the group's median price.
     agreeing = []
+    agreeing_ids = []
     if top:
         center = top["median_price"]
-        agreeing = [p for p in top["prices"] if abs(p - center) <= spread * center]
+        for sid, p in zip(top["ids"], top["prices"]):
+            if abs(p - center) <= spread * center:
+                agreeing.append(p)
+                agreeing_ids.append(sid)
     share = len(agreeing) / vendors if vendors else 0
     agree = len(agreeing) >= min_vendors and share >= agreement_needed
     if top:
@@ -311,6 +317,14 @@ def recommend_price(fish, municipality, market=None, today=None):
         "clusters": clusters,
         "agreement": round(share, 3),
         "agreeing_vendors": len(agreeing),
+        "agreeing_ids": agreeing_ids if agree else [],
+        # Who suggested, for the LGU (each vendor's latest suggestion).
+        "suggesters": [
+            {"id": i["id"], "vendor": i["vendor"], "price": i["price"], "category": i["category"],
+             "reason": dict(_reason_labels()).get(i["category"], "Other"), "comment": i["comment"],
+             "agrees": agree and i["id"] in agreeing_ids}
+            for i in sorted(items, key=lambda x: x["vendor"].lower())
+        ],
         "vendor_weight": round(weight, 2),
         "recommended_price": recommended,
         "change_percent": change,
@@ -327,6 +341,54 @@ def recommend_price(fish, municipality, market=None, today=None):
             "suggestion_days": SUGGESTION_DAYS, "history_count": HISTORY_COUNT,
         },
     }
+
+
+def _reason_labels():
+    from .models import VendorPriceSuggestion
+    return VendorPriceSuggestion.REASON_CHOICES
+
+
+def vendor_name(user):
+    """Full name (or username) of a vendor; "Deleted vendor" when removed."""
+    if user is None:
+        return "Deleted vendor"
+    return user.get_full_name().strip() or user.username
+
+
+def public_name(name):
+    """'Rio Jen Sagaad' -> 'Rio Jen S.' for the public price board."""
+    parts = name.split()
+    if len(parts) < 2 or name == "Deleted vendor":
+        return name
+    return " ".join(parts[:-1]) + f" {parts[-1][0]}."
+
+
+def link_contributors(record, rec):
+    """
+    Remember which vendors' agreeing suggestions formed this published price
+    and mark their suggestions, so each of those vendors is notified.
+    """
+    from django.utils import timezone as tz
+    from .models import VendorPriceSuggestion
+    ids = rec.get("agreeing_ids") or []
+    by_id = {s["id"]: s for s in rec.get("suggesters", [])}
+    record.suggested_by = [
+        {"name": public_name(by_id[i]["vendor"]), "price": by_id[i]["price"], "reason": by_id[i]["reason"]}
+        for i in ids if i in by_id
+    ]
+    record.save(update_fields=["suggested_by", "updated_at"])
+    VendorPriceSuggestion.objects.filter(published_record=record).exclude(pk__in=ids).update(
+        published_record=None, published_price=None, published_at=None)
+    VendorPriceSuggestion.objects.filter(pk__in=ids).update(
+        published_record=record, published_price=record.price_per_kg, published_at=tz.now())
+
+
+def unlink_contributors(record):
+    from .models import VendorPriceSuggestion
+    VendorPriceSuggestion.objects.filter(published_record=record).update(
+        published_record=None, published_price=None, published_at=None)
+    record.suggested_by = []
+    record.save(update_fields=["suggested_by", "updated_at"])
 
 
 def default_market(municipality):
@@ -384,6 +446,7 @@ def auto_publish(fish, municipality, market=None, today=None):
             live.status = PriceRecord.STATUS_WITHDRAWN
             live.remarks = (live.remarks + " Withdrawn automatically: the vendors no longer agree on the reason.")[:2000]
             live.save(update_fields=["status", "remarks", "updated_at"])
+            unlink_contributors(live)
             log("auto-withdrawn", live)
             return "withdrawn"
         return ""
@@ -399,6 +462,7 @@ def auto_publish(fish, municipality, market=None, today=None):
             price_per_kg=price, status=PriceRecord.STATUS_PUBLISHED, source=AUTO_SOURCE, remarks=remarks,
             reviewed_at=now, published_at=now,
         )
+        link_contributors(record, rec)
         log("auto-published", record)
         return "published"
     if live.price_per_kg != price or live.remarks != remarks:
@@ -406,6 +470,8 @@ def auto_publish(fish, municipality, market=None, today=None):
         live.price_per_kg = price
         live.remarks = remarks
         live.save(update_fields=["price_per_kg", "remarks", "updated_at"])
+        link_contributors(live, rec)
         log("auto-updated", live, {"previous_price": str(previous)})
         return "updated"
+    link_contributors(live, rec)
     return ""

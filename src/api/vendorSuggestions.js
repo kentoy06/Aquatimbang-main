@@ -70,6 +70,9 @@ export function normalizeSuggestion(item) {
       : "",
     createdAt: item.created_at,
     reviewedAt: item.reviewed_at,
+    // The published price this suggestion helped form, if any.
+    publishedPrice: item.published_price !== null && item.published_price !== undefined ? Number(item.published_price) : null,
+    publishedAt: item.published_at || null,
   };
 }
 
