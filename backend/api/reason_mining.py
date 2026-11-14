@@ -15,9 +15,11 @@ Vendor suggestion analytics: reason clustering and the recommended price.
 2. Recommended price (history + vendor suggestions)
    history_median = median of the latest published prices (up to 7)
    vendor_median  = median of the vendors' latest suggestions (last 7 days)
-   When at least MIN_VENDORS vendors suggested and the largest reason
-   cluster holds at least AGREEMENT_SHARE of them, the vendors' price moves
-   the recommendation in proportion to how many agree:
+   Agreeing vendors are those in the largest reason cluster whose price is
+   within the allowed spread of that cluster's median. When there are at
+   least the minimum number of them and they are at least the required
+   share of all vendors, their price moves the recommendation in proportion
+   to how many agree:
        weight = min(MAX_VENDOR_WEIGHT, VENDOR_WEIGHT_STEP x vendors)
        recommended = (1 - weight) x history_median + weight x vendor_median
    Otherwise the history alone is used. The LGU reviews the recommendation
@@ -31,8 +33,8 @@ from statistics import median
 
 from django.utils import timezone
 
-MIN_VENDORS = 3            # vendors needed before suggestions move the price
-AGREEMENT_SHARE = 0.6      # share of vendors the main reason must have
+# The number of agreeing vendors, the share they must be, and how close
+# their prices must be are set by the Administrator (SystemSetting).
 VENDOR_WEIGHT_STEP = 0.1   # weight added per vendor
 MAX_VENDOR_WEIGHT = 0.7    # vendors never decide more than 70% of the price
 SUGGESTION_DAYS = 7        # suggestions older than this are not counted
@@ -198,6 +200,7 @@ def cluster_reasons(items):
             "share": round(len(members) / total, 3),
             "top_terms": terms,
             "median_price": round(median(items[i]["price"] for i in members), 2),
+            "prices": [items[i]["price"] for i in members],
             "comments": [items[i]["comment"] for i in members if (items[i]["comment"] or "").strip()][:3],
         })
     clusters.sort(key=lambda cl: -cl["size"])
@@ -243,38 +246,54 @@ def recommend_price(fish, municipality, market=None, today=None):
     if today_record is not None and market is not None and today_record.market_id not in (None, market.pk):
         today_record = None
 
+    settings = SystemSetting.load()
+    min_vendors = settings.auto_publish_min_vendors
+    agreement_needed = settings.auto_publish_agreement_percent / 100
+    spread = settings.auto_publish_price_spread_percent / 100
+
     suggestions = latest_suggestions(fish, municipality, today)
     items = [{"category": s.reason_category, "comment": s.comment, "price": float(s.suggested_price)} for s in suggestions]
     clusters = cluster_reasons(items)
     vendors = len(items)
-    vendor_median = round(median(i["price"] for i in items), 2) if items else None
     top = clusters[0] if clusters else None
-    agree = bool(top) and vendors >= MIN_VENDORS and top["share"] >= AGREEMENT_SHARE
+    # Agreeing vendors: same reason (main reason group) AND a similar price,
+    # within the allowed spread of the group's median price.
+    agreeing = []
+    if top:
+        center = top["median_price"]
+        agreeing = [p for p in top["prices"] if abs(p - center) <= spread * center]
+    share = len(agreeing) / vendors if vendors else 0
+    agree = len(agreeing) >= min_vendors and share >= agreement_needed
+    if top:
+        top["agreeing"] = len(agreeing)
+    vendor_median = round(median(agreeing if agree else [i["price"] for i in items]), 2) if items else None
 
-    weight = min(MAX_VENDOR_WEIGHT, VENDOR_WEIGHT_STEP * vendors) if agree else 0.0
+    weight = min(MAX_VENDOR_WEIGHT, VENDOR_WEIGHT_STEP * len(agreeing)) if agree else 0.0
     if history_median is None:
         recommended = vendor_median if agree else None
         weight = 1.0 if agree else 0.0
     else:
         recommended = round((1 - weight) * history_median + weight * vendor_median, 2) if agree else history_median
 
+    pct = lambda x: f"{round(x * 100)}%"
     if recommended is None:
         basis = "No price history and not enough agreeing vendor suggestions yet."
     elif not items:
         basis = f"No vendor suggestions in the last {SUGGESTION_DAYS} days; based on the price history only."
     elif not agree:
-        if vendors < MIN_VENDORS:
-            basis = f"Only {vendors} vendor{'s' if vendors != 1 else ''} suggested (at least {MIN_VENDORS} needed); based on the price history."
+        if len(agreeing) < min_vendors:
+            basis = (f"{len(agreeing)} of {vendors} vendor{'s' if vendors != 1 else ''} gave the same reason with a similar price "
+                     f"(at least {min_vendors} needed); based on the price history.")
         else:
-            basis = (f"Vendors gave mixed reasons (the main reason has {round(top['share'] * 100)}%, "
-                     f"below {round(AGREEMENT_SHARE * 100)}%); based on the price history.")
+            basis = (f"Only {pct(share)} of vendors gave the same reason with a similar price "
+                     f"(at least {pct(agreement_needed)} needed); based on the price history.")
     else:
-        basis = (f"{round(top['share'] * 100)}% of {vendors} vendors gave the same reason ({top['label'].lower()}), "
-                 f"so their median of ₱{vendor_median:,.2f} counts {round(weight * 100)}% and the history "
-                 f"(₱{history_median:,.2f}) counts {round((1 - weight) * 100)}%." if history_median is not None else
-                 f"No price history; {round(top['share'] * 100)}% of {vendors} vendors agree, so their median is used.")
+        basis = (f"{len(agreeing)} of {vendors} vendors ({pct(share)}) gave the same reason ({top['label'].lower()}) "
+                 f"with similar prices, so their median of ₱{vendor_median:,.2f} counts {pct(weight)} and the history "
+                 f"(₱{history_median:,.2f}) counts {pct(1 - weight)}." if history_median is not None else
+                 f"No price history; {len(agreeing)} of {vendors} vendors agree, so their median is used.")
 
-    low, high, _label = SystemSetting.load().bounds_for(fish)
+    low, high, _label = settings.bounds_for(fish)
     in_range = recommended is None or (float(low) <= recommended <= float(high))
     change = None
     if recommended is not None and history_prices:
@@ -290,7 +309,8 @@ def recommend_price(fish, municipality, market=None, today=None):
         "vendor_count": vendors,
         "vendor_median": vendor_median,
         "clusters": clusters,
-        "agreement": top["share"] if top else 0,
+        "agreement": round(share, 3),
+        "agreeing_vendors": len(agreeing),
         "vendor_weight": round(weight, 2),
         "recommended_price": recommended,
         "change_percent": change,
@@ -301,7 +321,8 @@ def recommend_price(fish, municipality, market=None, today=None):
         "published_today_price": float(today_record.price_per_kg) if today_record else None,
         "published_today_automatic": bool(today_record and today_record.source == AUTO_SOURCE),
         "rules": {
-            "min_vendors": MIN_VENDORS, "agreement_share": AGREEMENT_SHARE,
+            "min_vendors": min_vendors, "agreement_share": agreement_needed,
+            "price_spread": spread, "auto_publish": settings.auto_publish_enabled,
             "weight_per_vendor": VENDOR_WEIGHT_STEP, "max_vendor_weight": MAX_VENDOR_WEIGHT,
             "suggestion_days": SUGGESTION_DAYS, "history_count": HISTORY_COUNT,
         },
@@ -339,6 +360,8 @@ def auto_publish(fish, municipality, market=None, today=None):
     )
     if live is not None and live.source != AUTO_SOURCE:
         return ""  # the LGU's own price for today stays
+    if not SystemSetting.load().auto_publish_enabled:
+        return ""  # switched off by the Administrator: the LGU publishes
 
     agree = rec["vendor_weight"] > 0 and rec["recommended_price"] is not None and rec["in_allowed_range"]
 

@@ -1240,6 +1240,15 @@ class SystemSetting(models.Model):
     # within this many days of the LGU's latest update; older prices move to
     # "Older prices".
     landing_fresh_days = models.PositiveSmallIntegerField(default=15)
+    # Automatic price publishing from vendor suggestions: a fish's price is
+    # published when at least `auto_publish_min_vendors` vendors give the same
+    # reason with prices within `auto_publish_price_spread_percent` of each
+    # other, and they are at least `auto_publish_agreement_percent` of all
+    # vendors who suggested a price for that fish.
+    auto_publish_enabled = models.BooleanField(default=True)
+    auto_publish_min_vendors = models.PositiveSmallIntegerField(default=3)
+    auto_publish_agreement_percent = models.PositiveSmallIntegerField(default=60)
+    auto_publish_price_spread_percent = models.PositiveSmallIntegerField(default=15)
 
     updated_by = models.ForeignKey(
         "auth.User",

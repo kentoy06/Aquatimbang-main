@@ -3127,6 +3127,33 @@ function SystemConfiguration({ notify }) {
   const [saving, setSaving] = useState(false);
   const [freshDays, setFreshDays] = useState("");
   const [savingDays, setSavingDays] = useState(false);
+  const AUTO_KEYS = ["auto_publish_enabled", "auto_publish_min_vendors", "auto_publish_agreement_percent", "auto_publish_price_spread_percent"];
+  const [auto, setAuto] = useState(null);
+  const [savingAuto, setSavingAuto] = useState(false);
+  const autoChanged = auto && saved && AUTO_KEYS.some((k) => String(auto[k]) !== String(saved[k]));
+
+  const saveAuto = async () => {
+    setSavingAuto(true);
+    setErrors({});
+    try {
+      const data = await sendJson("/system-settings/", "PATCH", {
+        auto_publish_enabled: Boolean(auto.auto_publish_enabled),
+        auto_publish_min_vendors: Number(auto.auto_publish_min_vendors),
+        auto_publish_agreement_percent: Number(auto.auto_publish_agreement_percent),
+        auto_publish_price_spread_percent: Number(auto.auto_publish_price_spread_percent),
+      });
+      setSaved(data);
+      setAuto(Object.fromEntries(AUTO_KEYS.map((k) => [k, data[k]])));
+      notify(data.auto_publish_enabled
+        ? `Saved. Prices are published automatically when at least ${data.auto_publish_min_vendors} vendors (${data.auto_publish_agreement_percent}% or more) give the same reason with prices within ${data.auto_publish_price_spread_percent}%.`
+        : "Saved. Automatic publishing is off; the LGU publishes every price.");
+    } catch (error) {
+      setErrors(error.fields || {});
+      if (!error.fields || !Object.keys(error.fields).length) notify(error.message);
+    } finally {
+      setSavingAuto(false);
+    }
+  };
 
   const saveDays = async () => {
     setSavingDays(true);
@@ -3151,6 +3178,7 @@ function SystemConfiguration({ notify }) {
         setSaved(data);
         setForm(Object.fromEntries(RANGE_KEYS.map((key) => [key, data[key]])));
         setFreshDays(String(data.landing_fresh_days ?? 15));
+        setAuto(Object.fromEntries(AUTO_KEYS.map((k) => [k, data[k]])));
       })
       .catch((error) => { if (!cancelled) setLoadError(error.message); });
     return () => { cancelled = true; };
@@ -3254,6 +3282,61 @@ function SystemConfiguration({ notify }) {
             disabled={savingDays || !saved || String(freshDays) === String(saved.landing_fresh_days) || !(Number(freshDays) >= 1)}>
             {savingDays ? "Saving…" : "Save"}
           </button>
+        </div>
+
+        <div className="config-card">
+          <div className="config-header">
+            <div className="config-icon green">✔</div>
+            <div>
+              <h3>Automatic Price Publishing</h3>
+              <p>When vendors agree on a reason and a price, the fish's price is published without waiting for the LGU</p>
+            </div>
+          </div>
+          {auto && (
+            <>
+              <label className="check-row" style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+                <input type="checkbox" checked={Boolean(auto.auto_publish_enabled)}
+                  onChange={(e) => setAuto((a) => ({ ...a, auto_publish_enabled: e.target.checked }))} />
+                Publish prices automatically when vendors agree
+              </label>
+              <div className="form-group">
+                <label htmlFor="cfg-auto-min">Minimum agreeing vendors</label>
+                <div className="input-with-unit input-with-unit-after">
+                  <input id="cfg-auto-min" type="number" min="2" max="20" step="1" value={auto.auto_publish_min_vendors}
+                    disabled={!auto.auto_publish_enabled} onChange={(e) => setAuto((a) => ({ ...a, auto_publish_min_vendors: e.target.value }))} />
+                  <span>vendors (2 to 20)</span>
+                </div>
+                {errors.auto_publish_min_vendors && <small className="field-error">{errors.auto_publish_min_vendors}</small>}
+              </div>
+              <div className="form-group">
+                <label htmlFor="cfg-auto-share">Share of vendors that must agree</label>
+                <div className="input-with-unit input-with-unit-after">
+                  <input id="cfg-auto-share" type="number" min="50" max="90" step="5" value={auto.auto_publish_agreement_percent}
+                    disabled={!auto.auto_publish_enabled} onChange={(e) => setAuto((a) => ({ ...a, auto_publish_agreement_percent: e.target.value }))} />
+                  <span>% or more (50 to 90)</span>
+                </div>
+                {errors.auto_publish_agreement_percent && <small className="field-error">{errors.auto_publish_agreement_percent}</small>}
+              </div>
+              <div className="form-group">
+                <label htmlFor="cfg-auto-spread">Prices count as the same within</label>
+                <div className="input-with-unit input-with-unit-after">
+                  <input id="cfg-auto-spread" type="number" min="5" max="50" step="1" value={auto.auto_publish_price_spread_percent}
+                    disabled={!auto.auto_publish_enabled} onChange={(e) => setAuto((a) => ({ ...a, auto_publish_price_spread_percent: e.target.value }))} />
+                  <span>% of each other (5 to 50)</span>
+                </div>
+                {errors.auto_publish_price_spread_percent && <small className="field-error">{errors.auto_publish_price_spread_percent}</small>}
+              </div>
+              <div className="info-box">
+                Recommended: at least <b>3 vendors</b>, <b>60%</b>, and prices within <b>15%</b>. Example: 4 vendors suggest
+                Bangus; 3 say ₱240 because of fuel and 1 says ₱150. The 3 agree (75%), so the price is published from the
+                history and their ₱240. When they don't agree, the LGU publishes the price on Price Recommendations.
+              </div>
+              <button className="primary-btn full-btn" style={{ marginTop: 14 }} onClick={saveAuto}
+                disabled={savingAuto || !autoChanged}>
+                {savingAuto ? "Saving…" : "Save"}
+              </button>
+            </>
+          )}
         </div>
 
         <div className="config-card">

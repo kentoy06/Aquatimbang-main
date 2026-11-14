@@ -100,10 +100,12 @@ export default function PriceRecommendations({ notify }) {
 
       <div className="info-box recommend-how">
         <strong>How the price is computed.</strong> Start from the history: the median of the latest {rules?.history_count || 7} published prices.
-        The vendors' reasons from the last {rules?.suggestion_days || 7} days are grouped by text clustering. When at least {rules?.min_vendors || 3} vendors
-        suggested and at least {pct(rules?.agreement_share || 0.6)} of them gave the same reason, the vendors' median price counts
+        The vendors' reasons from the last {rules?.suggestion_days || 7} days are grouped by text clustering. When at least {rules?.min_vendors || 3} vendors,
+        and at least {pct(rules?.agreement_share || 0.6)} of all who suggested, gave the same reason with prices within {pct(rules?.price_spread || 0.15)} of each other, their median price counts
         {" "}{pct(rules?.weight_per_vendor || 0.1)} per vendor (up to {pct(rules?.max_vendor_weight || 0.7)}); otherwise the history alone is used.
-        {" "}<strong>When the vendors agree, the price is published automatically</strong> as soon as a vendor submits, and it is updated as more vendors suggest.
+        {" "}{rules?.auto_publish === false
+          ? <strong>Automatic publishing is switched off by the Administrator, so publish each price here.</strong>
+          : <><strong>When the vendors agree, the price is published automatically</strong> as soon as a vendor submits, and it is updated as more vendors suggest.</>}
         These published prices become the price history the forecast learns from. When vendors disagree, publish the price here yourself.
       </div>
 
