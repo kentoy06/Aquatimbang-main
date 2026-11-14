@@ -58,6 +58,8 @@ export function normalizeSuggestion(item) {
     municipality: item.municipality_name,
     suggestedPrice: Number(item.suggested_price),
     comment: item.comment || "",
+    reasonCategory: item.reason_category || "",
+    reason: item.reason_display || "",
     status: STATUS_LABELS[item.status] || item.status,
     lguFeedback: item.lgu_feedback || "",
     date: item.created_at

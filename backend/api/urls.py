@@ -15,6 +15,8 @@ from .views import (
     public_summary,
     public_fish_profile,
     price_check,
+    price_recommendations,
+    publish_recommendation,
     price_outliers,
     market_insights,
     insight_settings,
@@ -329,6 +331,8 @@ urlpatterns = [
     ),
 
     # Data mining: learned price checks, outliers and market insights.
+    path("price-recommendations/", price_recommendations, name="price-recommendations"),
+    path("price-recommendations/publish/", publish_recommendation, name="publish-recommendation"),
     path("insights/price-check/", price_check, name="price-check"),
     path("insights/outliers/", price_outliers, name="price-outliers"),
     path("insights/rules/", market_insights, name="market-insights"),

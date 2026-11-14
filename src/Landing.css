@@ -919,3 +919,13 @@ button.price-tile:focus-visible { outline: 3px solid rgba(255, 122, 26, 0.7); ou
   .price-search { flex: 1 1 100%; }
   .price-pager { justify-content: center; }
 }
+
+/* Which market the prices come from */
+.market-strip { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; margin: 0 0 14px; }
+.market-strip-label { font-size: 13.5px; color: rgba(255, 255, 255, 0.75); margin-right: 4px; }
+.market-strip button {
+  border: 1px solid rgba(255, 255, 255, 0.2); background: rgba(255, 255, 255, 0.06); color: #fff;
+  border-radius: 999px; padding: 6px 14px; font: inherit; font-size: 13px; cursor: pointer;
+}
+.market-strip button.active { background: #3fc1d9; border-color: #3fc1d9; color: #06202a; font-weight: 600; }
+.price-tile .price-market { display: block; font-style: normal; font-size: 11.5px; font-weight: 600; color: #7fdcef; margin-bottom: 2px; }

@@ -20,6 +20,7 @@ import ProfitHelper from "./components/ProfitHelper.jsx";
 import { ScanFishButton } from "./components/ScanFish.jsx";
 import { FISH_SCANNER } from "./features.js";
 import { buildXlsx } from "./api/reportExport.js";
+import { SUGGESTION_REASONS, reasonLabel } from "./api/suggestionReasons.js";
 import { NotificationBell, UserAvatar } from "./components/UserAvatar.jsx";
 import { FishPicker, FishPicture, FishPreview, FishThumb } from "./components/FishPhoto.jsx";
 import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
@@ -673,6 +674,7 @@ function SubmitSuggestedPrice({
   const t = useT();
   const [speciesId, setSpeciesId] = useState("");
   const [price, setPrice] = useState("");
+  const [reason, setReason] = useState("");
   const [comment, setComment] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState("");
@@ -724,6 +726,15 @@ function SubmitSuggestedPrice({
       return;
     }
 
+    if (!reason) {
+      setError(t("Choose the reason for your suggested price."));
+      return;
+    }
+    if (reason === "other" && comment.trim().length < 10) {
+      setError(t("Explain your reason in a few words (at least 10 characters)."));
+      return;
+    }
+
     if (municipalityId === null || municipalityId === undefined) {
       setError("Your account has no assigned municipality. Please contact the administrator.");
       return;
@@ -737,6 +748,7 @@ function SubmitSuggestedPrice({
         fish_species: Number(selectedSpecies.id),
         municipality: municipalityId,
         suggested_price: parsed.toFixed(2),
+        reason_category: reason,
         comment: comment.trim(),
       });
 
@@ -746,10 +758,11 @@ function SubmitSuggestedPrice({
         ...prev,
       ]);
 
-      notify(t("Suggested price saved and submitted for LGU review."));
+      notify(t("Suggested price submitted. It is combined with other vendors' suggestions and the price history."));
 
       setPrice("");
       setComment("");
+      setReason("");
     } catch (err) {
       const message =
         err.message || "Unable to submit suggested price.";
@@ -766,7 +779,7 @@ function SubmitSuggestedPrice({
       <div className="page-title">
         <div>
           <h2>{t("Submit Suggested Price")}</h2>
-          <p>{t("Think the official price doesn't match what you're seeing at the market? Suggest a price for LGU review.")}</p>
+          <p>{t("Think the price doesn't match what you're seeing at the market? Suggest a price and tell us why. When most vendors give the same reason, their prices are used for the next published price.")}</p>
         </div>
       </div>
 
@@ -776,7 +789,7 @@ function SubmitSuggestedPrice({
             <div className="config-icon blue">✎</div>
             <div>
               <h3>{t("New Suggestion")}</h3>
-              <p>{t("Submitted suggestions are reviewed by an LGU officer.")}</p>
+              <p>{t("Your reason is grouped with other vendors' reasons.")}</p>
             </div>
           </div>
 
@@ -831,18 +844,28 @@ function SubmitSuggestedPrice({
           )}
 
           <div className="form-group">
-            <label>{t("Comment (optional)")}</label>
-            <input
-              type="text"
+            <label htmlFor="suggest-reason">{t("Reason for this price")}</label>
+            <select id="suggest-reason" value={reason} onChange={(e) => setReason(e.target.value)} disabled={submitting}>
+              <option value="">{t("Choose a reason")}</option>
+              {SUGGESTION_REASONS.map(([value, label]) => <option key={value} value={value}>{t(label)}</option>)}
+            </select>
+          </div>
+
+          <div className="form-group">
+            <label htmlFor="suggest-comment">{reason === "other" ? t("Explain your reason") : t("Comment (optional)")}</label>
+            <textarea
+              id="suggest-comment"
+              rows={3}
               value={comment}
-              placeholder={t("Explain the market conditions or price difference")}
+              placeholder={t("e.g. Mahal ang krudo karon, gamay ra ang nakapalaot")}
               onChange={(e) => setComment(e.target.value)}
               disabled={submitting}
             />
+            <small className="field-help">{t("You can write in English, Filipino, or Cebuano.")}</small>
           </div>
 
           <div className="info-box">
-            {t("Your suggestion will be saved and forwarded to the LGU for review.")}
+            {t("How it is used: the system groups the reasons of all vendors. When at least 3 vendors suggest and most of them give the same reason, their median price moves the next price published by the LGU, together with the price history.")}
           </div>
 
           {error && (
@@ -986,7 +1009,10 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
                           placeholder={t("Explain the market conditions or price difference")}
                         />
                       ) : (
-                        s.comment || <span className="muted-text">—</span>
+                        <>
+                          {s.reasonCategory && <span className="badge pending" style={{ marginRight: 6 }}>{t(reasonLabel(s.reasonCategory))}</span>}
+                          {s.comment || (!s.reasonCategory && <span className="muted-text">—</span>)}
+                        </>
                       )}
                     </td>
                     <td><span className={`badge ${statusClass(s.status)}`}>{t(s.status)}</span></td>

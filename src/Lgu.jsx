@@ -1,5 +1,6 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
 import FishNameField from "./components/FishNameField.jsx";
+import PriceRecommendations from "./components/PriceRecommendations.jsx";
 import SimilarFishNames from "./components/SimilarFishNames.jsx";
 import { OtherNamesField, splitNames } from "./components/FishNameField.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
@@ -355,7 +356,9 @@ const [menuOpen, setMenuOpen] = useState(false);
 // A price handed from an adopted vendor suggestion to Price Entry.
 const [priceDraft, setPriceDraft] = useState(null);
 const [activePage, setActivePage] = useState(() => {
-  return sessionStorage.getItem("lguActivePage") || "Dashboard";
+  const saved = sessionStorage.getItem("lguActivePage") || "Dashboard";
+  // Price Entry and the suggestion review were replaced by Price Recommendations.
+  return ["Price Entry", "Price Suggestions"].includes(saved) ? "Price Recommendations" : saved;
 });
 
 // Save the selected page whenever navigation changes.
@@ -413,7 +416,7 @@ useEffect(() => {
       label: "DAILY OPERATIONS",
       items: [
         { name: "Dashboard", icon: "▦" },
-        { name: "Price Entry", icon: "✎" },
+        { name: "Price Recommendations", icon: "✎" },
         { name: "Fish Species Management", icon: "🐟" },
         { name: "Review & Publish", icon: "✔" },
         { name: "Import Price History", icon: "⇪" },
@@ -425,7 +428,6 @@ useEffect(() => {
       items: [
         { name: "Vendor Registrations", icon: "☑" },
         { name: "Vendor Management", icon: "👥" },
-        { name: "Price Suggestions", icon: "📥" },
         ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "◉" }] : []),
       ],
     },
@@ -462,6 +464,8 @@ useEffect(() => {
 
   const renderPage = () => {
     switch (activePage) {
+      case "Price Recommendations":
+        return <PriceRecommendations notify={notify} />;
       case "Price Entry":
         return (
           <PriceEntry
@@ -668,8 +672,8 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk, announceme
   const pendingSuggestions = suggestions.filter((s) => s.status === "Pending Review");
   if (pendingSuggestions.length > 0) {
     notifs.push({
-      id: id++, type: "warning", page: "Price Suggestions",
-      title: `${pendingSuggestions.length} suggested price${pendingSuggestions.length > 1 ? "s" : ""} awaiting review`,
+      id: id++, type: "warning", page: "Price Recommendations",
+      title: `${pendingSuggestions.length} new vendor suggestion${pendingSuggestions.length > 1 ? "s" : ""} for today's recommendations`,
       detail: pendingSuggestions.slice(0, 3).map((s) => s.species).join(", "),
     });
   }
@@ -707,8 +711,8 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk, announceme
   const notEncoded = recordSpeciesNames(priceRecords).filter((sp) => !encodedToday.has(sp));
   if (notEncoded.length > 0) {
     notifs.push({
-      id: id++, type: "warning", page: "Price Entry",
-      title: `${notEncoded.length} species not yet encoded today`,
+      id: id++, type: "warning", page: "Price Recommendations",
+      title: `${notEncoded.length} species not yet published today`,
       detail: notEncoded.join(", "),
     });
   }
@@ -809,10 +813,10 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
       </div>
 
       <div className="stats-grid">
-        <div className="stat-card clickable" onClick={() => goTo("Price Entry")}>
+        <div className="stat-card clickable" onClick={() => goTo("Price Recommendations")}>
           <div className="stat-icon blue">✎</div>
           <div>
-            <span>Encoded Today</span>
+            <span>Published Today</span>
             <h2>{encodedToday}</h2>
             <small>unique species from Django</small>
           </div>
@@ -869,7 +873,7 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
           </div>
         </div>
 
-        <div className="stat-card clickable" onClick={() => goTo("Price Suggestions")}>
+        <div className="stat-card clickable" onClick={() => goTo("Price Recommendations")}>
           <div className="stat-icon green">📥</div>
           <div>
             <span>Suggestions (Last 7 Days)</span>
@@ -901,7 +905,7 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
                 {new Date().toLocaleDateString()}
               </p>
             </div>
-            <button className="text-button" onClick={() => goTo("Price Entry")}>Go to Price Entry →</button>
+            <button className="text-button" onClick={() => goTo("Price Recommendations")}>Go to Price Recommendations →</button>
           </div>
 
           <PagedTable>
@@ -3379,7 +3383,7 @@ function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
           <h2>Official Reference Prices</h2>
           <p>The latest published price per species and municipality.</p>
         </div>
-        <button className="secondary-btn" onClick={() => goTo("Price Entry")}>✎ Encode New Price</button>
+        <button className="secondary-btn" onClick={() => goTo("Price Recommendations")}>✎ Publish Today's Prices</button>
       </div>
 
       <div className="info-box" style={{ marginBottom: 14 }}>

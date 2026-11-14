@@ -20,7 +20,7 @@ function PriceSparkline({ history }) {
   const last = history[history.length - 1];
   return (
     <svg viewBox={`0 0 ${W} ${H}`} className="fp-chart" role="img"
-      aria-label={`Official price over the last ${history.length} days, from ${peso(history[0].price)} to ${peso(last.price)}`}>
+      aria-label={`Suggested price over the last ${history.length} days, from ${peso(history[0].price)} to ${peso(last.price)}`}>
       <defs>
         <linearGradient id="fp-fill" x1="0" y1="0" x2="0" y2="1">
           <stop offset="0%" stopColor="#3fc1d9" stopOpacity="0.35" />
@@ -79,7 +79,7 @@ export default function FishProfileModal({ item, onClose, onLogin, onRegister })
 
         <div className="fp-body">
           <header>
-            <span className="fp-eyebrow">Official LGU price · {item.municipality_name}</span>
+            <span className="fp-eyebrow">Suggested price · {item.municipality_name}{item.market ? ` · ${item.market}` : ""}</span>
             <h3 id="fp-title">{item.fish_name}</h3>
             {fish?.scientific_name && <em className="fp-sci">{fish.scientific_name}</em>}
           </header>

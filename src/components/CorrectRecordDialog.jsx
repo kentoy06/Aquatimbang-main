@@ -16,6 +16,7 @@ export default function CorrectRecordDialog({ record, onClose, onSaved }) {
   const [fishId, setFishId] = useState(String(record.fishId ?? ""));
   const [price, setPrice] = useState(String(Number(record.price).toFixed(2)));
   const [reason, setReason] = useState("");
+  const [category, setCategory] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState("");
 
@@ -39,12 +40,13 @@ export default function CorrectRecordDialog({ record, onClose, onSaved }) {
     const value = Number(price);
     if (!Number.isFinite(value) || value <= 0) { setError("Enter a price greater than zero."); return; }
     if (!fishChanged && !priceChanged) { setError("Nothing changed. Choose a different fish or enter a different price."); return; }
-    if (record.published && !reason.trim()) { setError("Write why this record is being corrected."); return; }
+    if (record.published && !category) { setError("Choose why this published price must be changed."); return; }
+    if (record.published && reason.trim().length < 30) { setError("Explain the change in at least 30 characters: what was wrong and where the correct price came from."); return; }
     setSaving(true);
     setError("");
     try {
       const body = record.published
-        ? { price_per_kg: value.toFixed(2), reason: reason.trim(), ...(fishChanged ? { fish_species: Number(fishId) } : {}) }
+        ? { price_per_kg: value.toFixed(2), reason: reason.trim(), reason_category: category, ...(fishChanged ? { fish_species: Number(fishId) } : {}) }
         : { price_per_kg: value.toFixed(2), ...(fishChanged ? { fish_species: Number(fishId) } : {}) };
       const response = await fetch(apiUrl(record.published ? `/prices/${record.id}/correct/` : `/prices/${record.id}/`), {
         method: record.published ? "POST" : "PATCH",
@@ -97,8 +99,20 @@ export default function CorrectRecordDialog({ record, onClose, onSaved }) {
         </div>
 
         {record.published && (
+          <>
           <div className="form-group">
-            <label htmlFor="correct-reason">Why is it being corrected?</label>
+            <label htmlFor="correct-category">Reason for changing a published price</label>
+            <select id="correct-category" value={category} onChange={(e) => setCategory(e.target.value)}>
+              <option value="">Choose why</option>
+              <option value="encoding_error">Encoding error (wrong digit or decimal)</option>
+              <option value="wrong_fish">Recorded under the wrong fish</option>
+              <option value="wrong_market_or_date">Wrong market or date</option>
+              <option value="dvmf_correction">Corrected by the DVMF official record</option>
+              <option value="market_change">Market price changed sharply the same day</option>
+            </select>
+          </div>
+          <div className="form-group">
+            <label htmlFor="correct-reason">Explain the change (at least 30 characters)</label>
             <textarea
               id="correct-reason"
               className="confirm-textarea"
@@ -108,8 +122,9 @@ export default function CorrectRecordDialog({ record, onClose, onSaved }) {
               placeholder="e.g. Encoded under the wrong fish; the price was for Bangus."
               onChange={(e) => setReason(e.target.value)}
             />
-            <small className="correct-note">The original fish and price, and this reason, stay in the correction history and the Audit Log.</small>
+            <small className="correct-note">{reason.trim().length}/30 · The original fish and price, and this reason, stay in the correction history and the Audit Log.</small>
           </div>
+          </>
         )}
 
         {error && <div className="error-box" role="alert">{error}</div>}

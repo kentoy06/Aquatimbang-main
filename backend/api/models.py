@@ -891,6 +891,29 @@ class VendorPriceSuggestion(models.Model):
         on_delete=models.PROTECT,
         related_name="vendor_suggestions",
     )
+    # Why the vendor suggests this price; used with the comment for the
+    # reason clustering that guides the LGU's recommended price.
+    REASON_FUEL = "fuel_price"
+    REASON_WEATHER = "weather"
+    REASON_LOW_CATCH = "low_catch"
+    REASON_HIGH_DEMAND = "high_demand"
+    REASON_TRANSPORT = "transport_ice"
+    REASON_CLOSED_SEASON = "closed_season"
+    REASON_QUALITY = "quality_size"
+    REASON_OVERSUPPLY = "oversupply"
+    REASON_OTHER = "other"
+    REASON_CHOICES = [
+        (REASON_FUEL, "Higher fuel (diesel) price"),
+        (REASON_WEATHER, "Bad weather, fewer boats went out"),
+        (REASON_LOW_CATCH, "Low catch or fewer fish arriving"),
+        (REASON_HIGH_DEMAND, "More buyers (holiday, fiesta, weekend)"),
+        (REASON_TRANSPORT, "Higher transport or ice cost"),
+        (REASON_CLOSED_SEASON, "Closed fishing season"),
+        (REASON_QUALITY, "Size or quality of the fish"),
+        (REASON_OVERSUPPLY, "Too much supply, fish not selling"),
+        (REASON_OTHER, "Other reason"),
+    ]
+    reason_category = models.CharField(max_length=20, choices=REASON_CHOICES, default=REASON_OTHER)
     suggested_price = models.DecimalField(
         max_digits=10,
         decimal_places=2,
@@ -1162,6 +1185,15 @@ class PriceCorrection(models.Model):
     """
 
     price_record = models.ForeignKey(PriceRecord, on_delete=models.CASCADE, related_name="corrections")
+    # Why a published price was changed (a detailed reason is also required).
+    REASON_CHOICES = [
+        ("encoding_error", "Encoding error (wrong digit or decimal)"),
+        ("wrong_fish", "Recorded under the wrong fish"),
+        ("wrong_market_or_date", "Wrong market or date"),
+        ("dvmf_correction", "Corrected by the DVMF official record"),
+        ("market_change", "Market price changed sharply the same day"),
+    ]
+    reason_category = models.CharField(max_length=30, choices=REASON_CHOICES, blank=True, default="")
     previous_price = models.DecimalField(max_digits=10, decimal_places=2)
     new_price = models.DecimalField(max_digits=10, decimal_places=2)
     # Set when the correction also fixed a wrong fish species.

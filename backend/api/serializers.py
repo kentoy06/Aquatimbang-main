@@ -1200,6 +1200,18 @@ class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
         source="get_status_display",
         read_only=True,
     )
+    reason_display = serializers.CharField(source="get_reason_category_display", read_only=True)
+
+    def validate(self, attrs):
+        """A new suggestion needs a reason; 'Other' needs a short explanation."""
+        attrs = super().validate(attrs)
+        category = attrs.get("reason_category", getattr(self.instance, "reason_category", None))
+        comment = (attrs.get("comment", getattr(self.instance, "comment", "")) or "").strip()
+        if self.instance is None and "reason_category" not in attrs:
+            raise serializers.ValidationError({"reason_category": "Choose the reason for your suggested price."})
+        if category == VendorPriceSuggestion.REASON_OTHER and len(comment) < 10:
+            raise serializers.ValidationError({"comment": "Explain your reason in a few words (at least 10 characters)."})
+        return attrs
 
     class Meta:
         model = VendorPriceSuggestion
@@ -1212,6 +1224,8 @@ class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
             "municipality",
             "municipality_name",
             "suggested_price",
+            "reason_category",
+            "reason_display",
             "comment",
             "status",
             "status_display",
