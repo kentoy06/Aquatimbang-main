@@ -1218,7 +1218,7 @@ class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
         fields = [
             "id",
             "vendor",
-            "submitted_by",
+            "submitted_by", "published_price", "published_at",
             "fish_species",
             "species",
             "municipality",
@@ -1244,6 +1244,8 @@ class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
             "reviewed_at",
             "created_at",
             "updated_at",
+            "published_price",
+            "published_at",
         ]
 
     def validate_suggested_price(self, value):

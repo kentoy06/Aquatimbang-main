@@ -651,6 +651,9 @@ A pending record may also be flagged or rejected.
     market = models.ForeignKey(
         "Market", on_delete=models.PROTECT, null=True, blank=True, related_name="price_records",
     )
+    # Vendors whose agreeing suggestions formed this price (name, price,
+    # reason), shown on the public fish profile and to the LGU.
+    suggested_by = models.JSONField(default=list, blank=True)
 
     # Prices checked at randomly chosen stalls; the official price is their
     # median. Empty when one price was typed directly or imported.
@@ -885,6 +888,12 @@ class VendorPriceSuggestion(models.Model):
         blank=True,
         related_name="fish_price_suggestions",
     )
+    # The published price this suggestion helped form, so the vendor is told.
+    published_record = models.ForeignKey(
+        "PriceRecord", on_delete=models.SET_NULL, null=True, blank=True, related_name="contributing_suggestions",
+    )
+    published_price = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    published_at = models.DateTimeField(null=True, blank=True)
     fish_species = models.ForeignKey(
         FishSpecies,
         on_delete=models.PROTECT,

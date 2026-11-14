@@ -192,7 +192,7 @@ function Landing({ onGetStarted, onRegister }) {
           )}
           {(summary?.featured_prices || []).map((item) => (
             <div className="hero-price-card" key={`${item.fish_name}-${item.municipality_name}`}>
-              <span>{item.fish_name} · {item.municipality_name}</span>
+              <span>{item.fish_name} · {item.market ? `${item.market}, ` : ""}{item.municipality_name}</span>
               <strong>{peso(item.price_per_kg)}<small>/kg</small></strong>
               {item.weekly_change_percent !== null && (
                 <em className={item.weekly_change_percent >= 0 ? "up" : "down"}>

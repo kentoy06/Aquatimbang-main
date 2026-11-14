@@ -523,6 +523,17 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
   });
 
   mySuggestions.forEach((s) => {
+    // Only the vendors whose suggestions formed a published price are told.
+    if (s.publishedPrice !== null && s.publishedPrice !== undefined) {
+      notifs.push({
+        id: `published-${s.id}-${s.publishedAt}`,
+        type: "info",
+        page: "My Suggested Prices",
+        at: s.publishedAt || s.createdAt,
+        title: `Your suggested price for ${s.species} was used`,
+        detail: `${s.species} is now published at ${peso(s.publishedPrice)}/kg. You suggested ${peso(s.suggestedPrice)}/kg; other vendors gave the same reason.`,
+      });
+    }
     if (s.status === "Reviewed" || s.status === "Adopted" || s.status === "Rejected") {
       notifs.push({
         id: id++,
@@ -1015,7 +1026,12 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
                         </>
                       )}
                     </td>
-                    <td><span className={`badge ${statusClass(s.status)}`}>{t(s.status)}</span></td>
+                    <td>
+                      <span className={`badge ${statusClass(s.status)}`}>{t(s.status)}</span>
+                      {s.publishedPrice !== null && s.publishedPrice !== undefined && (
+                        <span className="badge success" style={{ display: "inline-block", marginTop: 4 }}>{t("Used")}: {peso(s.publishedPrice)}</span>
+                      )}
+                    </td>
                     <td>{s.lguFeedback || <span className="muted-text">—</span>}</td>
                     <td>
                       {s.status !== "Submitted" ? (

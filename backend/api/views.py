@@ -32,6 +32,7 @@ from rest_framework.permissions import AllowAny, IsAuthenticated
 from rest_framework.parsers import MultiPartParser, FormParser, JSONParser
 from rest_framework.response import Response
 # Import AquaTimbang database models.
+from .reason_mining import AUTO_SOURCE as AUTO_PRICE_SOURCE
 from .models import (
     FishSpecies,
     ActivityLog,
@@ -1847,7 +1848,7 @@ def public_summary(request):
         published = PriceRecord.objects.filter(status=PriceRecord.STATUS_PUBLISHED)
         for record in (
             published.filter(recorded_date=latest)
-            .select_related("fish_species", "municipality")
+            .select_related("fish_species", "municipality", "market")
             .order_by("fish_species__name", "municipality__name")[:2]
         ):
             week_ago = (
@@ -1867,6 +1868,7 @@ def public_summary(request):
             featured.append({
                 "fish_name": record.fish_species.name,
                 "municipality_name": record.municipality.name,
+                "market": record.market.name if record.market_id else _market_label(record.source),
                 "price_per_kg": record.price_per_kg,
                 "recorded_date": record.recorded_date,
                 "weekly_change_percent": change,
@@ -2184,7 +2186,12 @@ def public_fish_profile(request, fish_id):
             return Response({"message": "Municipality not found."}, status=status.HTTP_404_NOT_FOUND)
         published = published.filter(municipality=municipality)
 
-    latest = published.select_related("municipality").order_by("-recorded_date", "-id").first()
+    if request.query_params.get("market"):
+        try:
+            published = published.filter(market_id=int(request.query_params["market"]))
+        except ValueError:
+            pass
+    latest = published.select_related("municipality", "market").order_by("-recorded_date", "-id").first()
     if latest is None:
         return Response({"message": f"No official price for {fish.name} yet."}, status=status.HTTP_404_NOT_FOUND)
     municipality = municipality or latest.municipality
@@ -2236,6 +2243,10 @@ def public_fish_profile(request, fish_id):
             "recorded_date": latest.recorded_date,
             "published_at": latest.published_at,
             "is_correction": latest.is_correction,
+            "market": latest.market.name if latest.market_id else _market_label(latest.source),
+            "automatic": latest.source == AUTO_PRICE_SOURCE,
+            # Vendors whose agreeing suggestions formed this price.
+            "suggested_by": latest.suggested_by or [],
         },
         "week_ago": (
             {"price_per_kg": float(week_ago.price_per_kg), "recorded_date": week_ago.recorded_date} if week_ago else None
@@ -2737,6 +2748,7 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
         # vendors' suggestions; published automatically when they agree.
         from .reason_mining import auto_publish
         auto_publish(suggestion.fish_species, municipality)
+        suggestion.refresh_from_db()
 
         ActivityLog.objects.create(
             actor=self.request.user,
@@ -2774,6 +2786,7 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
         suggestion = serializer.save()
         from .reason_mining import auto_publish
         auto_publish(suggestion.fish_species, suggestion.municipality)
+        suggestion.refresh_from_db()
         after = {"suggested_price": str(suggestion.suggested_price), "comment": suggestion.comment}
         ActivityLog.objects.create(
             actor=request.user,
@@ -4704,10 +4717,12 @@ def publish_recommendation(request):
         return Response({"price_per_kg": " ".join(str(d) for d in detail)}, status=status.HTTP_400_BAD_REQUEST)
 
     now = timezone.now()
+    from .reason_mining import link_contributors, unlink_contributors
     for auto in automatic_today:
         auto.status = PriceRecord.STATUS_WITHDRAWN
         auto.remarks = (auto.remarks + f" Replaced by the LGU ({request.user.username}).")[:2000]
         auto.save(update_fields=["status", "remarks", "updated_at"])
+        unlink_contributors(auto)
     record = PriceRecord.objects.create(
         fish_species=fish, municipality=municipality, market=market, recorded_date=today,
         price_per_kg=price, status=PriceRecord.STATUS_PUBLISHED,
@@ -4716,6 +4731,8 @@ def publish_recommendation(request):
         recorded_by=request.user, reviewed_by=request.user, reviewed_at=now,
         published_by=request.user, published_at=now,
     )
+    # Vendors whose agreeing suggestions formed the recommendation are told.
+    link_contributors(record, rec)
     log_activity(request.user, "published", "PriceRecord", record.pk, fish.name, {
         "price_per_kg": str(price), "recorded_date": today.isoformat(), "market": market.name if market else "",
         "recommended_price": rec["recommended_price"], "history_median": rec["history_median"],

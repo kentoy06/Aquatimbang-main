@@ -297,6 +297,7 @@ const PHRASES = {
   "Announcements": ["Mga Anunsyo", "Mga Pahibalo gikan sa Admin"],
   "Pending Review": ["Naghihintay ng Pagsusuri", "Naghulat sa Pagsusi"],
   "Submitted": ["Naipasa", "Napasa"],
+  "Used": ["Ginamit", "Gigamit"],
   "Reviewed": ["Nasuri na", "Nasusi na"],
   "Adopted": ["Tinanggap", "Gidawat"],
   "Rejected": ["Hindi tinanggap", "Wala gidawat"],

@@ -138,7 +138,14 @@ export default function PriceRecommendations({ notify }) {
                   <td><strong>{r.fish_name}</strong></td>
                   <td>{peso(r.last_price)}{r.last_date && <small className="muted-text" style={{ display: "block" }}>{r.last_date}</small>}</td>
                   <td>{peso(r.history_median)}</td>
-                  <td>{r.vendor_count ? <>{r.vendor_count} · {peso(r.vendor_median)}</> : <span className="muted-text">None</span>}</td>
+                  <td>
+                    {r.vendor_count ? <>{r.vendor_count} · {peso(r.vendor_median)}</> : <span className="muted-text">None</span>}
+                    {r.suggesters?.length > 0 && (
+                      <small className="muted-text" style={{ display: "block" }} title={r.suggesters.map((s) => s.vendor).join(", ")}>
+                        {r.suggesters.slice(0, 2).map((s) => s.vendor).join(", ")}{r.suggesters.length > 2 ? ` +${r.suggesters.length - 2}` : ""}
+                      </small>
+                    )}
+                  </td>
                   <td>
                     {top ? (
                       <button type="button" className="reason-chip" onClick={() => setDetails(r)} title="See all reason groups">
@@ -192,6 +199,27 @@ export default function PriceRecommendations({ notify }) {
               <div className="profile-field"><span>Vendor weight</span><strong>{pct(details.vendor_weight)}</strong></div>
               <div className="profile-field"><span>Recommended</span><strong>{peso(details.recommended_price)}</strong></div>
             </div>
+            {details.suggesters?.length > 0 && (
+              <>
+                <div className="mini-head">Who suggested (each vendor's latest suggestion)</div>
+                <div className="table-scroll">
+                  <table className="who-suggested">
+                    <thead><tr><th>Vendor</th><th>Price</th><th>Reason</th><th>Comment</th><th>Counted</th></tr></thead>
+                    <tbody>
+                      {details.suggesters.map((s) => (
+                        <tr key={s.id}>
+                          <td><strong>{s.vendor}</strong></td>
+                          <td>{peso(s.price)}</td>
+                          <td>{s.reason}</td>
+                          <td>{s.comment ? `"${s.comment}"` : <span className="muted-text">—</span>}</td>
+                          <td>{s.agrees ? <span className="badge success">Agrees</span> : <span className="muted-text">No</span>}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </>
+            )}
             <div className="mini-head">Reason groups (text clustering of the vendors' reasons and comments)</div>
             {details.clusters.length === 0 ? <p className="empty-row">No vendor suggestions in the last days.</p> : (
               <ul className="reason-clusters">

@@ -47,7 +47,10 @@ export default function FishProfileModal({ item, onClose, onLogin, onRegister })
 
   useEffect(() => {
     let cancelled = false;
-    const params = item.municipality_id ? `?municipality=${item.municipality_id}` : "";
+    const query = new URLSearchParams();
+    if (item.municipality_id) query.set("municipality", item.municipality_id);
+    if (item.market_id) query.set("market", item.market_id);
+    const params = query.toString() ? `?${query}` : "";
     fetch(apiUrl(`/public/fish/${item.fish_id}/${params}`))
       .then(async (r) => { const d = await r.json().catch(() => null); if (!r.ok) throw new Error(d?.message || "Could not load this fish."); return d; })
       .then((d) => { if (!cancelled) setData(d); })
@@ -103,9 +106,21 @@ export default function FishProfileModal({ item, onClose, onLogin, onRegister })
               <dl className="fp-facts">
                 <div><dt>Price date</dt><dd>{longDate(data.latest.recorded_date)}</dd></div>
                 <div><dt>Municipality</dt><dd>{data.municipality.name}{data.municipality.province ? `, ${data.municipality.province}` : ""}</dd></div>
+                {data.latest.market && <div><dt>Market</dt><dd>{data.latest.market}</dd></div>}
                 {data.week_ago && <div><dt>A week earlier</dt><dd>{peso(data.week_ago.price_per_kg)} ({shortDate(data.week_ago.recorded_date)})</dd></div>}
-                <div><dt>Published by</dt><dd>The LGU{data.latest.is_correction ? " (corrected)" : ""}</dd></div>
+                <div><dt>Published by</dt><dd>{data.latest.automatic ? "Vendors' agreement (automatic)" : "The LGU"}{data.latest.is_correction ? " (corrected)" : ""}</dd></div>
               </dl>
+
+              {data.latest.suggested_by?.length > 0 && (
+                <section className="fp-section">
+                  <h4>Suggested by</h4>
+                  <ul className="fp-suggesters">
+                    {data.latest.suggested_by.map((v, i) => (
+                      <li key={i}><b>{v.name}</b> {peso(v.price)}/kg{v.reason ? ` · ${v.reason}` : ""}</li>
+                    ))}
+                  </ul>
+                </section>
+              )}
 
               {data.closed_seasons_now.length > 0 && (
                 <div className="fp-season">
