@@ -38,7 +38,10 @@ async function apiRequest(path, options = {}) {
     throw new Error(
       data?.detail ||
       data?.message ||
-      (data ? JSON.stringify(data) : `Request failed: ${response.status}`)
+      // {"field": ["message"]} -> "message"
+      (data && typeof data === "object"
+        ? Object.values(data).flat().map(String).join(" ")
+        : `Request failed: ${response.status}`)
     );
   }
 
@@ -87,6 +90,7 @@ export async function createVendorSuggestion(data) {
     fish_species: data.fish_species ?? data.fishSpeciesId,
     municipality: data.municipality ?? data.municipalityId,
     suggested_price: data.suggested_price ?? data.suggestedPrice,
+    reason_category: data.reason_category ?? data.reasonCategory ?? "",
     comment: data.comment ?? "",
   };
 
