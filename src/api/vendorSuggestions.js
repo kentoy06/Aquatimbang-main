@@ -3,7 +3,7 @@
 import { API_BASE_URL as API_BASE } from "./config.js";
 
 const STATUS_LABELS = {
-  pending: "Pending Review",
+  pending: "Submitted",
   reviewed: "Reviewed",
   adopted: "Adopted",
   rejected: "Rejected",

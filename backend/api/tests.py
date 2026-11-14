@@ -2308,40 +2308,41 @@ class PriceInsightsTests(TestCase):
 
 
 class CommunityAverageTests(TestCase):
-    """Community Average: last 30 days, reviewed + adopted only, adopted shown separately."""
+    """Community Average: vendors' suggestions of the last 30 days, with the main reason."""
 
-    def test_recent_reviewed_and_adopted_only(self):
+    def test_recent_suggestions_with_main_reason(self):
         from .models import VendorPriceSuggestion
         role = Role.objects.get_or_create(name="Fish Vendor")[0]
         place = Municipality.objects.create(name="Talisay", province="Cebu")
         fish = FishSpecies.objects.create(name="Tulingan")
-        vendor = User.objects.create_user("ca_vendor", "ca@example.com", "TestPass123!")
-        UserProfile.objects.create(user=vendor, role=role, municipality=place, account_status="approved", is_active=True)
+        vendors = []
+        for i in range(2):
+            v = User.objects.create_user(f"ca_vendor{i}", f"ca{i}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=v, role=role, municipality=place, account_status="approved", is_active=True)
+            vendors.append(v)
 
-        def suggest(price, status, days_ago=0):
+        def suggest(vendor, price, status="pending", days_ago=0, reason="fuel_price"):
             s = VendorPriceSuggestion.objects.create(vendor=vendor, fish_species=fish, municipality=place,
-                                                     suggested_price=Decimal(price), status=status,
-                                                     reviewed_at=timezone.now() if status != "pending" else None)
+                                                     suggested_price=Decimal(price), status=status, reason_category=reason)
             VendorPriceSuggestion.objects.filter(pk=s.pk).update(created_at=timezone.now() - datetime.timedelta(days=days_ago))
 
-        suggest("190", "adopted")
-        suggest("200", "adopted", 3)
-        suggest("180", "reviewed", 5)
-        suggest("500", "pending")           # not reviewed yet: ignored
-        suggest("100", "rejected")          # rejected: ignored
-        suggest("300", "adopted", 45)       # too old: ignored
+        suggest(vendors[0], "190")
+        suggest(vendors[0], "200", days_ago=3)
+        suggest(vendors[1], "180", days_ago=5, reason="weather")
+        suggest(vendors[1], "100", status="withdrawn")   # withdrawn: ignored
+        suggest(vendors[1], "120", status="rejected")    # rejected: ignored
+        suggest(vendors[0], "300", days_ago=45)          # too old: ignored
 
         client = APIClient()
-        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=vendor)[0].key}")
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=vendors[0])[0].key}")
         rows = client.get("/api/vendor-suggestions/community-average/").data
         self.assertEqual(len(rows), 1)
         row = rows[0]
         self.assertEqual(row["submission_count"], 3)
-        self.assertEqual(row["adopted_count"], 2)
-        self.assertEqual(row["reviewed_count"], 1)
-        self.assertEqual(float(row["average_price"]), 190.0)
-        self.assertEqual(float(row["adopted_average"]), 195.0)
-        self.assertIsNotNone(row["latest_adopted_at"])
+        self.assertEqual(row["vendor_count"], 2)
+        self.assertEqual(row["average_price"], 190.0)
+        self.assertIn("fuel", row["main_reason"].lower())
+        self.assertEqual(row["main_reason_share"], 0.67)
 
 
 class PresenceTests(TestCase):
