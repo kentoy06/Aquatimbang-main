@@ -948,15 +948,22 @@ class AccountManagementTests(TestCase):
         self.assertFalse(User.objects.filter(pk=self.vendor.pk).exists())
         self.assertTrue(ActivityLog.objects.filter(action="deleted", target_name="um_vendor").exists())
 
-    def test_delete_account_with_suggestions_is_refused(self):
+    def test_delete_account_keeps_its_suggestions(self):
         from .models import FishSpecies, VendorPriceSuggestion
         species = FishSpecies.objects.create(name="Galunggong")
-        VendorPriceSuggestion.objects.create(vendor=self.vendor, fish_species=species, municipality=self.cebu, suggested_price=180)
+        VendorPriceSuggestion.objects.create(vendor=self.vendor, fish_species=species, municipality=self.cebu,
+                                             suggested_price=180, reason_category="fuel_price")
         response = self.client_for(self.admin).delete(f"/api/auth/users/{self.vendor.pk}/")
-        self.assertEqual(response.status_code, 400)
-        self.assertIn("Deactivate", response.data["message"])
-        self.assertTrue(User.objects.filter(pk=self.vendor.pk).exists())
-        self.assertFalse(ActivityLog.objects.filter(action="deleted", target_name="um_vendor").exists())
+        self.assertEqual(response.status_code, 200, response.data)
+        self.assertIn("1 suggested price", response.data["message"])
+        self.assertFalse(User.objects.filter(pk=self.vendor.pk).exists())
+        suggestion = VendorPriceSuggestion.objects.get()
+        self.assertIsNone(suggestion.vendor)
+        rows = self.client_for(self.admin).get("/api/vendor-suggestions/").data
+        rows = rows.get("results", rows) if isinstance(rows, dict) else rows
+        self.assertEqual(rows[0]["submitted_by"], "Deleted vendor")
+        log = ActivityLog.objects.get(action="deleted", target_name="um_vendor")
+        self.assertEqual(log.details["suggestions_kept"], 1)
 
     # ---- passwords ----
 

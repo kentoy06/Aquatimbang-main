@@ -876,9 +876,13 @@ class VendorPriceSuggestion(models.Model):
         (STATUS_WITHDRAWN, "Withdrawn"),
     ]
 
+    # Kept when the vendor's account is deleted (shown as "Deleted vendor"),
+    # so the suggested price stays in the price history.
     vendor = models.ForeignKey(
         "auth.User",
-        on_delete=models.PROTECT,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
         related_name="fish_price_suggestions",
     )
     fish_species = models.ForeignKey(
@@ -940,7 +944,7 @@ class VendorPriceSuggestion(models.Model):
         ordering = ["-created_at", "-id"]
 
     def __str__(self):
-        return f"{self.vendor.username} - {self.fish_species.name}" 
+        return f"{self.vendor.username if self.vendor_id else 'Deleted vendor'} - {self.fish_species.name}" 
 
 
 # ============================================================

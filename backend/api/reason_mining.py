@@ -218,7 +218,8 @@ def latest_suggestions(fish, municipality, today=None, days=SUGGESTION_DAYS):
     )
     latest = {}
     for row in rows:
-        latest.setdefault(row.vendor_id, row)
+        # A deleted vendor's suggestion has no vendor; count it on its own.
+        latest.setdefault(row.vendor_id or f"s{row.pk}", row)
     return list(latest.values())
 
 

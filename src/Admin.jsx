@@ -1710,7 +1710,7 @@ const submitReview = async () => {
   };
 
   const deleteAccount = async (u) => {
-    if (!await askConfirm(`Permanently delete ${u.name}'s account? This cannot be undone.`)) return;
+    if (!await askConfirm(`Permanently delete ${u.name}'s account? ${u.role === "Fish Vendor" ? "Their suggested prices are kept and shown as \"Deleted vendor\". " : ""}This cannot be undone.`)) return;
     try {
       const data = await sendJson(`/auth/users/${u.id}/`, "DELETE");
       setDatabaseUsers((prev) => prev.filter((a) => a.id !== u.id));
