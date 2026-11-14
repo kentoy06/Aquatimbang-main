@@ -1192,10 +1192,7 @@ class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
         source="municipality.name",
         read_only=True,
     )
-    submitted_by = serializers.CharField(
-        source="vendor.username",
-        read_only=True,
-    )
+    submitted_by = serializers.SerializerMethodField()
     status_display = serializers.CharField(
         source="get_status_display",
         read_only=True,
@@ -1212,6 +1209,9 @@ class VendorPriceSuggestionSerializer(serializers.ModelSerializer):
         if category == VendorPriceSuggestion.REASON_OTHER and len(comment) < 10:
             raise serializers.ValidationError({"comment": "Explain your reason in a few words (at least 10 characters)."})
         return attrs
+
+    def get_submitted_by(self, obj):
+        return obj.vendor.username if obj.vendor_id else "Deleted vendor"
 
     class Meta:
         model = VendorPriceSuggestion

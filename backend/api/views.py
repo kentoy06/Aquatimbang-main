@@ -2908,7 +2908,7 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
             target_id=suggestion.pk,
             target_name=suggestion.fish_species.name,
             details={
-                "vendor": suggestion.vendor.username,
+                "vendor": suggestion.vendor.username if suggestion.vendor_id else "Deleted vendor",
                 "suggested_price": str(suggestion.suggested_price),
                 "feedback": suggestion.lgu_feedback,
             },
@@ -3445,16 +3445,21 @@ def manage_user(request, user_id):
         if is_active_admin and active_admin_count(exclude_user_id=user.pk) == 0:
             return Response({"message": "You cannot delete the last active Administrator."}, status=status.HTTP_400_BAD_REQUEST)
         username, role = user.username, profile.role.name
+        # The vendor's suggested prices stay (shown as "Deleted vendor") so
+        # the price history and today's recommendations are unchanged.
+        suggestion_count = VendorPriceSuggestion.objects.filter(vendor=user).count()
         try:
             with transaction.atomic():
-                log_activity(request.user, "deleted", "UserAccount", user.pk, username, {"role": role})
+                log_activity(request.user, "deleted", "UserAccount", user.pk, username,
+                             {"role": role, "suggestions_kept": suggestion_count})
                 user.delete()
         except ProtectedError:
             return Response(
-                {"message": f"{username} has price suggestions on record and cannot be deleted. Deactivate the account instead to keep the history."},
+                {"message": f"{username} has records that must be kept and cannot be deleted. Deactivate the account instead."},
                 status=status.HTTP_400_BAD_REQUEST,
             )
-        return Response({"message": f"{username} deleted."}, status=status.HTTP_200_OK)
+        extra = f" Their {suggestion_count} suggested price{'s' if suggestion_count != 1 else ''} were kept." if suggestion_count else ""
+        return Response({"message": f"{username} deleted.{extra}"}, status=status.HTTP_200_OK)
 
     values, errors = clean_account_fields(request.data, user=user)
     if errors:
