@@ -2818,6 +2818,69 @@ class PriceRecommendationTests(StallSampleTests):
         self.assertEqual(row["recommended_price"], 220.0)    # 0.5 x 200 + 0.5 x 240
         self.assertIn("100% of 5 vendors", row["basis"])
 
+    def submit(self, vendor, price, category, comment=""):
+        self.client.force_authenticate(vendor)
+        response = self.client.post("/api/vendor-suggestions/", {
+            "fish_species": self.fish.pk, "suggested_price": str(price),
+            "reason_category": category, "comment": comment,
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        return response.data
+
+    def auto_records(self):
+        from .reason_mining import AUTO_SOURCE
+        return PriceRecord.objects.filter(fish_species=self.fish, recorded_date=timezone.localdate(), source=AUTO_SOURCE)
+
+    def test_vendor_agreement_publishes_automatically(self):
+        self.submit(self.vendors[0], 150, "fuel_price", "Mahal ang krudo")
+        self.submit(self.vendors[1], 240, "fuel_price")
+        self.assertFalse(self.auto_records().exists())  # 2 vendors are not enough
+        self.submit(self.vendors[2], 240, "fuel_price", "diesel went up")
+        record = self.auto_records().get()
+        self.assertEqual(record.status, "published")
+        self.assertEqual(record.market, self.market)
+        # history 200, vendors' median 240, weight 0.3 -> 212
+        self.assertEqual(record.price_per_kg, Decimal("212.00"))
+        self.assertIn("Main reason: Higher fuel", record.remarks)
+        # A 4th agreeing vendor updates the same automatic price.
+        self.submit(self.vendors[3], 240, "fuel_price")
+        record.refresh_from_db()
+        self.assertEqual(self.auto_records().count(), 1)
+        self.assertEqual(record.price_per_kg, Decimal("216.00"))
+        self.assertTrue(ActivityLog.objects.filter(action="auto-published", target_id=record.pk).exists())
+        self.assertTrue(ActivityLog.objects.filter(action="auto-updated", target_id=record.pk).exists())
+        # The automatic price is part of the published history the forecast uses.
+        self.assertTrue(PriceRecord.objects.filter(status="published", recorded_date=timezone.localdate()).exists())
+
+    def test_mixed_reasons_do_not_publish(self):
+        for vendor, reason in zip(self.vendors, ["fuel_price", "weather", "high_demand", "quality_size"]):
+            self.submit(vendor, 260, reason)
+        self.assertFalse(self.auto_records().exists())
+
+    def test_withdraw_removes_automatic_price_when_agreement_lost(self):
+        ids = [self.submit(v, 240, "fuel_price")["id"] for v in self.vendors[:3]]
+        self.assertTrue(self.auto_records().filter(status="published").exists())
+        self.client.force_authenticate(self.vendors[2])
+        self.assertEqual(self.client.post(f"/api/vendor-suggestions/{ids[2]}/withdraw/").status_code, 200)
+        self.assertEqual(self.auto_records().get().status, "withdrawn")
+
+    def test_lgu_price_is_not_replaced_and_lgu_can_replace_automatic(self):
+        for vendor in self.vendors[:3]:
+            self.submit(vendor, 240, "fuel_price")
+        auto = self.auto_records().get()
+        self.client.force_authenticate(self.officer)
+        response = self.client.post("/api/price-recommendations/publish/", {
+            "fish_species": self.fish.pk, "market": self.market.pk, "price_per_kg": "205",
+            "reason_category": "market_change", "reason": "Checked at Pasil this morning; most stalls sell at 205.",
+        }, format="json")
+        self.assertEqual(response.status_code, 201, response.data)
+        auto.refresh_from_db()
+        self.assertEqual(auto.status, "withdrawn")
+        # More vendor suggestions no longer touch the LGU's price.
+        self.submit(self.vendors[3], 240, "fuel_price")
+        self.assertFalse(self.auto_records().filter(status="published").exists())
+        self.assertEqual(PriceRecord.objects.get(pk=response.data["id"]).price_per_kg, Decimal("205.00"))
+
     def test_mixed_reasons_keep_the_history(self):
         reasons = ["fuel_price", "weather", "high_demand", "quality_size"]
         for vendor, reason in zip(self.vendors, reasons):

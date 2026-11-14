@@ -38,6 +38,7 @@ MAX_VENDOR_WEIGHT = 0.7    # vendors never decide more than 70% of the price
 SUGGESTION_DAYS = 7        # suggestions older than this are not counted
 HISTORY_COUNT = 7          # latest published prices used for the history
 OTHER_SIMILARITY = 0.15    # an "Other" reason this close to a group joins it
+AUTO_SOURCE = "AquaTimbang automatic price (vendor agreement + price history)"
 
 # Words with the same meaning, in English, Filipino and Cebuano.
 SYNONYMS = {
@@ -232,10 +233,14 @@ def recommend_price(fish, municipality, market=None, today=None):
     )
     if market is not None:
         published = published.filter(Q(market=market) | Q(market__isnull=True))
-    history = list(published.order_by("-recorded_date", "-id")[:HISTORY_COUNT])
+    # The history is the prices before today, so today's price (automatic or
+    # published by the LGU) does not count toward its own calculation.
+    history = list(published.filter(recorded_date__lt=today).order_by("-recorded_date", "-id")[:HISTORY_COUNT])
     history_prices = [float(r.price_per_kg) for r in history]
     history_median = round(median(history_prices), 2) if history_prices else None
-    today_record = next((r for r in history if r.recorded_date == today and (market is None or r.market_id == market.pk)), None)
+    today_record = published.filter(recorded_date=today).order_by("-id").first()
+    if today_record is not None and market is not None and today_record.market_id not in (None, market.pk):
+        today_record = None
 
     suggestions = latest_suggestions(fish, municipality, today)
     items = [{"category": s.reason_category, "comment": s.comment, "price": float(s.suggested_price)} for s in suggestions]
@@ -293,9 +298,90 @@ def recommend_price(fish, municipality, market=None, today=None):
         "allowed_range": [float(low), float(high)],
         "published_today": bool(today_record),
         "published_today_price": float(today_record.price_per_kg) if today_record else None,
+        "published_today_automatic": bool(today_record and today_record.source == AUTO_SOURCE),
         "rules": {
             "min_vendors": MIN_VENDORS, "agreement_share": AGREEMENT_SHARE,
             "weight_per_vendor": VENDOR_WEIGHT_STEP, "max_vendor_weight": MAX_VENDOR_WEIGHT,
             "suggestion_days": SUGGESTION_DAYS, "history_count": HISTORY_COUNT,
         },
     }
+
+
+def default_market(municipality):
+    """The market used for vendor suggestions: Pasil when there is one."""
+    from .models import Market
+    markets = Market.objects.filter(municipality=municipality, is_active=True).order_by("name")
+    return markets.filter(name__icontains="pasil").first() or markets.first()
+
+
+def auto_publish(fish, municipality, market=None, today=None):
+    """
+    Called whenever a vendor submits, edits or withdraws a suggestion.
+    When enough vendors agree on the reason, today's price of the fish is
+    published automatically from the price history and the vendors'
+    suggestions, so the published history (and therefore the forecast)
+    follows the market. An automatic price is updated as more vendors
+    suggest, and withdrawn if the vendors no longer agree. A price the LGU
+    published or imported for today is never replaced.
+    Returns "published", "updated", "withdrawn" or "" (nothing done).
+    """
+    from decimal import Decimal
+    from django.utils import timezone as tz
+    from .models import ActivityLog, PriceRecord, SystemSetting
+    today = today or timezone.localdate()
+    market = market or default_market(municipality)
+    rec = recommend_price(fish, municipality, market, today)
+    live = (
+        PriceRecord.objects.filter(fish_species=fish, municipality=municipality, market=market, recorded_date=today)
+        .exclude(status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN])
+        .first()
+    )
+    if live is not None and live.source != AUTO_SOURCE:
+        return ""  # the LGU's own price for today stays
+
+    agree = rec["vendor_weight"] > 0 and rec["recommended_price"] is not None and rec["in_allowed_range"]
+
+    def log(action, record, extra=None):
+        top = rec["clusters"][0] if rec["clusters"] else {}
+        ActivityLog.objects.create(
+            actor=None, actor_username="AquaTimbang", actor_role="System", action=action,
+            target_type="PriceRecord", target_id=record.pk, target_name=fish.name,
+            details={
+                "price_per_kg": str(record.price_per_kg), "recorded_date": today.isoformat(),
+                "market": market.name if market else "", "history_median": rec["history_median"],
+                "vendor_median": rec["vendor_median"], "vendor_count": rec["vendor_count"],
+                "main_reason": top.get("label", ""), "agreement": rec["agreement"],
+                "vendor_weight": rec["vendor_weight"], **(extra or {}),
+            },
+        )
+
+    if not agree:
+        if live is not None:
+            live.status = PriceRecord.STATUS_WITHDRAWN
+            live.remarks = (live.remarks + " Withdrawn automatically: the vendors no longer agree on the reason.")[:2000]
+            live.save(update_fields=["status", "remarks", "updated_at"])
+            log("auto-withdrawn", live)
+            return "withdrawn"
+        return ""
+
+    price = Decimal(str(rec["recommended_price"])).quantize(Decimal("0.01"))
+    top = rec["clusters"][0]
+    remarks = (f"{rec['basis']} Main reason: {top['label']}"
+               + (f" (key words: {', '.join(top['top_terms'])})" if top["top_terms"] else "") + ".")[:2000]
+    now = tz.now()
+    if live is None:
+        record = PriceRecord.objects.create(
+            fish_species=fish, municipality=municipality, market=market, recorded_date=today,
+            price_per_kg=price, status=PriceRecord.STATUS_PUBLISHED, source=AUTO_SOURCE, remarks=remarks,
+            reviewed_at=now, published_at=now,
+        )
+        log("auto-published", record)
+        return "published"
+    if live.price_per_kg != price or live.remarks != remarks:
+        previous = live.price_per_kg
+        live.price_per_kg = price
+        live.remarks = remarks
+        live.save(update_fields=["price_per_kg", "remarks", "updated_at"])
+        log("auto-updated", live, {"previous_price": str(previous)})
+        return "updated"
+    return ""
