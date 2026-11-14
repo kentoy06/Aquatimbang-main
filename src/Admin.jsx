@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
 import { askConfirm, askText } from "./components/ConfirmDialog.jsx";
 import CorrectRecordDialog from "./components/CorrectRecordDialog.jsx";
 import { LearnedOutliers } from "./components/PriceInsights.jsx";
@@ -611,6 +612,8 @@ useEffect(() => {
     setTimeout(() => setToast(""), 2600);
   };
 
+  // Related pages share one menu item and open as tabs. Notifications open
+  // from the bell at the top.
   const menuGroups = [
     {
       label: "ADMINISTRATION",
@@ -620,34 +623,21 @@ useEffect(() => {
         { name: "Fish Species", icon: "🐟" },
         ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "◉" }] : []),
         { name: "Municipality & Market", icon: "⚑" },
-        { name: "Price Records", icon: "₱" },
-        { name: "Import Price History", icon: "⇪" },
-        { name: "System Configuration", icon: "⚙" },
+        { name: "Prices", icon: "₱", tabs: ["Price Records", "Vendor Suggestions", "Import Price History"] },
       ],
     },
     {
       label: "MONITORING",
       items: [
-        { name: "Vendor Suggestions", icon: "💬" },
-        { name: "Predictive Analytics", icon: "∿" },
-        { name: "Market Insights", icon: "✦" },
-        { name: "External Factors", icon: "☁" },
-        { name: "Data Monitoring", icon: "◫" },
-        { name: "Messages", icon: "✉" },
-        { name: "Notifications", icon: "🔔" },
-      ],
-    },
-    {
-      label: "REPORTS",
-      items: [
-        { name: "Reports Management", icon: "▤" },
-        { name: "Activity Logs", icon: "◷" },
+        { name: "Analytics", icon: "∿", tabs: ["Predictive Analytics", "Market Insights", "External Factors", "Data Monitoring"] },
+        { name: "Reports & Logs", icon: "▤", tabs: ["Reports Management", "Activity Logs"] },
       ],
     },
     {
       label: "SYSTEM",
       items: [
-        { name: "System Announcements", icon: "📢" },
+        { name: "System", icon: "⚙", tabs: ["System Configuration", "System Announcements"] },
+        { name: "Messages", icon: "✉" },
         { name: "Admin Profile", icon: "👤" },
       ],
     },
@@ -803,8 +793,8 @@ useEffect(() => {
               {group.items.map((item) => (
                 <button
                   key={item.name}
-                  className={`nav-item ${activePage === item.name ? "active" : ""}`}
-                  onClick={() => { setActivePage(item.name); setMenuOpen(false); }}
+                  className={`nav-item ${isActiveItem(item, activePage) ? "active" : ""}`}
+                  onClick={() => { setActivePage(firstPage(item)); setMenuOpen(false); }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{item.name}</span>
@@ -860,6 +850,7 @@ useEffect(() => {
 
         <section className="content">
           {activePage === "Dashboard" && <ProfileProgress compact profile={account.profile} onOpen={() => setActivePage("Admin Profile")} />}
+          <PageTabs menuGroups={menuGroups} page={activePage} onSelect={setActivePage} />
           {renderPage()}
         </section>
 

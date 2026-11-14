@@ -351,17 +351,6 @@ export default function PriceImport({ notify, onImported }) {
                 </div>
               )}
 
-              <fieldset className="import-mode">
-                <legend>After importing, the prices should be</legend>
-                <label>
-                  <input type="radio" name="import-mode" checked={!sendToReview} onChange={() => setSendToReview(false)} />
-                  <span><strong>Published right away</strong><small>For past official records (e.g. DVFM history) that were already checked.</small></span>
-                </label>
-                <label>
-                  <input type="radio" name="import-mode" checked={sendToReview} onChange={() => setSendToReview(true)} />
-                  <span><strong>Sent to Review &amp; Publish</strong><small>For new or unchecked data: an officer approves them before vendors see them.</small></span>
-                </label>
-              </fieldset>
 
               <div className="button-row" style={{ marginTop: 14 }}>
                 <button className="secondary-btn" onClick={() => run(true)} disabled={Boolean(busy)}>{mode === "file" ? "Check File" : "Check List"}</button>

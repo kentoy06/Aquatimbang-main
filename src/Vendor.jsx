@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
 import React, { useRef, useEffect, useState, lazy, Suspense } from "react";
 import NotificationList, { useNotificationState } from "./components/NotificationList.jsx";
@@ -243,22 +244,20 @@ useEffect(() => {
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
 
+  // Related pages share one menu item and open as tabs. Notifications open
+  // from the bell at the top.
   const menuGroups = [
     {
       label: "PRICES",
       items: [
         { name: "Dashboard", icon: "▦" },
-        { name: "Current Fish Prices", icon: "₱" },
-        { name: "Price Trends", icon: "↗" },
-        { name: "Price Forecast", icon: "∿" },
+        { name: "Fish Prices", icon: "₱", tabs: ["Current Fish Prices", "Price Trends", "Price Forecast"] },
       ],
     },
     {
       label: "SUGGESTIONS",
       items: [
-        { name: "Submit Suggested Price", icon: "✎" },
-        { name: "My Suggested Prices", icon: "📥" },
-        { name: "Community Average", icon: "👥" },
+        { name: "Suggested Prices", icon: "✎", tabs: ["Submit Suggested Price", "My Suggested Prices", "Community Average"] },
       ],
     },
     {
@@ -272,7 +271,6 @@ useEffect(() => {
       label: "ACCOUNT",
       items: [
         { name: "Messages", icon: "✉" },
-        { name: "Notifications", icon: "🔔" },
         { name: "My Profile", icon: "♙" },
         { name: "Help / How to Use", icon: "❓" },
       ],
@@ -364,8 +362,8 @@ useEffect(() => {
               {group.items.map((item) => (
                 <button
                   key={item.name}
-                  className={`nav-item ${activePage === item.name ? "active" : ""}`}
-                  onClick={() => { setActivePage(item.name); setMenuOpen(false); }}
+                  className={`nav-item ${isActiveItem(item, activePage) ? "active" : ""}`}
+                  onClick={() => { setActivePage(firstPage(item)); setMenuOpen(false); }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{t(item.name)}</span>
@@ -423,6 +421,7 @@ useEffect(() => {
 
         <section className="content">
           {activePage === "Dashboard" && <ProfileProgress compact profile={account.profile} onOpen={() => setActivePage("My Profile")} />}
+          <PageTabs menuGroups={menuGroups} page={activePage} onSelect={setActivePage} translate={t} />
           {renderPage()}
         </section>
         <AnnouncementPopup announcements={announcements} />

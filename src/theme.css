@@ -2156,3 +2156,10 @@ table th {
 .who-suggested th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #64748b); }
 .fp-suggesters { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .fp-suggesters li { background: #f1f5f9; border-radius: 999px; padding: 4px 10px; font-size: 13px; color: #334155; }
+
+/* Tabs for pages grouped under one menu item */
+.page-tabs { display: flex; gap: 4px; flex-wrap: wrap; border-bottom: 1px solid var(--line, #e2e8f0); margin: 0 0 18px; }
+.page-tabs button { background: none; border: 0; border-bottom: 3px solid transparent; padding: 10px 14px; font: inherit; font-weight: 600; color: var(--muted, #64748b); cursor: pointer; margin-bottom: -1px; }
+.page-tabs button:hover { color: var(--ink, #0f172a); }
+.page-tabs button.active { color: var(--ink, #0f172a); border-bottom-color: var(--accent, #f97316); }
+@media (max-width: 640px) { .page-tabs { flex-wrap: nowrap; overflow-x: auto; } .page-tabs button { white-space: nowrap; } }

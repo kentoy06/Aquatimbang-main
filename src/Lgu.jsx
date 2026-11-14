@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
 import FishNameField from "./components/FishNameField.jsx";
 import PriceRecommendations from "./components/PriceRecommendations.jsx";
 import SimilarFishNames from "./components/SimilarFishNames.jsx";
@@ -409,52 +410,42 @@ useEffect(() => {
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
 
+  // Related pages share one menu item and open as tabs. Notifications open
+  // from the bell at the top.
   const menuGroups = [
     {
       label: "DAILY OPERATIONS",
       items: [
         { name: "Dashboard", icon: "▦" },
         { name: "Price Recommendations", icon: "✎" },
-        { name: "Fish Species Management", icon: "🐟" },
-        { name: "Review & Publish", icon: "✔" },
         { name: "Import Price History", icon: "⇪" },
-        { name: "External Factors", icon: "☁" },
+        { name: "Fish Species Management", icon: "🐟" },
       ],
     },
     {
       label: "FISH VENDORS",
       items: [
-        { name: "Vendor Registrations", icon: "☑" },
-        { name: "Vendor Management", icon: "👥" },
+        { name: "Vendors", icon: "👥", tabs: ["Vendor Registrations", "Vendor Management"] },
         ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "◉" }] : []),
       ],
     },
     {
-      label: "REFERENCE PRICES",
+      label: "PRICES & ANALYTICS",
       items: [
-        { name: "Official Reference Prices", icon: "₱" },
-        { name: "Price Trends", icon: "↗" },
-        { name: "Price Comparison", icon: "⇄" },
-        { name: "Price Anomalies", icon: "⚠" },
+        { name: "Published Prices", icon: "₱", tabs: ["Official Reference Prices", "Price Trends", "Price Comparison"] },
+        { name: "Forecast & Insights", icon: "∿", tabs: ["Price Forecast", "Market Insights", "Price Anomalies", "External Factors"] },
       ],
-    },
-    {
-      label: "FORECASTING",
-      items: [{ name: "Price Forecast", icon: "∿" }, { name: "Market Insights", icon: "✦" }],
     },
     {
       label: "REPORTS & AUDIT",
       items: [
-        { name: "Reports", icon: "▤" },
-        { name: "Validation History", icon: "☷" },
-        { name: "Audit Log", icon: "◷" },
+        { name: "Reports & Logs", icon: "▤", tabs: ["Reports", "Validation History", "Audit Log"] },
       ],
     },
     {
       label: "ACCOUNT",
       items: [
         { name: "Messages", icon: "✉" },
-        { name: "Notifications", icon: "🔔" },
         { name: "My Profile", icon: "♙" },
       ],
     },
@@ -552,8 +543,8 @@ useEffect(() => {
               {group.items.map((item) => (
                 <button
                   key={item.name}
-                  className={`nav-item ${activePage === item.name ? "active" : ""}`}
-                  onClick={() => { setActivePage(item.name); setMenuOpen(false); }}
+                  className={`nav-item ${isActiveItem(item, activePage) ? "active" : ""}`}
+                  onClick={() => { setActivePage(firstPage(item)); setMenuOpen(false); }}
                 >
                   <span className="nav-icon">{item.icon}</span>
                   <span>{item.name}</span>
@@ -625,6 +616,7 @@ useEffect(() => {
 
         <section className="content">
           {activePage === "Dashboard" && <ProfileProgress compact profile={account.profile} onOpen={() => setActivePage("My Profile")} />}
+          <PageTabs menuGroups={menuGroups} page={activePage} onSelect={setActivePage} />
           {renderPage()}
         </section>
         <AnnouncementPopup announcements={announcements} />
@@ -742,9 +734,10 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
   // If the field is absent, show a dash instead of displaying old mock numbers.
   const hasStatusField = priceRecords.some((record) => "status" in record);
   const normalizeStatus = (value) => String(value || "").trim().toLowerCase();
-  const pendingReview = hasStatusField
-    ? priceRecords.filter((record) => ["for review", "pending review", "pending"].includes(normalizeStatus(record.status))).length
-    : null;
+  // Prices published today from the vendors' agreement (no LGU click needed).
+  const automaticToday = todaysRecords.filter(
+    (record) => normalizeStatus(record.status) === "published" && /automatic/i.test(record.source || "")
+  ).length;
   const published = hasStatusField
     ? priceRecords.filter((record) => normalizeStatus(record.status) === "published").length
     : null;
@@ -800,16 +793,16 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
           </div>
         </div>
 
-        <div className="stat-card clickable" onClick={() => goTo("Review & Publish")}>
-          <div className="stat-icon orange">⏳</div>
+        <div className="stat-card clickable" onClick={() => goTo("Price Recommendations")}>
+          <div className="stat-icon orange">⚡</div>
           <div>
-            <span>Pending Review</span>
-            <h2>{pendingReview ?? "—"}</h2>
-            <small>{hasStatusField ? "Awaiting validation" : "Status not provided by API"}</small>
+            <span>Automatic Today</span>
+            <h2>{automaticToday}</h2>
+            <small>Published from vendors' agreement</small>
           </div>
         </div>
 
-        <div className="stat-card clickable" onClick={() => goTo("Review & Publish")}>
+        <div className="stat-card clickable" onClick={() => goTo("Official Reference Prices")}>
           <div className="stat-icon green">✔</div>
           <div>
             <span>Published</span>
@@ -818,7 +811,7 @@ function LGUDashboard({ priceRecords, pricesLoading, pricesError, suggestions, f
           </div>
         </div>
 
-        <div className="stat-card clickable" onClick={() => goTo("Review & Publish")}>
+        <div className="stat-card clickable" onClick={() => goTo("Price Anomalies")}>
           <div className="stat-icon purple">⚠</div>
           <div>
             <span>Flagged Entries</span>
@@ -2055,7 +2048,7 @@ function PriceTrends({ priceRecords: recentRecords, loading: recentLoading, erro
       </div>
 
       {loading ? <EmptyPanel>Loading published prices…</EmptyPanel> : error ? <EmptyPanel>{error}</EmptyPanel> : !hasData ? (
-        <EmptyPanel>{published.length ? "No published prices for these filters. Try another species, municipality or date range." : "No published prices yet. Trends appear once prices are published in Review & Publish."}</EmptyPanel>
+        <EmptyPanel>{published.length ? "No published prices for these filters. Try another species, municipality or date range." : "No published prices yet. Trends appear once prices are published from Price Recommendations or imported."}</EmptyPanel>
       ) : (
         <>
           <div className="stats-grid">
