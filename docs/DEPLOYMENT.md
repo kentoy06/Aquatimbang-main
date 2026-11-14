@@ -145,6 +145,43 @@ Actions → Variables → New repository variable**
 Then **Actions → Deploy to GitHub Pages → Run workflow** (or push any
 change). When it finishes, the website logs in using the online backend.
 
+## 6b. Host the website on Cloudflare Pages (instead of GitHub Pages)
+
+Cloudflare Pages hosts only the website (React). The backend, database, and
+photos stay on PythonAnywhere: Cloudflare cannot run Django or the forecasting
+libraries.
+
+1. Sign in at [dash.cloudflare.com](https://dash.cloudflare.com) (a free account is enough).
+2. **Workers & Pages → Create → Pages → Connect to Git**, allow access to GitHub,
+   and choose **kentoy06/Aquatimbang-main**.
+3. Build settings:
+   - Production branch: `main`
+   - Framework preset: **React (Vite)** (or None)
+   - Build command: `npm run build`
+   - Build output directory: `dist`
+4. **Environment variables (Production)** → add
+   `VITE_API_BASE_URL` = `https://yourname.pythonanywhere.com/api`
+   (Node 22 is picked up from the `.node-version` file; the site is built for
+   the address root automatically.)
+5. **Save and Deploy.** The site appears at `https://<project-name>.pages.dev`.
+   Every merge into `main` rebuilds it automatically.
+6. Tell the backend about the new address. On PythonAnywhere, edit
+   `~/Aquatimbang-main/backend/.env` and change these lines (keep the GitHub
+   address in the lists while you still use it):
+
+   ```ini
+   CORS_ALLOWED_ORIGINS=https://<project-name>.pages.dev,https://kentoy06.github.io
+   CSRF_TRUSTED_ORIGINS=https://yourname.pythonanywhere.com,https://<project-name>.pages.dev
+   FRONTEND_URL=https://<project-name>.pages.dev/
+   ```
+
+   Then **Reload** the web app on the Web tab.
+7. Optional: a custom domain such as `aquatimbang.com` under the Pages
+   project's **Custom domains** tab. Add it to the three lines above too.
+
+Once the Cloudflare site works, the GitHub Pages workflow can be turned off
+(Actions → Deploy to GitHub Pages → Disable workflow) or left running as a backup.
+
 ## 7. Email (optional): password reset and lockout notices
 
 Without email settings, emails are only written to the server log. To send

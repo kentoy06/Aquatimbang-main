@@ -8,7 +8,9 @@ export default defineConfig({
   // Enable React/JSX.
   plugins: [react()],
 
-  // This repository is named "Aquatimbang-main", so
-  // GitHub Pages serves the website from /Aquatimbang-main/.
-  base: "/Aquatimbang-main/",
+  // Where the website is served from:
+  // - Cloudflare Pages (CF_PAGES is set by its build): the site root, "/".
+  // - GitHub Pages and local development: /Aquatimbang-main/, the repository name.
+  // VITE_BASE overrides both.
+  base: process.env.VITE_BASE || (process.env.CF_PAGES ? "/" : "/Aquatimbang-main/"),
 });
