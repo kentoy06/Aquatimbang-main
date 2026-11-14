@@ -1018,7 +1018,7 @@ function MySuggestedPrices({ mySuggestions, setMySuggestions, notify }) {
                     <td><span className={`badge ${statusClass(s.status)}`}>{t(s.status)}</span></td>
                     <td>{s.lguFeedback || <span className="muted-text">—</span>}</td>
                     <td>
-                      {s.status !== "Pending Review" ? (
+                      {s.status !== "Submitted" ? (
                         <span className="muted-text">—</span>
                       ) : editing ? (
                         <div className="action-icons">
@@ -1065,11 +1065,11 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
   return (
     <>
       <div className="page-title"><div><h2>{t("Community Average")}</h2>
-        <p>Prices suggested by vendors in the last 30 days that the LGU reviewed or adopted, grouped by municipality and fish. Vendor names are never shown.</p>
+        <p>Prices suggested by vendors in the last 30 days, grouped by municipality and fish, with the reason most of them gave. Vendor names are never shown.</p>
       </div></div>
       <div className="notice"><div className="notice-icon">!</div><div>
         <strong>Community price — not the official LGU price</strong>
-        <p>Only suggestions from the last 30 days that the LGU reviewed or adopted are counted. <b>Adopted</b> means the LGU found the price fair. The official price is only the one the LGU publishes.</p>
+        <p>Withdrawn and rejected suggestions are not counted. When at least 3 vendors suggest a price and most give the same reason, their prices are used for the next published price.</p>
       </div></div>
       <PriceMunicipalitySelector records={publishedPrices} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
       <div className="panel" style={{ padding: 18, marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>
@@ -1085,9 +1085,9 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
        <div className="panel" style={{ overflowX: "auto" }}>
         <PagedTable><thead><tr>
           <th>MUNICIPALITY</th><th>SPECIES</th><th>LATEST OFFICIAL PRICE / KG</th>
-          <th>COMMUNITY AVERAGE / KG</th><th>DIFFERENCE</th><th>ADOPTED BY LGU</th><th>REVIEWED ONLY</th>
+          <th>COMMUNITY AVERAGE / KG</th><th>DIFFERENCE</th><th>VENDORS</th><th>MAIN REASON</th>
         </tr></thead><tbody>
-          {rows.length === 0 ? <tr><td colSpan={7}>No reviewed or adopted vendor suggestions in the last 30 days for these filters.</td></tr> :
+          {rows.length === 0 ? <tr><td colSpan={7}>No vendor suggestions in the last 30 days for these filters.</td></tr> :
             rows.map((row) => {
               const official = latestOfficial(row);
               const officialPrice = official ? Number(official.price_per_kg) : null;
@@ -1100,16 +1100,8 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
                 <td className={difference === null ? "" : difference > 0 ? "up" : difference < 0 ? "down" : ""}>
                   {difference === null ? "—" : `${difference > 0 ? "+" : difference < 0 ? "−" : ""}${peso(Math.abs(difference))}`}
                 </td>
-                <td>
-                  {row.adopted_count > 0 ? (
-                    <div className="adopted-cell">
-                      <span className="adopted-badge">✔ Adopted by LGU</span>
-                      <span>{row.adopted_count} {row.adopted_count === 1 ? "price" : "prices"}, average {peso(row.adopted_average)}</span>
-                      {row.latest_adopted_at && <small>Latest: {new Date(row.latest_adopted_at).toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })}</small>}
-                    </div>
-                  ) : <span className="muted-text">None yet</span>}
-                </td>
-                <td>{row.reviewed_count ?? row.submission_count}</td>
+                <td>{row.vendor_count} <small className="muted-text">({row.submission_count} {row.submission_count === 1 ? "price" : "prices"})</small></td>
+                <td>{row.main_reason}{row.main_reason_share ? <small className="muted-text"> · {Math.round(row.main_reason_share * 100)}%</small> : null}</td>
               </tr>;
             })}
         </tbody></PagedTable>
@@ -1346,7 +1338,7 @@ function ExportReportsPage({ title, mySuggestions = [], suggestionsLoading, sugg
   return (
     <>
       <div className="page-title"><div><h2>{title}</h2>
-        <p>Download actual AquaTimbang records as Excel-compatible CSV files. No simulated prices.</p>
+        <p>Download actual AquaTimbang records as formatted Excel files. No simulated prices.</p>
       </div></div>
       <div className="notice"><div className="notice-icon">!</div><div>
         <strong>Published LGU prices and vendor suggestions are separate reports</strong>
@@ -1528,7 +1520,7 @@ function LiveVendorDashboard({ records, loading, error, municipality, onMunicipa
     price: rows.find((r) => String(r.fish_species) === id),
   })).filter((item) => item.fish.name || item.price);
   const average = rows.length ? rows.reduce((sum, r) => sum + Number(r.price_per_kg), 0) / rows.length : null;
-  const pending = mySuggestions.filter((s) => s.status === "Pending Review").length;
+  const pending = mySuggestions.filter((s) => s.status === "Submitted").length;
   return <>
     <div className="welcome-card"><div><span className="eyebrow">{t("FISH VENDOR")}</span><h2>{t("Welcome, {name}!", { name: vendorName.split(" ")[0] })}</h2><p>{t("Official LGU prices for {place}.", { place: municipality || t("all municipalities") })}</p></div><div className="welcome-fish">🐟</div></div>
     <PriceMunicipalitySelector records={records} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />

@@ -13,7 +13,7 @@ import "./App.css";
 import "./Admin.css";
 import { API_BASE_URL, apiUrl, authHeaders, fetchAll } from "./api/config.js";
 import { fullName as profileName, useMyProfile } from "./api/account.js";
-import { listVendorSuggestions, reviewVendorSuggestion } from "./api/vendorSuggestions.js";
+import { listVendorSuggestions } from "./api/vendorSuggestions.js";
 import { getForecastHistory, listExternalFactors } from "./api/forecast.js";
 import { buildXlsx, describeFilters, exportReport } from "./api/reportExport.js";
 import AccountProfile, { ProfileProgress } from "./components/AccountProfile.jsx";
@@ -360,11 +360,11 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
     });
   }
 
-  const pendingSuggestions = suggestions.filter((s) => s.status === "Pending Review");
+  const pendingSuggestions = suggestions.filter((s) => s.status === "Submitted");
   if (pendingSuggestions.length > 0) {
     notifs.push({
       id: nid++, type: "info", page: "Vendor Suggestions",
-      title: `${pendingSuggestions.length} vendor suggestion${pendingSuggestions.length > 1 ? "s" : ""} awaiting review`,
+      title: `${pendingSuggestions.length} vendor suggested price${pendingSuggestions.length > 1 ? "s" : ""} submitted`,
       detail: pendingSuggestions.slice(0, 3).map((s) => s.species).join(", "),
     });
   }
@@ -380,8 +380,8 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
   if (missingCount > 0) {
     notifs.push({
       id: nid++, type: "danger", page: "Price Records",
-      title: `${missingCount} missing price record${missingCount > 1 ? "s" : ""} for today`,
-      detail: "No entry logged by any LGU officer yet.",
+      title: `${missingCount} fish without a published price today`,
+      detail: "Prices are published from Price Recommendations or when vendors agree on a reason.",
     });
   }
 
@@ -3381,7 +3381,7 @@ function ActivityLogs({ notify }) {
    FISHERFOLK SUGGESTED PRICE MONITORING
    ================================================================ */
 
-function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
+function FisherfolkSuggestions({ suggestions, error }) {
   const daysAgo = (n) => {
     const d = new Date();
     d.setDate(d.getDate() - n);
@@ -3391,8 +3391,6 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
   const [from, setFrom] = useState(daysAgo(30));
   const [to, setTo] = useState(daysAgo(0));
   const [search, setSearch] = useState("");
-  const [savingId, setSavingId] = useState(null);
-
   const speciesNames = [...new Set(suggestions.map((s) => s.species).filter(Boolean))].sort((a, b) => a.localeCompare(b));
   const stats = suggestionStats(suggestions, speciesFilter, from, to);
 
@@ -3403,24 +3401,9 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
       [s.species, s.submittedBy, s.municipality].join(" ").toLowerCase().includes(search.toLowerCase())
     );
 
-  const setStatus = async (s, decision) => {
-    const feedback = await askText(`Optional feedback for ${s.submittedBy} (${s.species}):`, "");
-    if (feedback === null) return;
-    setSavingId(s.id);
-    try {
-      await reviewVendorSuggestion(s.id, decision, feedback.trim());
-      notify(`Suggestion marked as ${decision}.`);
-      onChanged();
-    } catch (err) {
-      notify(err.message);
-    } finally {
-      setSavingId(null);
-    }
-  };
-
   const statusClass = (s) => {
     if (s === "Adopted") return "success";
-    if (s === "Rejected") return "deleted";
+    if (s === "Rejected" || s === "Withdrawn") return "deleted";
     if (s === "Reviewed") return "approved";
     return "pending";
   };
@@ -3430,7 +3413,7 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
       <div className="page-title">
         <div>
           <h2>Vendor Suggested Price Monitoring</h2>
-          <p>Review prices suggested by fish vendors and compare them against official rates.</p>
+          <p>Prices suggested by fish vendors with their reasons. Suggestions are not reviewed one by one: they are combined with the price history in the LGU's Price Recommendations, and published automatically when most vendors give the same reason.</p>
         </div>
       </div>
 
@@ -3507,8 +3490,8 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
               <th>SUGGESTED PRICE</th>
               <th>SUBMITTED BY</th>
               <th>MUNICIPALITY</th>
+              <th>REASON</th>
               <th>STATUS</th>
-              <th>ACTIONS</th>
             </tr>
           </thead>
           <tbody>
@@ -3524,18 +3507,11 @@ function FisherfolkSuggestions({ suggestions, error, onChanged, notify }) {
                   <td><strong>{peso(s.suggestedPrice)}</strong></td>
                   <td>{s.submittedBy}</td>
                   <td>{s.municipality}</td>
-                  <td><span className={`badge ${statusClass(s.status)}`}>{s.status}</span></td>
                   <td>
-                    {s.status === "Pending Review" ? (
-                      <div className="action-icons">
-                        <button title="Mark Reviewed" disabled={savingId === s.id} onClick={() => setStatus(s, "reviewed")}>👁</button>
-                        <button title="Adopt" disabled={savingId === s.id} onClick={() => setStatus(s, "adopted")}>✔</button>
-                        <button title="Reject" disabled={savingId === s.id} onClick={() => setStatus(s, "rejected")}>✕</button>
-                      </div>
-                    ) : (
-                      <span className="muted-text">{s.lguFeedback || "Reviewed"}</span>
-                    )}
+                    {s.reason || "—"}
+                    {s.comment && <small className="muted-text" style={{ display: "block" }}>"{s.comment}"</small>}
                   </td>
+                  <td><span className={`badge ${statusClass(s.status)}`}>{s.status}</span></td>
                 </tr>
               ))
             )}

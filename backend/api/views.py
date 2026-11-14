@@ -2814,51 +2814,47 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
     @action(detail=False, methods=["get"], url_path="community-average")
     def community_average(self, request):
         """
-        Average of LGU-reviewed and adopted vendor suggestions per fish and
-        municipality, from the last ?days= (default 30). Vendor names are
-        never included.
+        Average of the vendors' suggested prices per fish and municipality
+        from the last ?days= (default 30), with the number of vendors and the
+        reason most of them gave. Withdrawn and rejected suggestions are left
+        out. Vendor names are never included.
         """
         self.get_role()  # Require an approved AquaTimbang account.
+        from collections import Counter
         from datetime import timedelta
-        from django.db.models import Avg, Count, Max, Q
         try:
             days = max(7, min(365, int(request.query_params.get("days", 30))))
         except ValueError:
             days = 30
-        adopted = Q(status=VendorPriceSuggestion.STATUS_ADOPTED)
-        rows = (
+        suggestions = (
             VendorPriceSuggestion.objects
-            .filter(
-                status__in=[VendorPriceSuggestion.STATUS_REVIEWED, VendorPriceSuggestion.STATUS_ADOPTED],
-                suggested_price__gt=0,
-                created_at__gte=timezone.now() - timedelta(days=days),
-            )
-            .values("municipality_id", "municipality__name", "fish_species_id", "fish_species__name")
-            .annotate(
-                average_price=Avg("suggested_price"),
-                submission_count=Count("id"),
-                adopted_count=Count("id", filter=adopted),
-                adopted_average=Avg("suggested_price", filter=adopted),
-                latest_adopted_at=Max("reviewed_at", filter=adopted),
-            )
-            .order_by("municipality__name", "fish_species__name")
+            .filter(suggested_price__gt=0, created_at__gte=timezone.now() - timedelta(days=days))
+            .exclude(status__in=[VendorPriceSuggestion.STATUS_WITHDRAWN, VendorPriceSuggestion.STATUS_REJECTED])
+            .select_related("municipality", "fish_species")
         )
-        return Response([
-            {
-                "municipality_id": row["municipality_id"],
-                "municipality_name": row["municipality__name"],
-                "fish_species": row["fish_species_id"],
-                "fish_name": row["fish_species__name"],
-                "average_price": round(row["average_price"], 2),
-                "submission_count": row["submission_count"],
-                "adopted_count": row["adopted_count"],
-                "reviewed_count": row["submission_count"] - row["adopted_count"],
-                "adopted_average": round(row["adopted_average"], 2) if row["adopted_average"] is not None else None,
-                "latest_adopted_at": row["latest_adopted_at"],
+        groups = {}
+        for s in suggestions:
+            key = (s.municipality_id, s.fish_species_id)
+            groups.setdefault(key, []).append(s)
+        reasons = dict(VendorPriceSuggestion.REASON_CHOICES)
+        result = []
+        for items in groups.values():
+            first = items[0]
+            top_reason, top_count = Counter(s.reason_category for s in items).most_common(1)[0]
+            result.append({
+                "municipality_id": first.municipality_id,
+                "municipality_name": first.municipality.name if first.municipality else "",
+                "fish_species": first.fish_species_id,
+                "fish_name": first.fish_species.name,
+                "average_price": round(sum(float(s.suggested_price) for s in items) / len(items), 2),
+                "submission_count": len(items),
+                "vendor_count": len({s.vendor_id for s in items}),
+                "main_reason": reasons.get(top_reason, top_reason),
+                "main_reason_share": round(top_count / len(items), 2),
                 "days": days,
-            }
-            for row in rows
-        ])
+            })
+        result.sort(key=lambda r: (r["municipality_name"], r["fish_name"]))
+        return Response(result)
 
     @action(detail=True, methods=["post"], url_path="review")
     @transaction.atomic
