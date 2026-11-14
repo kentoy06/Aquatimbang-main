@@ -103,6 +103,8 @@ export default function PriceRecommendations({ notify }) {
         The vendors' reasons from the last {rules?.suggestion_days || 7} days are grouped by text clustering. When at least {rules?.min_vendors || 3} vendors
         suggested and at least {pct(rules?.agreement_share || 0.6)} of them gave the same reason, the vendors' median price counts
         {" "}{pct(rules?.weight_per_vendor || 0.1)} per vendor (up to {pct(rules?.max_vendor_weight || 0.7)}); otherwise the history alone is used.
+        {" "}<strong>When the vendors agree, the price is published automatically</strong> as soon as a vendor submits, and it is updated as more vendors suggest.
+        These published prices become the price history the forecast learns from. When vendors disagree, publish the price here yourself.
       </div>
 
       {error && <div className="warn-box" role="alert">{error}</div>}
@@ -151,7 +153,13 @@ export default function PriceRecommendations({ notify }) {
                     {!r.in_allowed_range && <small className="rec-warn">Outside the allowed range</small>}
                   </td>
                   <td>
-                    {r.published_today ? (
+                    {r.published_today && r.published_today_automatic ? (
+                      <div className="action-buttons">
+                        <span className="badge success" title="Published automatically because the vendors agree on the reason">Auto-published {peso(r.published_today_price)}</span>
+                        <button className="secondary-btn" disabled={busy === r.fish_id} onClick={() => setOverride({ row: r, price: r.published_today_price ?? "", category: "", reason: "" })}>Change</button>
+                        <button className="text-btn" onClick={() => setDetails(r)}>Why?</button>
+                      </div>
+                    ) : r.published_today ? (
                       <span className="badge success">Published {peso(r.published_today_price)}</span>
                     ) : (
                       <div className="action-buttons">

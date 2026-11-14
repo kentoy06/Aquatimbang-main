@@ -2733,6 +2733,10 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
             vendor=self.request.user,
             municipality=municipality,
         )
+        # Recalculate today's price of this fish from the history and the
+        # vendors' suggestions; published automatically when they agree.
+        from .reason_mining import auto_publish
+        auto_publish(suggestion.fish_species, municipality)
 
         ActivityLog.objects.create(
             actor=self.request.user,
@@ -2761,13 +2765,15 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
     def partial_update(self, request, *args, **kwargs):
         """A vendor edits the price or comment of their own pending suggestion."""
         suggestion = self.own_pending_suggestion()
-        changes = {key: request.data[key] for key in ("suggested_price", "comment") if key in request.data}
+        changes = {key: request.data[key] for key in ("suggested_price", "comment", "reason_category") if key in request.data}
         if not changes:
             return Response({"message": "Nothing to change."}, status=status.HTTP_400_BAD_REQUEST)
         before = {"suggested_price": str(suggestion.suggested_price), "comment": suggestion.comment}
         serializer = self.get_serializer(suggestion, data=changes, partial=True)
         serializer.is_valid(raise_exception=True)
         suggestion = serializer.save()
+        from .reason_mining import auto_publish
+        auto_publish(suggestion.fish_species, suggestion.municipality)
         after = {"suggested_price": str(suggestion.suggested_price), "comment": suggestion.comment}
         ActivityLog.objects.create(
             actor=request.user,
@@ -2801,6 +2807,8 @@ class VendorPriceSuggestionViewSet(viewsets.ModelViewSet):
             target_name=suggestion.fish_species.name,
             details={"suggested_price": str(suggestion.suggested_price)},
         )
+        from .reason_mining import auto_publish
+        auto_publish(suggestion.fish_species, suggestion.municipality)
         return Response(self.get_serializer(suggestion).data)
 
     @action(detail=False, methods=["get"], url_path="community-average")
@@ -4660,9 +4668,13 @@ def publish_recommendation(request):
     live = PriceRecord.objects.filter(
         fish_species=fish, municipality=municipality, market=market, recorded_date=today,
     ).exclude(status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN])
-    if live.exists():
+    from .reason_mining import AUTO_SOURCE
+    # An automatic price (published from the vendors' agreement) can be
+    # replaced by the LGU; a price the LGU published is corrected instead.
+    if live.exclude(source=AUTO_SOURCE).exists():
         return Response({"message": f"{fish.name} already has a price for today. Correct that price instead, with a reason."},
                         status=status.HTTP_400_BAD_REQUEST)
+    automatic_today = list(live.filter(source=AUTO_SOURCE))
 
     price = Decimal(str(rec["recommended_price"])).quantize(Decimal("0.01")) if rec["recommended_price"] is not None else None
     override = request.data.get("price_per_kg") not in (None, "")
@@ -4691,6 +4703,10 @@ def publish_recommendation(request):
         return Response({"price_per_kg": " ".join(str(d) for d in detail)}, status=status.HTTP_400_BAD_REQUEST)
 
     now = timezone.now()
+    for auto in automatic_today:
+        auto.status = PriceRecord.STATUS_WITHDRAWN
+        auto.remarks = (auto.remarks + f" Replaced by the LGU ({request.user.username}).")[:2000]
+        auto.save(update_fields=["status", "remarks", "updated_at"])
     record = PriceRecord.objects.create(
         fish_species=fish, municipality=municipality, market=market, recorded_date=today,
         price_per_kg=price, status=PriceRecord.STATUS_PUBLISHED,
