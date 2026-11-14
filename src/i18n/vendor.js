@@ -297,6 +297,8 @@ const PHRASES = {
   "Announcements": ["Mga Anunsyo", "Mga Pahibalo gikan sa Admin"],
   "Pending Review": ["Naghihintay ng Pagsusuri", "Naghulat sa Pagsusi"],
   "Submitted": ["Naipasa", "Napasa"],
+  "Fish Prices": ["Presyo ng Isda", "Presyo sa Isda"],
+  "Suggested Prices": ["Mga Iminungkahing Presyo", "Mga Gisugyot nga Presyo"],
   "Used": ["Ginamit", "Gigamit"],
   "Reviewed": ["Nasuri na", "Nasusi na"],
   "Adopted": ["Tinanggap", "Gidawat"],
