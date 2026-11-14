@@ -136,13 +136,17 @@ function Register({ onBack, onGoToLogin }) {
     !form.last_name.trim() ||
     !form.username.trim() ||
     !form.password.trim() ||
-    !form.contact.trim() ||
-    // Vendors without an email can still register; LGU staff need one.
-    (role !== "Fish Vendor" && !form.email.trim()) ||
     !form.dob ||
     !form.sex
   ) {
     setError(t("Please fill in every field."));
+    return;
+  }
+
+  // Email and contact number are each optional, but one is needed.
+  if (!form.email.trim() && !form.contact.trim()) {
+    setError(t("Give at least an email address or a contact number, so you can be reached about your account."));
+    document.getElementById("reg-email")?.focus();
     return;
   }
 
@@ -297,12 +301,36 @@ if (role === "LGU Officer") {
       <div className="login-page">
         <div className="login-card register-confirm-card">
           <div className="register-confirm-icon">✔</div>
-          <h3>{t("Registration submitted")}</h3>
-          <p>
-            {t(role === "Fish Vendor"
-              ? "Thanks, {name}! Your Fish Vendor account is pending approval from an LGU Officer of your municipality. You'll be able to log in once it's reviewed and approved."
-              : "Thanks, {name}! Your LGU Officer account is pending approval from an Administrator. You'll be able to log in once it's reviewed and approved.",
-            { name: form.first_name.trim() })}
+          <h3>{t("Registration confirmed")}</h3>
+          <p className="register-confirm-lead">
+            {t("Thank you, {name}! Your registration was received successfully.", { name: form.first_name.trim() })}
+          </p>
+          <ol className="register-steps">
+            <li className="done">
+              <span className="register-step-dot">✓</span>
+              <div><strong>{t("Registration received")}</strong><small>{t("Your details and documents were saved.")}</small></div>
+            </li>
+            <li className="current">
+              <span className="register-step-dot">2</span>
+              <div>
+                <strong>{t("Waiting for approval")}</strong>
+                <small>{t(role === "Fish Vendor"
+                  ? "An LGU Officer of your municipality will review your details and documents."
+                  : "An Administrator will review your details and documents.")}</small>
+              </div>
+            </li>
+            <li>
+              <span className="register-step-dot">3</span>
+              <div>
+                <strong>{t("Log in once approved")}</strong>
+                <small>{t("Use your username {username} and the password you created.", { username: form.username.trim() })}</small>
+              </div>
+            </li>
+          </ol>
+          <p className="register-confirm-contact">
+            {form.email.trim()
+              ? t("We will contact you at {contact} if anything is missing.", { contact: form.email.trim() })
+              : t("We will contact you at {contact} if anything is missing.", { contact: form.contact.trim() })}
           </p>
           <div className="button-row" style={{ marginTop: 22 }}>
             <button className="secondary-btn" onClick={onBack}>{t("← Back to Home")}</button>
@@ -448,16 +476,21 @@ if (role === "LGU Officer") {
             <section className="register-section">
               <h4 className="register-section-title">{t("Contact & Location")}</h4>
 
+              <p className={`register-contact-note${!form.email.trim() && !form.contact.trim() ? "" : " is-ok"}`}>
+                {!form.email.trim() && !form.contact.trim()
+                  ? t("Give at least one: an email address or a contact number.")
+                  : t("✓ We can reach you about your account.")}
+              </p>
               <div className="form-row">
                 <div className="form-group">
-                  <label htmlFor="reg-email">{t("Email Address")}{role === "Fish Vendor" && <>{" "}<span className="optional">{t("(optional)")}</span></>}</label>
+                  <label htmlFor="reg-email">{t("Email Address")} <span className="optional">{t("(optional)")}</span></label>
                   <input id="reg-email" type="email" value={form.email} placeholder={t("you@email.com")} autoComplete="email" onChange={(e) => update("email", e.target.value)} />
-                  {role === "Fish Vendor" && !form.email.trim() && (
+                  {!form.email.trim() && form.contact.trim() && (
                     <small className="field-help">{t("No email? You can still register. If you forget your password, ask your LGU Officer to reset it.")}</small>
                   )}
                 </div>
                 <div className="form-group">
-                  <label htmlFor="reg-contact">{t("Contact Number")}</label>
+                  <label htmlFor="reg-contact">{t("Contact Number")} <span className="optional">{t("(optional)")}</span></label>
                   <input id="reg-contact" type="tel" value={form.contact} placeholder={t("e.g. 0917 555 0198")} autoComplete="tel" onChange={(e) => update("contact", e.target.value)} />
                 </div>
               </div>
