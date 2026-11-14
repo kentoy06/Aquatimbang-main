@@ -307,10 +307,11 @@ class RegisterSerializer(serializers.Serializer):
         # optional: the Administrator checks them and can ask for the rest
         # before approving.
 
-        # Fish Vendors may register without an email (password resets are
-        # then done by their LGU Officer); everyone else needs one.
-        if not (attrs.get("email") or "").strip() and not (role and role.name == "Fish Vendor"):
-            raise serializers.ValidationError({"email": "An email address is required."})
+        # Email and contact number are each optional, but at least one is
+        # needed so the LGU or Administrator can reach the person.
+        if not (attrs.get("email") or "").strip() and not (attrs.get("contact_number") or "").strip():
+            message = "Give at least an email address or a contact number."
+            raise serializers.ValidationError({"email": message, "contact_number": message})
 
         return attrs
 

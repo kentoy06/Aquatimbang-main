@@ -1592,8 +1592,8 @@ def update_species_sold(profile, value):
 @transaction.atomic
 def my_profile(request):
     """
-    Read or update the logged-in user's own profile: names, email (optional
-    for Fish Vendors), contact number, date of birth, sex, and the vendor's or
+    Read or update the logged-in user's own profile: names, email and contact
+    number (at least one of the two), date of birth, sex, and the vendor's or
     LGU officer's registration details. Uploaded documents are not changed here.
     """
     user = request.user
@@ -1613,10 +1613,9 @@ def my_profile(request):
                 errors[field] = "Must be text."
                 continue
             value = value.strip()
-            email_optional = field == "email" and profile.role and profile.role.name == "Fish Vendor"
-            if field == "email" and not value and email_optional:
+            if field == "email" and not value:
                 user.email = ""
-            elif field in ("first_name", "email") and not value:
+            elif field == "first_name" and not value:
                 errors[field] = "This field is required."
             elif field == "email":
                 from django.core.validators import validate_email
@@ -1694,6 +1693,10 @@ def my_profile(request):
                         setattr(record, name, value)
                 if not errors:
                     record.save()
+        if not errors and not (user.email or "").strip() and not (profile.contact_number or "").strip():
+            message = "Keep at least an email address or a contact number."
+            errors["email"] = message
+            errors["contact_number"] = message
         if errors:
             transaction.set_rollback(True)
             return Response(errors, status=status.HTTP_400_BAD_REQUEST)

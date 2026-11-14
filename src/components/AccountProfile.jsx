@@ -163,8 +163,7 @@ export function profileCompletion(profile) {
     ["photo", "Profile photo", Boolean(profile.has_photo)],
     ["first_name", "First name", Boolean(profile.first_name)],
     ["last_name", "Last name", Boolean(profile.last_name)],
-    ...(isVendor ? [] : [["email", "Email address", Boolean(profile.email)]]),
-    ["contact_number", "Contact number", Boolean(profile.contact_number)],
+    ["contact_number", "Email or contact number", Boolean(profile.email || profile.contact_number)],
     ["date_of_birth", "Date of birth", Boolean(profile.date_of_birth)],
     ["sex", "Sex", Boolean(profile.sex)],
     ...(isVendor ? [
@@ -263,9 +262,12 @@ function AccountProfile({ account, notify, description = "Manage your account de
   const update = (key, value) => setDraft((prev) => ({ ...prev, [key]: value }));
 
   const submit = async () => {
-    const emailOptional = profile.role === "Fish Vendor";
-    if (!draft.first_name.trim() || (!emailOptional && !draft.email.trim())) {
-      setSaveError(emailOptional ? "First name is required." : "First name and email are required.");
+    if (!draft.first_name.trim()) {
+      setSaveError("First name is required.");
+      return;
+    }
+    if (!draft.email.trim() && !draft.contact_number.trim()) {
+      setSaveError("Keep at least an email address or a contact number.");
       return;
     }
     setSaving(true);
@@ -351,7 +353,7 @@ function AccountProfile({ account, notify, description = "Manage your account de
             <input id="profile-last_name" value={draft.last_name} onChange={(e) => update("last_name", e.target.value)} />
           </div>
           <div className="form-group">
-            <label htmlFor="profile-email">Email Address{profile.role === "Fish Vendor" && <span className="optional"> (optional)</span>}</label>
+            <label htmlFor="profile-email">Email Address <span className="optional">(optional if you give a contact number)</span></label>
             <input id="profile-email" type="email" value={draft.email} onChange={(e) => update("email", e.target.value)} />
           </div>
           <div className="form-group">

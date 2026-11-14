@@ -2544,7 +2544,7 @@ class RelaxedRegistrationTests(RegistrationPhotoAndSpeciesTests):
     """Vendors may register without email; LGU officers with missing details."""
 
     def test_vendor_without_email(self):
-        response = APIClient().post("/api/auth/register/", self.vendor_payload(email=""), format="multipart")
+        response = APIClient().post("/api/auth/register/", self.vendor_payload(email="", contact_number="09175550198"), format="multipart")
         self.assertEqual(response.status_code, 201, response.data)
         self.assertEqual(User.objects.get(username="new_vendor").email, "")
 
@@ -2553,10 +2553,17 @@ class RelaxedRegistrationTests(RegistrationPhotoAndSpeciesTests):
                                       market_name=None, stall_number=None, species_sold=None, stall_photo=None)
         response = APIClient().post("/api/auth/register/", payload, format="multipart")
         self.assertEqual(response.status_code, 201, response.data)
-        # An LGU officer still needs an email.
-        payload = self.vendor_payload(username="lgu_two", email="", role=self.roles["LGU Officer"].id,
+        # Without an email, a contact number is enough.
+        payload = self.vendor_payload(username="lgu_two", email="", contact_number="09175550198", role=self.roles["LGU Officer"].id,
                                       market_name=None, stall_number=None, species_sold=None, stall_photo=None)
-        self.assertEqual(APIClient().post("/api/auth/register/", payload, format="multipart").status_code, 400)
+        self.assertEqual(APIClient().post("/api/auth/register/", payload, format="multipart").status_code, 201)
+
+    def test_email_or_contact_number_is_needed(self):
+        neither = APIClient().post("/api/auth/register/", self.vendor_payload(email="", contact_number=""), format="multipart")
+        self.assertEqual(neither.status_code, 400)
+        self.assertIn("at least an email address or a contact number", str(neither.data))
+        only_email = APIClient().post("/api/auth/register/", self.vendor_payload(email="v@example.com", contact_number=""), format="multipart")
+        self.assertEqual(only_email.status_code, 201, only_email.data)
 
 
 class FishMergeTests(StallSampleTests):
