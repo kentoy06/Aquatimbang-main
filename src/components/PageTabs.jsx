@@ -23,6 +23,20 @@ export const isActiveItem = (item, page) => item.name === page || Boolean(item.t
 /** The page a sidebar item opens: its first tab, or itself. */
 export const firstPage = (item) => (item.tabs ? item.tabs[0] : item.name);
 
+// A picture for each tab, so it is recognised before it is read.
+const TAB_ICONS = {
+  "Current Fish Prices": "🐟", "Price Trends": "📈", "Price Forecast": "🔮",
+  "Submit Suggested Price": "✍️", "My Suggested Prices": "📋", "Community Average": "👥",
+  "Vendor Registrations": "🆕", "Vendor Management": "🧑‍🤝‍🧑",
+  "Official Reference Prices": "₱", "Price Comparison": "⚖️",
+  "Market Insights": "💡", "Price Anomalies": "⚠️", "External Factors": "🌦️",
+  "Reports": "📄", "Validation History": "✅", "Audit Log": "🕘",
+  "Price Records": "₱", "Vendor Suggestions": "💬", "Import Price History": "⬆️",
+  "Predictive Analytics": "🔮", "Data Monitoring": "📊",
+  "Reports Management": "📄", "Activity Logs": "🕘",
+  "System Configuration": "⚙️", "System Announcements": "📢",
+};
+
 /** Tab bar shown above a page that belongs to a group. */
 export default function PageTabs({ menuGroups, page, onSelect, translate = (text) => text }) {
   const item = itemFor(menuGroups, page);
@@ -38,7 +52,8 @@ export default function PageTabs({ menuGroups, page, onSelect, translate = (text
           className={tab === page ? "active" : ""}
           onClick={() => onSelect(tab)}
         >
-          {translate(tab)}
+          <span className="page-tab-icon" aria-hidden="true">{TAB_ICONS[tab] || "•"}</span>
+          <span>{translate(tab)}</span>
         </button>
       ))}
     </div>
