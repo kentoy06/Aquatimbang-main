@@ -82,6 +82,7 @@ function Landing({ onGetStarted, onRegister }) {
   // "current": checked recently; "older": not checked recently.
   const [priceView, setPriceView] = useState("current");
   const [pricePage, setPricePage] = useState(1);
+  const [marketView, setMarketView] = useState("");
   const [priceSearch, setPriceSearch] = useState("");
 
   useEffect(() => {
@@ -104,14 +105,16 @@ function Landing({ onGetStarted, onRegister }) {
       title: `Fish the LGU checked within ${summary?.fresh_days || 15} days of its latest update` },
     { value: count(summary?.municipality_count), label: "Municipalities" },
     { value: count(summary?.published_price_count), label: "Prices recorded", note: "all dates",
-      title: "Every official price the LGU has published, on every date. This history is used for trends and forecasts." },
+      title: "Every price the LGU has published, on every date. This history is used for trends and forecasts." },
   ];
   const latestDate = summary?.latest_published_date;
   const freshDays = summary?.fresh_days || 15;
   // Older servers do not send "current": treat every price as current then.
   const currentPrices = allPrices.filter((p) => p.current !== false);
   const olderPrices = allPrices.filter((p) => p.current === false);
-  const tabPrices = priceView === "older" ? olderPrices : currentPrices;
+  const marketNames = [...new Set(allPrices.map((p) => p.market).filter(Boolean))].sort();
+  const inMarket = (p) => !marketView || p.market === marketView;
+  const tabPrices = (priceView === "older" ? olderPrices : currentPrices).filter(inMarket);
   const searchKey = priceSearch.trim().toLowerCase();
   const prices = searchKey
     ? tabPrices.filter((p) => `${p.fish_name} ${p.scientific_name || ""} ${p.municipality_name} ${p.market || ""}`.toLowerCase().includes(searchKey))
@@ -126,8 +129,8 @@ function Landing({ onGetStarted, onRegister }) {
   };
 
   const audiences = [
-    { icon: "🐟", title: "Fish Vendors", desc: "Check official prices, compute fair selling amounts, and suggest a price when the market looks different." },
-    { icon: "✔", title: "LGU Officers", desc: "Encode, validate and publish official prices, review vendor suggestions, and approve vendor accounts." },
+    { icon: "🐟", title: "Fish Vendors", desc: "Check the suggested prices, compute fair selling amounts, and suggest a price with your reason when the market changes." },
+    { icon: "✔", title: "LGU Officers", desc: "Publish each day's price from the price history and the vendors' suggestions and reasons, and approve vendor accounts." },
     { icon: "📈", title: "Administrators", desc: "Manage users, species and markets, watch price forecasts, and generate reports." },
   ];
 
@@ -163,10 +166,10 @@ function Landing({ onGetStarted, onRegister }) {
         <>
         <div className="hero-content">
           <span className="hero-tag">Fish price transparency · Cebu · Philippines</span>
-          <span className="hero-eyebrow">Official · LGU-validated · Forecasted</span>
+          <span className="hero-eyebrow">Vendor-based · LGU-approved · Forecasted</span>
           <h1>Fair Fish Prices,<br />Clear as Ocean Water</h1>
           <p>
-            See today's official price per kilo before you buy or sell. Fair price
+            See today's suggested price per kilo before you buy or sell. Fair price
             calculator, price trends and forecasts for fish vendors and LGUs.
           </p>
           <div className="hero-buttons">
@@ -185,7 +188,7 @@ function Landing({ onGetStarted, onRegister }) {
 
         <div className="hero-cards">
           {(summary?.featured_prices || []).length > 0 && (
-            <span className="hero-cards-label">Latest official LGU prices</span>
+            <span className="hero-cards-label">Latest suggested prices</span>
           )}
           {(summary?.featured_prices || []).map((item) => (
             <div className="hero-price-card" key={`${item.fish_name}-${item.municipality_name}`}>
@@ -208,13 +211,26 @@ function Landing({ onGetStarted, onRegister }) {
         {section === "prices" && (
         <div className="landing-panel" id="prices">
         <span className="section-eyebrow">Today's market</span>
-        <h2>Official Fish Prices</h2>
+        <h2>Suggested Fish Prices</h2>
         <p className="section-lead">
-          Official prices per kilo published by the LGU, newest first. Only prices checked within {freshDays} days
-          of the latest update{latestDate ? ` (${formatDate(latestDate)})` : ""} are shown here; fish not checked
-          since then are under Older prices. Tap a fish for its details.
+          Suggested prices per kilo, computed from the price history and the prices and reasons given by the fish
+          vendors, and approved by the LGU. Newest first; only prices checked within {freshDays} days of the latest
+          update{latestDate ? ` (${formatDate(latestDate)})` : ""} are shown here, and fish not checked since then are
+          under Older prices. Tap a fish for its details.
         </p>
         <div id="price-board-top" />
+        {marketNames.length > 0 && (
+          <div className="market-strip" role="group" aria-label="Market">
+            <span className="market-strip-label">📍 Prices from</span>
+            {marketNames.length > 1 && (
+              <button type="button" className={marketView === "" ? "active" : ""} onClick={() => { setMarketView(""); setPricePage(1); }}>All markets</button>
+            )}
+            {marketNames.map((m) => (
+              <button type="button" key={m} className={marketView === m || marketNames.length === 1 ? "active" : ""}
+                onClick={() => { setMarketView(m); setPricePage(1); }}>{m}</button>
+            ))}
+          </div>
+        )}
         {latestDate && allPrices.length > 0 && (
           <div className="price-toolbar">
           <div className="price-view-toggle" role="group" aria-label="Which prices to show">
@@ -232,11 +248,11 @@ function Landing({ onGetStarted, onRegister }) {
         {priceView === "older" && olderPrices.length > 0 && (
           <p className="older-note">
             These fish have not been checked by the LGU for more than {freshDays} days before the latest update.
-            Their last official price is shown for reference only and may not match today's market.
+            Their last suggested price is shown for reference only and may not match today's market.
           </p>
         )}
         {prices.length === 0 ? (
-          <div className="landing-empty">{!summary ? "Loading prices…" : searchKey ? `No fish matching "${priceSearch.trim()}" in this list.` : allPrices.length ? "No prices in this list." : "No official prices have been published yet."}</div>
+          <div className="landing-empty">{!summary ? "Loading prices…" : searchKey ? `No fish matching "${priceSearch.trim()}" in this list.` : allPrices.length ? "No prices in this list." : "No suggested prices have been published yet."}</div>
         ) : (
           <div className="price-board">
             {pagePrices.map((p) => (
@@ -249,8 +265,9 @@ function Landing({ onGetStarted, onRegister }) {
               >
                 <FishThumb fish={{ id: p.fish_id, name: p.fish_name, has_photo: p.has_photo, updated_at: p.updated_at }} size={54} />
                 <div>
+                  {p.market && <em className="price-market">📍 {p.market}</em>}
                   <strong>{p.fish_name}</strong>
-                  <span>{p.municipality_name}{p.market ? ` · ${p.market}` : ""}</span>
+                  <span>{p.municipality_name}</span>
                   <span className={`price-date${p.recorded_date === latestDate ? " is-latest" : ""}`}>
                     {p.recorded_date === latestDate ? `Latest · ${formatDate(p.recorded_date)}` : `Last checked ${formatDate(p.recorded_date)}`}
                   </span>
@@ -293,7 +310,7 @@ function Landing({ onGetStarted, onRegister }) {
         <h2>Prices Everyone Can Trust</h2>
         <p className="section-lead">
           AquaTimbang is a predictive analytics-driven fish price transparency system. Fish
-          vendors and local government units see current and past official prices, suggest prices
+          vendors and local government units see current and past prices, suggest prices with their reasons
           from the market floor, compute fair amounts by weight, and plan ahead with SARIMAX price forecasts.
         </p>
         <div className="audience-grid">

@@ -2125,3 +2125,27 @@ table th {
 .register-steps li.done .register-step-dot { background: #12b76a; color: #fff; }
 .register-steps li.current .register-step-dot { background: #0e7c86; color: #fff; }
 .register-confirm-contact { font-size: 13px; color: #475467; margin: 0; }
+
+/* Price Recommendations (LGU) */
+.recommend-market { min-width: 220px; padding: 10px 12px; border-radius: 10px; border: 1px solid #cfdbe6; font: inherit; }
+.recommend-how { margin-bottom: 16px; font-size: 13px; line-height: 1.55; }
+.reason-chip {
+  border: 1px solid #b9e6fe; background: #f0f9ff; color: #0b4a6f; border-radius: 999px; padding: 4px 10px;
+  font: inherit; font-size: 12.5px; cursor: pointer; text-align: left;
+}
+.reason-chip b { margin-left: 4px; color: #0e7c86; }
+.rec-up { color: #b42318; font-weight: 600; white-space: nowrap; }
+.rec-down { color: #027a48; font-weight: 600; white-space: nowrap; }
+.rec-warn { display: block; color: #b54708; font-size: 11.5px; }
+.modal.reasons-modal { max-width: 720px; width: calc(100% - 32px); }
+.reasons-basis { margin: 0 0 12px; padding: 10px 12px; background: #f6fef9; border: 1px solid #abefc6; border-radius: 10px; font-size: 13.5px; color: #054f31; }
+.reason-clusters { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; max-height: 50vh; overflow-y: auto; }
+.reason-clusters > li { border: 1px solid #e4e7ec; border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; }
+.reason-cluster-head { display: flex; justify-content: space-between; gap: 10px; flex-wrap: wrap; }
+.reason-cluster-head span { font-size: 12.5px; color: #475467; }
+.reason-bar { height: 8px; border-radius: 999px; background: #e4e7ec; overflow: hidden; }
+.reason-bar span { display: block; height: 100%; background: linear-gradient(90deg, #0e7c86, #3fc1d9); border-radius: 999px; }
+.reason-clusters small { color: #475467; font-size: 12.5px; }
+.reason-comments { margin: 0; padding-left: 16px; font-size: 12.5px; color: #344054; font-style: italic; }
+#suggest-comment { width: 100%; box-sizing: border-box; resize: vertical; font: inherit; padding: 10px 12px; border-radius: 10px; border: 1px solid #cfdbe6; }
+#suggest-comment + .field-help { display: block; margin-top: 4px; }

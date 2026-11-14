@@ -1190,21 +1190,21 @@ class PriceCorrectionAndSettingsTests(TestCase):
 
     def test_correct_published_price_keeps_original(self):
         response = self.client_for("LGU Officer").post(
-            f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "175.50", "reason": "Typo in encoding"}, format="json"
+            f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "175.50", "reason_category": "encoding_error", "reason": "Typed one digit wrong; the DVMF sheet shows the correct price."}, format="json"
         )
         self.assertEqual(response.status_code, 200, response.data)
         record = response.data["record"]
         self.assertEqual(record["price_per_kg"], "175.50")
         self.assertTrue(record["is_correction"])
         self.assertEqual(record["corrections"][0]["previous_price"], "180.00")
-        self.assertEqual(record["corrections"][0]["reason"], "Typo in encoding")
+        self.assertEqual(record["corrections"][0]["reason"], "Typed one digit wrong; the DVMF sheet shows the correct price.")
         self.assertTrue(ActivityLog.objects.filter(action="corrected", target_type="PriceRecord").exists())
 
     def test_correct_wrong_fish_keeps_original(self):
         bangus = FishSpecies.objects.create(name="Bangus")
         response = self.client_for("LGU Officer").post(
             f"/api/prices/{self.published.pk}/correct/",
-            {"fish_species": bangus.pk, "price_per_kg": "190", "reason": "Encoded under the wrong fish"}, format="json",
+            {"fish_species": bangus.pk, "price_per_kg": "190", "reason_category": "wrong_fish", "reason": "Encoded under the wrong fish; the DVMF list says Bangus."}, format="json",
         )
         self.assertEqual(response.status_code, 200, response.data)
         record = response.data["record"]
@@ -1219,11 +1219,11 @@ class PriceCorrectionAndSettingsTests(TestCase):
         # Fish only, price unchanged, works too; nothing changed is refused.
         tamban = FishSpecies.objects.create(name="Tamban")
         only_fish = self.client_for("Administrator").post(
-            f"/api/prices/{self.published.pk}/correct/", {"fish_species": tamban.pk, "reason": "Still wrong fish"}, format="json")
+            f"/api/prices/{self.published.pk}/correct/", {"fish_species": tamban.pk, "reason_category": "wrong_fish", "reason": "The price was recorded under the wrong fish on the DVMF list."}, format="json")
         self.assertEqual(only_fish.status_code, 200, only_fish.data)
         self.assertEqual(only_fish.data["record"]["price_per_kg"], "190.00")
         same = self.client_for("Administrator").post(
-            f"/api/prices/{self.published.pk}/correct/", {"fish_species": tamban.pk, "reason": "again"}, format="json")
+            f"/api/prices/{self.published.pk}/correct/", {"fish_species": tamban.pk, "reason_category": "wrong_fish", "reason": "The price was recorded under the wrong fish on the DVMF list."}, format="json")
         self.assertEqual(same.status_code, 400)
 
     def test_correction_cannot_create_a_duplicate(self):
@@ -1231,7 +1231,7 @@ class PriceCorrectionAndSettingsTests(TestCase):
         PriceRecord.objects.create(fish_species=bangus, municipality=self.cebu, price_per_kg=Decimal("200"),
                                    recorded_date=self.published.recorded_date, status="published")
         response = self.client_for("LGU Officer").post(
-            f"/api/prices/{self.published.pk}/correct/", {"fish_species": bangus.pk, "reason": "Wrong fish"}, format="json")
+            f"/api/prices/{self.published.pk}/correct/", {"fish_species": bangus.pk, "reason_category": "wrong_fish", "reason": "The price was recorded under the wrong fish on the DVMF list."}, format="json")
         self.assertEqual(response.status_code, 400)
         self.assertIn("already has a price", response.data["fish_species"])
 
@@ -1271,8 +1271,11 @@ class PriceCorrectionAndSettingsTests(TestCase):
         self.assertIn("encoded today", response.data["message"])
 
     def test_correction_requires_reason_and_lgu_or_admin(self):
-        self.assertIn("reason", self.client_for("Administrator").post(
+        self.assertIn("reason_category", self.client_for("Administrator").post(
             f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "170"}, format="json").data)
+        # A category with a short reason is not enough.
+        self.assertIn("reason", self.client_for("Administrator").post(
+            f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "170", "reason_category": "encoding_error", "reason": "typo"}, format="json").data)
         self.assertEqual(self.client_for("Fish Vendor").post(
             f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "170", "reason": "x"}, format="json").status_code, 403)
         self.assertFalse(PriceCorrection.objects.exists())
@@ -1291,7 +1294,7 @@ class PriceCorrectionAndSettingsTests(TestCase):
         }, format="json")
         self.assertEqual(response.status_code, 400)
         self.assertIn("between", str(response.data["price_per_kg"]))
-        too_low = client.post(f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "10", "reason": "x"}, format="json")
+        too_low = client.post(f"/api/prices/{self.published.pk}/correct/", {"price_per_kg": "10", "reason_category": "encoding_error", "reason": "Typed one digit wrong; the DVMF sheet shows the correct price."}, format="json")
         self.assertEqual(too_low.status_code, 400)
 
     def test_admin_changes_price_range(self):
@@ -1503,7 +1506,7 @@ class SuggestionEditAnnouncementMarketTests(TestCase):
 
     def test_vendor_edits_and_withdraws_own_pending_suggestion(self):
         vendor = self.client_for("se_vendor")
-        created = vendor.post("/api/vendor-suggestions/", {"fish_species": self.fish.id, "municipality": self.cebu.id, "suggested_price": "180.00", "comment": "Low catch"}, format="json")
+        created = vendor.post("/api/vendor-suggestions/", {"fish_species": self.fish.id, "municipality": self.cebu.id, "suggested_price": "180.00", "comment": "Low catch", "reason_category": "low_catch"}, format="json")
         self.assertEqual(created.status_code, 201, created.data)
         url = f"/api/vendor-suggestions/{created.data['id']}/"
 
@@ -2766,3 +2769,83 @@ class ProfileCompletionTests(StallSampleTests):
         self.assertEqual(response.data["verification"]["details"]["department"], "DVMF")
         self.assertEqual(self.client.patch("/api/auth/me/", {"date_of_birth": "2024-01-01"}, format="json").status_code, 400)
         self.assertEqual(self.client.patch("/api/auth/me/", {"official_email": "not-an-email"}, format="json").status_code, 400)
+
+
+class PriceRecommendationTests(StallSampleTests):
+    """History + vendor suggestions -> recommended price; reasons are clustered."""
+
+    def setUp(self):
+        super().setUp()
+        from .models import Market, VendorPriceSuggestion
+        self.market = Market.objects.create(municipality=self.place, name="Pasil Fish Market")
+        role = Role.objects.get_or_create(name="Fish Vendor")[0]
+        self.vendors = []
+        for i in range(6):
+            user = User.objects.create_user(f"rv{i}", f"rv{i}@example.com", "TestPass123!")
+            UserProfile.objects.create(user=user, role=role, municipality=self.place, account_status="approved", is_active=True)
+            self.vendors.append(user)
+        today = timezone.localdate()
+        for days, price in enumerate([200, 200, 202, 198, 200, 201, 199]):
+            PriceRecord.objects.create(fish_species=self.fish, municipality=self.place, market=self.market,
+                                       price_per_kg=Decimal(price), recorded_date=today - datetime.timedelta(days=days + 1),
+                                       status="published")
+        self.Suggestion = VendorPriceSuggestion
+
+    def suggest(self, vendor, price, category, comment=""):
+        return self.Suggestion.objects.create(vendor=vendor, fish_species=self.fish, municipality=self.place,
+                                              suggested_price=Decimal(price), reason_category=category, comment=comment)
+
+    def test_text_clustering_groups_same_meaning(self):
+        from .reason_mining import cluster_reasons
+        clusters = cluster_reasons([
+            {"category": "fuel_price", "comment": "Mahal na ang krudo", "price": 230},
+            {"category": "fuel_price", "comment": "diesel went up", "price": 228},
+            {"category": "other", "comment": "taas ang presyo sa gasolina sa bangka", "price": 232},
+            {"category": "weather", "comment": "bagyo, walay pumapalaot", "price": 240},
+        ])
+        self.assertEqual(clusters[0]["category"], "fuel_price")
+        self.assertEqual(clusters[0]["size"], 3)  # the "Other" comment about gasolina joins the fuel group
+        self.assertIn("fuel / diesel", clusters[0]["top_terms"])
+        self.assertEqual(clusters[0]["share"], 0.75)
+
+    def test_agreeing_vendors_move_the_price(self):
+        for i, vendor in enumerate(self.vendors[:5]):
+            self.suggest(vendor, 240, "fuel_price", "krudo is expensive" if i % 2 else "")
+        rows = self.client.get("/api/price-recommendations/", {"market": self.market.pk}).data["results"]
+        row = next(r for r in rows if r["fish_name"] == "Sample Fish")
+        self.assertEqual((row["history_median"], row["vendor_median"], row["vendor_count"]), (200.0, 240.0, 5))
+        self.assertEqual(row["vendor_weight"], 0.5)          # 5 vendors x 0.1
+        self.assertEqual(row["recommended_price"], 220.0)    # 0.5 x 200 + 0.5 x 240
+        self.assertIn("100% of 5 vendors", row["basis"])
+
+    def test_mixed_reasons_keep_the_history(self):
+        reasons = ["fuel_price", "weather", "high_demand", "quality_size"]
+        for vendor, reason in zip(self.vendors, reasons):
+            self.suggest(vendor, 260, reason, "")
+        row = self.client.get("/api/price-recommendations/").data["results"][0]
+        self.assertEqual(row["vendor_weight"], 0.0)
+        self.assertEqual(row["recommended_price"], 200.0)
+        self.assertIn("mixed reasons", row["basis"])
+
+    def test_publish_recommendation_and_override_needs_reason(self):
+        for vendor in self.vendors[:3]:
+            self.suggest(vendor, 230, "fuel_price")
+        url = "/api/price-recommendations/publish/"
+        bad = self.client.post(url, {"fish_species": self.fish.pk, "market": self.market.pk, "price_per_kg": "250"}, format="json")
+        self.assertEqual(bad.status_code, 400)
+        self.assertIn("reason_category", bad.data)
+        ok = self.client.post(url, {"fish_species": self.fish.pk, "market": self.market.pk}, format="json")
+        self.assertEqual(ok.status_code, 201, ok.data)
+        record = PriceRecord.objects.get(pk=ok.data["id"])
+        self.assertEqual((record.status, record.price_per_kg), ("published", Decimal("209.00")))  # 0.7x200 + 0.3x230
+        again = self.client.post(url, {"fish_species": self.fish.pk, "market": self.market.pk}, format="json")
+        self.assertEqual(again.status_code, 400)  # one price per day; corrections need a reason
+
+    def test_suggestion_needs_a_reason(self):
+        from rest_framework.authtoken.models import Token
+        client = APIClient()
+        client.credentials(HTTP_AUTHORIZATION=f"Token {Token.objects.get_or_create(user=self.vendors[0])[0].key}")
+        body = {"fish_species": self.fish.pk, "municipality": self.place.pk, "suggested_price": "230"}
+        self.assertEqual(client.post("/api/vendor-suggestions/", body, format="json").status_code, 400)
+        self.assertEqual(client.post("/api/vendor-suggestions/", {**body, "reason_category": "other", "comment": "x"}, format="json").status_code, 400)
+        self.assertEqual(client.post("/api/vendor-suggestions/", {**body, "reason_category": "fuel_price"}, format="json").status_code, 201)

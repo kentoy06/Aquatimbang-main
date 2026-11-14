@@ -727,9 +727,16 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
 
+        # A published price is official: changing it needs a reason category
+        # and a detailed explanation.
         reason = request.data.get("reason")
-        if not isinstance(reason, str) or not reason.strip():
-            return Response({"reason": "Give a reason for the correction."}, status=status.HTTP_400_BAD_REQUEST)
+        category = str(request.data.get("reason_category") or "")
+        categories = dict(PriceCorrection.REASON_CHOICES)
+        if category not in categories:
+            return Response({"reason_category": "Choose why this published price must be changed."}, status=status.HTTP_400_BAD_REQUEST)
+        if not isinstance(reason, str) or len(reason.strip()) < 30:
+            return Response({"reason": "Explain the change in at least 30 characters: what was wrong and where the correct price came from."},
+                            status=status.HTTP_400_BAD_REQUEST)
 
         # The price, the fish species, or both can be corrected.
         new_price = record.price_per_kg
@@ -781,6 +788,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             previous_species=previous_species if species_changed else None,
             new_species=new_species if species_changed else None,
             reason=reason.strip(),
+            reason_category=category,
             corrected_by=request.user,
         )
         record.price_per_kg = new_price
@@ -4567,3 +4575,134 @@ def unread_message_count(request):
         Q(conversation__user_low=me) | Q(conversation__user_high=me), read_at__isnull=True,
     ).exclude(sender=me).count()
     return Response({"unread": count})
+
+
+# ============================================================
+# PRICE RECOMMENDATIONS: PRICE HISTORY + VENDOR SUGGESTIONS
+# ============================================================
+def _recommendation_place(request):
+    """Municipality and market for the recommendations (LGU: their own municipality)."""
+    from .models import Market
+    profile = getattr(request.user, "aquatimbang_profile", None)
+    municipality = None
+    raw = request.query_params.get("municipality") if hasattr(request, "query_params") else None
+    raw = raw or request.data.get("municipality") if request.method == "POST" else raw
+    if raw:
+        municipality = Municipality.objects.filter(pk=raw).first()
+    if municipality is None and profile is not None:
+        municipality = profile.municipality
+    if municipality is None:
+        municipality = Municipality.objects.filter(is_active=True).order_by("name").first()
+    raw_market = request.query_params.get("market") if request.method == "GET" else request.data.get("market")
+    markets = Market.objects.filter(municipality=municipality, is_active=True).order_by("name") if municipality else Market.objects.none()
+    market = markets.filter(pk=raw_market).first() if raw_market else None
+    if market is None:
+        market = markets.filter(name__icontains="pasil").first() or markets.first()
+    return municipality, market, markets
+
+
+@api_view(["GET"])
+@permission_classes([IsAuthenticated])
+def price_recommendations(request):
+    """
+    Recommended price of every active fish for one market: price history
+    plus the vendors' suggestions of the last days, with their reasons
+    grouped by text clustering. Optional ?species=<id> for one fish.
+    """
+    from .reason_mining import recommend_price
+    _lgu_or_admin(request)
+    municipality, market, markets = _recommendation_place(request)
+    if municipality is None:
+        return Response({"results": [], "markets": []})
+    fishes = FishSpecies.objects.filter(is_active=True).order_by("name")
+    if request.query_params.get("species"):
+        fishes = fishes.filter(pk=request.query_params.get("species"))
+    results = []
+    for fish in fishes:
+        row = recommend_price(fish, municipality, market)
+        if row["history_count"] or row["vendor_count"]:
+            results.append(row)
+    # Fish with vendor suggestions first, then by name.
+    results.sort(key=lambda r: (-r["vendor_count"], r["fish_name"]))
+    return Response({
+        "municipality": {"id": municipality.pk, "name": municipality.name},
+        "market": {"id": market.pk, "name": market.name} if market else None,
+        "markets": [{"id": m.pk, "name": m.name} for m in markets],
+        "today": timezone.localdate(),
+        "results": results,
+    })
+
+
+@api_view(["POST"])
+@permission_classes([IsAuthenticated])
+@transaction.atomic
+def publish_recommendation(request):
+    """
+    Publish today's price of a fish from its recommendation. A price other
+    than the recommended one needs a reason category and a detailed reason.
+    """
+    from .reason_mining import recommend_price
+    from .models import PriceCorrection
+    if approved_role(request.user) != "LGU Officer" and approved_role(request.user) != "Administrator":
+        raise PermissionDenied("Only LGU Officers and Administrators can publish prices.")
+    municipality, market, _ = _recommendation_place(request)
+    try:
+        fish = FishSpecies.objects.get(pk=int(request.data.get("fish_species")), is_active=True)
+    except (TypeError, ValueError, FishSpecies.DoesNotExist):
+        return Response({"fish_species": "Choose an active fish."}, status=status.HTTP_400_BAD_REQUEST)
+    if municipality is None:
+        return Response({"municipality": "No municipality to publish for."}, status=status.HTTP_400_BAD_REQUEST)
+
+    rec = recommend_price(fish, municipality, market)
+    if rec["recommended_price"] is None and request.data.get("price_per_kg") in (None, ""):
+        return Response({"price_per_kg": "There is no recommended price yet; enter the price with a reason."}, status=status.HTTP_400_BAD_REQUEST)
+    today = timezone.localdate()
+    live = PriceRecord.objects.filter(
+        fish_species=fish, municipality=municipality, market=market, recorded_date=today,
+    ).exclude(status__in=[PriceRecord.STATUS_REJECTED, PriceRecord.STATUS_WITHDRAWN])
+    if live.exists():
+        return Response({"message": f"{fish.name} already has a price for today. Correct that price instead, with a reason."},
+                        status=status.HTTP_400_BAD_REQUEST)
+
+    price = Decimal(str(rec["recommended_price"])).quantize(Decimal("0.01")) if rec["recommended_price"] is not None else None
+    override = request.data.get("price_per_kg") not in (None, "")
+    override_note = ""
+    if override:
+        try:
+            chosen = Decimal(str(request.data.get("price_per_kg"))).quantize(Decimal("0.01"))
+        except (InvalidOperation, ValueError, TypeError):
+            return Response({"price_per_kg": "Enter a valid price."}, status=status.HTTP_400_BAD_REQUEST)
+        if price is None or chosen != price:
+            category = str(request.data.get("reason_category") or "")
+            reason = str(request.data.get("reason") or "").strip()
+            categories = dict(PriceCorrection.REASON_CHOICES)
+            if category not in categories:
+                return Response({"reason_category": "Choose why the price differs from the recommendation."}, status=status.HTTP_400_BAD_REQUEST)
+            if len(reason) < 30:
+                return Response({"reason": "Explain the change in at least 30 characters (what you saw and where)."}, status=status.HTTP_400_BAD_REQUEST)
+            override_note = f" Changed from the recommended {('₱%s' % price) if price is not None else 'price'} to ₱{chosen}: {categories[category]}. {reason}"
+        price = chosen
+
+    from .serializers import check_price_bounds
+    try:
+        check_price_bounds(price, fish)
+    except serializers.ValidationError as error:
+        detail = error.detail if isinstance(error.detail, list) else [error.detail]
+        return Response({"price_per_kg": " ".join(str(d) for d in detail)}, status=status.HTTP_400_BAD_REQUEST)
+
+    now = timezone.now()
+    record = PriceRecord.objects.create(
+        fish_species=fish, municipality=municipality, market=market, recorded_date=today,
+        price_per_kg=price, status=PriceRecord.STATUS_PUBLISHED,
+        source="AquaTimbang recommendation (price history + vendor suggestions)",
+        remarks=(rec["basis"] + override_note)[:2000],
+        recorded_by=request.user, reviewed_by=request.user, reviewed_at=now,
+        published_by=request.user, published_at=now,
+    )
+    log_activity(request.user, "published", "PriceRecord", record.pk, fish.name, {
+        "price_per_kg": str(price), "recorded_date": today.isoformat(), "market": market.name if market else "",
+        "recommended_price": rec["recommended_price"], "history_median": rec["history_median"],
+        "vendor_median": rec["vendor_median"], "vendor_count": rec["vendor_count"],
+        "vendor_weight": rec["vendor_weight"], "overridden": bool(override_note),
+    })
+    return Response({"message": f"{fish.name} published at ₱{price:,.2f}/kg.", "id": record.pk}, status=status.HTTP_201_CREATED)
