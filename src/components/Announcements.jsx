@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { addToState, useNotificationStore } from "../api/notificationState.js";
 import { groupByDay } from "./NotificationList.jsx";
 import { askConfirm } from "./ConfirmDialog.jsx";
 import { apiUrl, authHeaders, fetchAll } from "../api/config.js";
@@ -49,38 +50,21 @@ export function useAnnouncements(reloadKey = 0, { live = false } = {}) {
   return { announcements, error };
 }
 
-// Which announcements this user already saw (kept on this device).
-const seenKey = () => {
-  try {
-    const user = JSON.parse(localStorage.getItem("user") || "{}");
-    return `aquatimbang-seen-announcements-${user.id ?? "anon"}`;
-  } catch {
-    return "aquatimbang-seen-announcements-anon";
-  }
-};
-function readSeen() {
-  try { return new Set(JSON.parse(localStorage.getItem(seenKey()) || "[]")); } catch { return new Set(); }
-}
-function writeSeen(ids) {
-  try { localStorage.setItem(seenKey(), JSON.stringify([...ids].slice(-200))); } catch { /* storage unavailable */ }
-}
-
 /**
  * Pops up announcements the user hasn't seen yet, newest first. "Got it"
  * marks them seen; afterwards they stay in the Notifications tab only.
  */
 export function AnnouncementPopup({ announcements }) {
-  const [seen, setSeen] = useState(readSeen);
+  // Saved on the server, so "Got it" on one device counts everywhere.
+  const seen = new Set(useNotificationStore().announcements);
   const unseen = announcements
-    .filter((a) => a.is_active && !seen.has(a.id))
+    .filter((a) => a.is_active && !seen.has(String(a.id)))
     .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
   if (!unseen.length) return null;
 
   const gotIt = () => {
-    const next = new Set(seen);
-    unseen.forEach((a) => next.add(a.id));
-    writeSeen(next);
-    setSeen(next);
+    addToState("announcements", unseen.map((a) => a.id));
+    addToState("seen", unseen.map((a) => `announcement-${a.id}`));
   };
 
   return (

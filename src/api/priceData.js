@@ -59,3 +59,45 @@ export function latestBy(records, keyOf) {
   });
   return [...latest.values()];
 }
+
+// Date ranges a trends page offers, shortest first ("all" = every price).
+export const RANGE_STEPS = ["7", "14", "30", "90", "180", "365", "all"];
+export const RANGE_LABELS = {
+  7: "the last 7 days", 14: "the last 14 days", 30: "the last 30 days", 90: "the last 90 days",
+  180: "the last 180 days", 365: "the last 12 months", all: "all history",
+};
+
+// "YYYY-MM-DD" of the first day of the last `days` days, today included.
+export function daysAgo(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - (Number(days) - 1));
+  return d.toLocaleDateString("en-CA");
+}
+
+// Days with a published price for one fish (by id or name) since a date.
+export function countPricedDays(records, { species, speciesName, municipality = "", since = "" }) {
+  const days = new Set();
+  records.forEach((r) => {
+    if (r.status && r.status !== "published") return;
+    if (species !== undefined && String(r.fish_species) !== String(species)) return;
+    if (speciesName !== undefined && r.fish_name !== speciesName) return;
+    if (municipality && String(r.municipality_name || "").toLowerCase() !== String(municipality).toLowerCase()) return;
+    const day = String(r.recorded_date || "").slice(0, 10);
+    if (day && (!since || day >= since)) days.add(day);
+  });
+  return days.size;
+}
+
+/**
+ * The range to show: the chosen one, or, when it has fewer than two priced
+ * days, the next longer range that has at least two (up to "all").
+ */
+export function widenRange(range, pricedDaysIn) {
+  if (range === "all" || range === "custom") return range;
+  const steps = RANGE_STEPS.slice(Math.max(0, RANGE_STEPS.indexOf(String(range))));
+  for (const step of steps) {
+    if (step === "all") return "all";
+    if (pricedDaysIn(Number(step)) >= 2) return step;
+  }
+  return range;
+}

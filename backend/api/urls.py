@@ -40,6 +40,7 @@ from .views import (
     change_my_password,
     logout_user,
     presence_heartbeat,
+    notification_state,
     message_contacts,
     conversations,
     conversation_messages,
@@ -301,6 +302,9 @@ urlpatterns = [
 
     # Open pages report that the user is still here (Online / Offline).
     path("auth/heartbeat/", presence_heartbeat, name="presence-heartbeat"),
+
+    # Read and cleared notifications, remembered on every device.
+    path("auth/notification-state/", notification_state, name="notification-state"),
 
     # Private messages (vendor <-> LGU, LGU <-> admin, vendor <-> admin).
     path("messages/contacts/", message_contacts, name="message-contacts"),

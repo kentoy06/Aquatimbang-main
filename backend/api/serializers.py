@@ -985,6 +985,10 @@ class PriceRecordSerializer(serializers.ModelSerializer):
 
             "published_at",
 
+            # Vendors whose agreeing suggestions formed this price, and the import it came from.
+            "suggested_by",
+            "import_batch",
+
             # Flag/rejection information.
 
             "flag_reason",
@@ -1040,6 +1044,9 @@ class PriceRecordSerializer(serializers.ModelSerializer):
             "published_by_name",
 
             "published_at",
+
+            "suggested_by",
+            "import_batch",
 
             # System timestamps.
 

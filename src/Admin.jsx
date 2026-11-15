@@ -34,6 +34,7 @@ import { AnnouncementsManager } from "./components/Announcements.jsx";
 import PagedTable from "./components/PagedTable.jsx";
 import FishNameField from "./components/FishNameField.jsx";
 import SimilarFishNames from "./components/SimilarFishNames.jsx";
+import NonFishItems from "./components/NonFishItems.jsx";
 import SpeciesFilterBar, { sortSpecies } from "./components/SpeciesFilterBar.jsx";
 import { OtherNamesField, splitNames } from "./components/FishNameField.jsx";
 
@@ -344,6 +345,10 @@ function suggestionStats(suggestions, species, from, to) {
   };
 }
 
+// Newest id in a list, so a "N waiting" notification counts as new only
+// when a newer item arrives, not every time the number changes.
+const newestId = (items) => items.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0);
+
 function buildNotifications(users, priceRecords, species, municipalities, suggestions) {
   const notifs = [];
   let nid = 1;
@@ -351,7 +356,7 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
   const pending = users.filter((u) => u.status === "Pending");
   if (pending.length > 0) {
     notifs.push({
-      id: nid++, type: "warning", page: "User Management",
+      id: nid++, key: `admin-registrations:${newestId(pending)}`, type: "warning", page: "User Management",
       title: `${pending.length} pending user registration${pending.length > 1 ? "s" : ""}`,
       detail: pending.map((u) => u.name).join(", "),
     });
@@ -360,7 +365,7 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
   const flagged = priceRecords.filter((r) => r.status === "Flagged");
   if (flagged.length > 0) {
     notifs.push({
-      id: nid++, type: "info", page: "Price Records",
+      id: nid++, key: `admin-flagged:${newestId(flagged)}`, type: "info", page: "Price Records",
       title: `${flagged.length} flagged price record${flagged.length > 1 ? "s" : ""}`,
       detail: flagged.slice(0, 3).map((r) => `${r.species} · ${r.municipality}`).join(", "),
     });
@@ -369,25 +374,9 @@ function buildNotifications(users, priceRecords, species, municipalities, sugges
   const pendingSuggestions = suggestions.filter((s) => s.status === "Submitted");
   if (pendingSuggestions.length > 0) {
     notifs.push({
-      id: nid++, type: "info", page: "Vendor Suggestions",
+      id: nid++, key: `admin-suggestions:${newestId(pendingSuggestions)}`, type: "info", page: "Vendor Suggestions",
       title: `${pendingSuggestions.length} vendor suggested price${pendingSuggestions.length > 1 ? "s" : ""} submitted`,
       detail: pendingSuggestions.slice(0, 3).map((s) => s.species).join(", "),
-    });
-  }
-
-  // Active species × municipality pairs with no price recorded today.
-  const today = new Date().toLocaleDateString("en-CA");
-  let missingCount = 0;
-  species.filter((s) => s.status === "Active").forEach((sp) => {
-    municipalities.filter((m) => m.status === "Active").forEach((mk) => {
-      if (!priceRecords.some((r) => r.species === sp.name && r.municipality === mk.name && r.date === today)) missingCount++;
-    });
-  });
-  if (missingCount > 0) {
-    notifs.push({
-      id: nid++, type: "danger", page: "Price Records",
-      title: `${missingCount} fish without a published price today`,
-      detail: "Prices are published from Price Recommendations or when vendors agree on a reason.",
     });
   }
 
@@ -2407,6 +2396,8 @@ const toggleStatus = async (s) => {
         <button className="primary-btn" onClick={openAdd}>+ Add Species</button>
       </div>
 
+      <NonFishItems notify={notify} refreshKey={species.length}
+        onRemoved={() => fetchAll("/fish-species/").then((rows) => setSpecies(rows.map(mapDatabaseSpecies))).catch(() => {})} />
       <SimilarFishNames notify={notify} refreshKey={species.length}
         onMerged={() => fetchAll("/fish-species/").then((rows) => setSpecies(rows.map(mapDatabaseSpecies))).catch(() => {})} />
 

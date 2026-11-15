@@ -6,7 +6,7 @@ const peso = (n) => `₱${Number(n).toLocaleString("en-PH", { minimumFractionDig
 const longDate = (iso) => new Date(`${String(iso).slice(0, 10)}T00:00:00`).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" });
 const shortDate = (iso) => new Date(`${String(iso).slice(0, 10)}T00:00:00`).toLocaleDateString("en-PH", { month: "short", day: "numeric" });
 
-// Small line chart of the last 30 days of official prices.
+// Small line chart of the last 30 days that have an official price.
 function PriceSparkline({ history }) {
   if (history.length < 2) return <p className="fp-muted">Not enough prices yet for a chart.</p>;
   const W = 460, H = 130, PAD_X = 8, PAD_TOP = 12, PAD_BOTTOM = 22;
@@ -108,7 +108,7 @@ export default function FishProfileModal({ item, onClose, onLogin, onRegister })
                 <div><dt>Municipality</dt><dd>{data.municipality.name}{data.municipality.province ? `, ${data.municipality.province}` : ""}</dd></div>
                 {data.latest.market && <div><dt>Market</dt><dd>{data.latest.market}</dd></div>}
                 {data.week_ago && <div><dt>A week earlier</dt><dd>{peso(data.week_ago.price_per_kg)} ({shortDate(data.week_ago.recorded_date)})</dd></div>}
-                <div><dt>Published by</dt><dd>{data.latest.automatic ? "Vendors' agreement (automatic)" : "The LGU"}{data.latest.is_correction ? " (corrected)" : ""}</dd></div>
+                <div><dt>Published by</dt><dd>{data.latest.automatic ? "Vendors' suggested prices (automatic)" : data.latest.suggested_by?.length ? "The LGU, from vendors' suggested prices" : "The LGU"}{data.latest.is_correction ? " (corrected)" : ""}</dd></div>
               </dl>
 
               {data.latest.suggested_by?.length > 0 && (
@@ -132,7 +132,8 @@ export default function FishProfileModal({ item, onClose, onLogin, onRegister })
               )}
 
               <section className="fp-section">
-                <h4>Last 30 days</h4>
+                <h4>Recent prices</h4>
+                {data.stats_30_days?.from && <p className="fp-muted">{shortDate(data.stats_30_days.from)} to {shortDate(data.stats_30_days.to)} · {data.stats_30_days.days} day{data.stats_30_days.days === 1 ? "" : "s"} with a price</p>}
                 <PriceSparkline history={data.history} />
                 {data.stats_30_days && (
                   <div className="fp-stats">

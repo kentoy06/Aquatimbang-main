@@ -35,6 +35,8 @@ SEASONAL_PERIOD = 7
 CONFIDENCE = 0.95
 # Most recent days of price history used to fit the model.
 TRAINING_WINDOW_DAYS = 365
+# Furthest back the model reaches when the last year has too few prices.
+MAX_HISTORY_DAYS = 3 * 365
 # An external factor is only used when it was recorded on this share of training days.
 MIN_FACTOR_COVERAGE = 0.5
 
@@ -83,8 +85,15 @@ def daily_series(species_id, municipality_id=None):
     frame["price"] = frame["price"].astype(float)
     series = frame.groupby("date")["price"].mean().sort_index()
 
-    # Keep the most recent year so fitting stays fast.
-    series = series[series.index >= series.index.max() - pd.Timedelta(days=TRAINING_WINDOW_DAYS - 1)]
+    # Keep the most recent year so fitting stays fast. When that year holds
+    # too few prices (e.g. imported history ends long before today's price),
+    # reach back to the most recent MIN_SARIMAX_DAYS priced days, up to
+    # MAX_HISTORY_DAYS, so the imported history is still used.
+    start = series.index.max() - pd.Timedelta(days=TRAINING_WINDOW_DAYS - 1)
+    if (series.index >= start).sum() < MIN_SARIMAX_DAYS and len(series) > (series.index >= start).sum():
+        earliest = series.index.max() - pd.Timedelta(days=MAX_HISTORY_DAYS - 1)
+        start = max(series.index[-min(len(series), MIN_SARIMAX_DAYS * 2)], earliest)
+    series = series[series.index >= start]
     observed_days = len(series)
 
     full_range = pd.date_range(series.index.min(), series.index.max(), freq="D")

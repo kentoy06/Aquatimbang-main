@@ -6,6 +6,7 @@ import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
 import FishNameField from "./components/FishNameField.jsx";
 import PriceRecommendations from "./components/PriceRecommendations.jsx";
 import SimilarFishNames from "./components/SimilarFishNames.jsx";
+import NonFishItems from "./components/NonFishItems.jsx";
 import SpeciesFilterBar, { sortSpecies } from "./components/SpeciesFilterBar.jsx";
 import { OtherNamesField, splitNames } from "./components/FishNameField.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
@@ -50,7 +51,8 @@ import { FishPhotoPanel, FishThumb, uploadSpeciesPhoto } from "./components/Fish
 import { useRemoveFish } from "./components/RemoveFish.jsx";
 import { AnnouncementPopup, useAnnouncements } from "./components/Announcements.jsx";
 import { buildXlsx, describeFilters, exportReport } from "./api/reportExport.js";
-import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
+import { ALL_HISTORY_FROM, mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
+import { RANGE_LABELS, countPricedDays, daysAgo, widenRange } from "./api/priceData.js";
 
 // Loaded only when the forecast page opens (the chart library is large).
 const ForecastView = lazy(() => import("./components/ForecastView.jsx"));
@@ -645,6 +647,10 @@ useEffect(() => {
   );
 }
 
+// Newest id in a list, so a "N waiting" notification counts as new only
+// when a newer item arrives, not every time the number changes.
+const newestId = (items) => items.reduce((max, item) => Math.max(max, Number(item.id) || 0), 0);
+
 function buildLguNotifications(suggestions, priceRecords, fisherfolk, announcements = []) {
   const notifs = [];
   let id = 1;
@@ -652,7 +658,7 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk, announceme
   // Announcements from the Administrator stay here as history.
   announcements.filter((a) => a.is_active).forEach((a) => {
     notifs.push({
-      id: `announcement-${a.id}`, type: "info", title: `📢 ${a.title}`,
+      id: `announcement-${a.id}`, key: `announcement-${a.id}`, type: "info", title: `📢 ${a.title}`,
       detail: a.message, at: a.created_at, announcement: a,
     });
   });
@@ -660,7 +666,7 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk, announceme
   const pendingSuggestions = suggestions.filter((s) => s.status === "Submitted");
   if (pendingSuggestions.length > 0) {
     notifs.push({
-      id: id++, type: "warning", page: "Price Recommendations",
+      id: id++, key: `lgu-suggestions:${newestId(pendingSuggestions)}`, type: "warning", page: "Price Recommendations",
       title: `${pendingSuggestions.length} new vendor suggestion${pendingSuggestions.length > 1 ? "s" : ""} for today's recommendations`,
       detail: pendingSuggestions.slice(0, 3).map((s) => s.species).join(", "),
     });
@@ -669,7 +675,7 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk, announceme
   const pendingFisherfolk = fisherfolk.filter((f) => f.account_status === "pending");
   if (pendingFisherfolk.length > 0) {
     notifs.push({
-      id: id++, type: "warning", page: "Vendor Registrations",
+      id: id++, key: `lgu-registrations:${newestId(pendingFisherfolk)}`, type: "warning", page: "Vendor Registrations",
       title: `${pendingFisherfolk.length} fish vendor registration${pendingFisherfolk.length > 1 ? "s" : ""} waiting for your review`,
       detail: "Approve or reject them in Vendor Registrations.",
     });
@@ -678,7 +684,7 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk, announceme
   const forReview = priceRecords.filter((r) => r.status === "pending");
   if (forReview.length > 0) {
     notifs.push({
-      id: id++, type: "warning", page: "Review & Publish",
+      id: id++, key: `lgu-review:${newestId(forReview)}`, type: "warning", page: "Review & Publish",
       title: `${forReview.length} price entr${forReview.length > 1 ? "ies" : "y"} waiting for review`,
       detail: forReview.slice(0, 3).map((r) => `${r.fish_name} at ${peso(r.price_per_kg)}`).join(", "),
     });
@@ -687,21 +693,9 @@ function buildLguNotifications(suggestions, priceRecords, fisherfolk, announceme
   const flagged = priceRecords.filter((r) => r.status === "flagged");
   if (flagged.length > 0) {
     notifs.push({
-      id: id++, type: "danger", page: "Review & Publish",
+      id: id++, key: `lgu-flagged:${newestId(flagged)}`, type: "danger", page: "Review & Publish",
       title: `${flagged.length} flagged price entr${flagged.length > 1 ? "ies" : "y"}`,
       detail: flagged.slice(0, 3).map((r) => `${r.fish_name} at ${peso(r.price_per_kg)}`).join(", "),
-    });
-  }
-
-  // Species that have price history but no entry yet for today.
-  const today = new Date().toLocaleDateString("en-CA");
-  const encodedToday = new Set(priceRecords.filter((r) => r.recorded_date === today).map((r) => r.fish_name));
-  const notEncoded = recordSpeciesNames(priceRecords).filter((sp) => !encodedToday.has(sp));
-  if (notEncoded.length > 0) {
-    notifs.push({
-      id: id++, type: "warning", page: "Price Recommendations",
-      title: `${notEncoded.length} species not yet published today`,
-      detail: notEncoded.join(", "),
     });
   }
 
@@ -1113,6 +1107,7 @@ function LGUFishSpeciesManagement({ notify }) {
         <button className="primary-btn" onClick={openAdd} disabled={busy}>+ Add Fish Species</button>
       </div>
 
+      <NonFishItems notify={notify} refreshKey={species.length} onRemoved={() => loadSpecies()} />
       <SimilarFishNames notify={notify} refreshKey={species.length} onMerged={() => loadSpecies()} />
 
       <div className="panel" style={{ marginTop: 18 }}>
@@ -2000,7 +1995,7 @@ function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
                   <td>{r.municipality_name}{r.market_name ? <small className="market-tag">{r.market_name}</small> : null}</td>
                   <td><strong>{peso(r.price_per_kg)}</strong></td>
                   <td>{fmtDate(r.recorded_date)}</td>
-                  <td>{r.published_by_name || "—"}</td>
+                  <td>{publishedByLabel(r)}</td>
                 </tr>
               ))
             )}
@@ -2015,24 +2010,40 @@ function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
    PRICE TRENDS (broader LGU view)
    ================================================================ */
 
+// Who published a price, in words people understand.
+function publishedByLabel(r) {
+  if (/automatic price/i.test(r.source || "")) return "Vendors' suggested prices (automatic)";
+  if (r.suggested_by?.length) return `${r.published_by_name || "LGU"}, from vendors' suggested prices`;
+  if (/dvfm|dvmf|import/i.test(r.source || "") || r.import_batch) return "Imported DVMF records";
+  return r.published_by_name || "—";
+}
+
 function PriceTrends({ priceRecords: recentRecords, loading: recentLoading, error: recentError }) {
   const [selected, setSelected] = useState("");
   const [municipality, setMunicipality] = useState("");
   const [range, setRange] = useState("30");
   const [from, setFrom] = useState("");
   const [to, setTo] = useState("");
-  // A custom range may reach back before the prices already loaded.
-  const older = useOlderPublished(range === "custom" ? from : "", to);
+  const recentPublished = recentRecords.filter(isPublished);
+  const recentSpecies = recordSpeciesNames(recentPublished);
+  const current = recentSpecies.includes(selected) ? selected : selected || recentSpecies[0] || "";
+  // When the chosen range has fewer than two prices for this fish, show the
+  // next longer range that has enough, up to all imported history.
+  const shownRange = range === "custom" ? "custom" : widenRange(range, (days) => countPricedDays(recentPublished, {
+    speciesName: current, municipality, since: daysAgo(days),
+  }));
+  // Custom dates or "all history" may reach back before the prices already loaded.
+  const older = useOlderPublished(range === "custom" ? from : shownRange === "all" ? ALL_HISTORY_FROM : "", range === "custom" ? to : "");
   const priceRecords = mergeRecords(recentRecords, older.records);
   const loading = recentLoading || older.loading;
   const error = recentError || older.error;
   const published = priceRecords.filter(isPublished);
   const species = recordSpeciesNames(published);
   const municipalities = municipalityNames(published);
-  const current = species.includes(selected) ? selected : species[0] || "";
   const seriesFor = (sp) => {
     const series = dailySeries(published, sp, municipality);
-    return range === "custom" ? betweenDates(series, from, to) : lastDays(series, range);
+    if (range === "custom") return betweenDates(series, from, to);
+    return shownRange === "all" ? series : betweenDates(series, daysAgo(shownRange), "");
   };
 
   const rows = seriesFor(current);
@@ -2065,6 +2076,9 @@ function PriceTrends({ priceRecords: recentRecords, loading: recentLoading, erro
             <option value="14">Last 14 days</option>
             <option value="30">Last 30 days</option>
             <option value="90">Last 90 days</option>
+            <option value="180">Last 180 days</option>
+            <option value="365">Last 12 months</option>
+            <option value="all">All history</option>
             <option value="custom">Custom dates</option>
           </select>
           {range === "custom" && (
@@ -2076,6 +2090,7 @@ function PriceTrends({ priceRecords: recentRecords, loading: recentLoading, erro
         </div>
       </div>
 
+      {shownRange !== range && <p className="chart-note">Not enough prices for {current} in this range, so {RANGE_LABELS[shownRange]} is shown.</p>}
       {loading ? <EmptyPanel>Loading published prices…</EmptyPanel> : error ? <EmptyPanel>{error}</EmptyPanel> : !hasData ? (
         <EmptyPanel>{published.length ? "No published prices for these filters. Try another species, municipality or date range." : "No published prices yet. Trends appear once prices are published from Price Recommendations or imported."}</EmptyPanel>
       ) : (
