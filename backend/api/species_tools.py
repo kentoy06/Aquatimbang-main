@@ -6,6 +6,8 @@ merge_species() takes the model classes as arguments so the same code runs
 in views and in data migrations (which use historical models).
 """
 
+import re
+import unicodedata
 from django.db.models import Q
 
 
@@ -241,3 +243,33 @@ def duplicate_evidence(pairs, PriceRecord):
             "same_days": overlap,
         }))
     return sorted(out, key=lambda row: -row[3]["score"])
+
+
+# Seafood and other items that are not fish, in English, Filipino and
+# Cebuano. AquaTimbang tracks fish only, so these are left out of imports
+# and can be removed from Fish Species in one step.
+NON_FISH_WORDS = {
+    # shrimp and prawns
+    "shrimp", "shrimps", "prawn", "prawns", "hipon", "pasayan", "sugpo", "uyabang", "lukon", "alamang",
+    # crabs and lobsters
+    "crab", "crabs", "alimango", "alimasag", "kasag", "lambay", "kagang", "kuyom", "curacha", "lobster",
+    "lobsters", "banagan", "pitik",
+    # squid and octopus
+    "squid", "squids", "pusit", "nukos", "nokus", "cuttlefish", "octopus", "kugita", "pugita",
+    # shellfish
+    "shellfish", "shell", "shells", "mussel", "mussels", "tahong", "oyster", "oysters", "talaba", "clam",
+    "clams", "halaan", "tuway", "imbaw", "imbao", "litob", "sisi", "kinhason", "scallop", "scallops",
+    "kapis", "abalone", "kuhol", "snail", "snails",
+    # other sea products
+    "seaweed", "seaweeds", "guso", "gamet", "lato", "urchin", "tuyom", "salawaki", "cucumber",
+    # not seafood
+    "annicad", "anicad",
+    "frog", "palaka", "turtle", "pawikan", "egg", "eggs", "itlog", "chicken", "manok", "pork", "baboy",
+    "beef", "baka", "rice", "bugas", "vegetable", "vegetables", "gulay", "ice", "yelo",
+}
+
+
+def is_non_fish(name):
+    """True when a name is a seafood or product that is not a fish (e.g. "Pusit", "Hipon")."""
+    words = re.findall(r"[a-z]+", unicodedata.normalize("NFKD", str(name or "")).lower())
+    return any(word in NON_FISH_WORDS for word in words)

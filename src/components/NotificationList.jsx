@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { addToState, clearState, useNotificationStore } from "../api/notificationState.js";
 
 const plain = (text, vars = {}) => String(text).replace(/\{(\w+)\}/g, (m, k) => (k in vars ? String(vars[k]) : m));
 
@@ -11,39 +12,25 @@ export function isRecent(n) {
   return Date.now() - d.getTime() <= NOTIFICATION_HISTORY_DAYS * 24 * 60 * 60 * 1000;
 }
 
-// A stable key for a notification (ids like 1, 2, 3 change as the list changes).
-export const notifKey = (n) => `${n.id}|${n.title}|${n.at || ""}`;
-
-function storageKey(kind) {
-  let user = "";
-  try { user = JSON.parse(localStorage.getItem("user") || "{}").username || ""; } catch { /* ignore */ }
-  return `aquatimbang:${kind}:${user}`;
-}
-function readList(kind) {
-  try { return JSON.parse(localStorage.getItem(storageKey(kind)) || "[]"); } catch { return []; }
-}
-function writeList(kind, list) {
-  try { localStorage.setItem(storageKey(kind), JSON.stringify(list.slice(-500))); } catch { /* storage unavailable */ }
-}
+// A stable key for a notification. Builders give a `key` for notifications
+// whose title has a count in it ("3 new suggestions"), so a changing count
+// is not a new notification.
+export const notifKey = (n) => n.key || `${n.id}|${n.title}|${n.at || ""}`;
 
 /**
- * Which notifications this user has seen and dismissed, remembered on this
- * device. The badge counts only notifications that are not seen yet.
+ * Which notifications this user has seen and dismissed, saved on the server
+ * so they stay read on every device. The badge counts only unseen ones.
  */
 export function useNotificationState(notifications) {
-  const [dismissed, setDismissedState] = useState(() => readList("dismissedNotifs"));
-  const [seen, setSeenState] = useState(() => new Set(readList("seenNotifs")));
-  const setDismissed = (update) => setDismissedState((prev) => {
-    const next = typeof update === "function" ? update(prev) : update;
-    writeList("dismissedNotifs", next);
-    return next;
-  });
-  const markSeen = (keys) => setSeenState((prev) => {
-    if (keys.every((k) => prev.has(k))) return prev;
-    const next = new Set([...prev, ...keys]);
-    writeList("seenNotifs", [...next]);
-    return next;
-  });
+  const store = useNotificationStore();
+  const dismissed = store.dismissed;
+  const seen = new Set(store.seen);
+  const setDismissed = (update) => {
+    const next = typeof update === "function" ? update(dismissed) : update;
+    if (!next.length) clearState("dismissed");
+    else addToState("dismissed", next);
+  };
+  const markSeen = (keys) => addToState("seen", keys);
   const unread = notifications.filter((n) => isRecent(n) && !dismissed.includes(notifKey(n)) && !seen.has(notifKey(n)));
   return { dismissed, setDismissed, seen, markSeen, unread };
 }

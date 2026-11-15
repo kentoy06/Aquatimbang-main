@@ -3025,3 +3025,70 @@ class PriceRecommendationTests(StallSampleTests):
         self.assertEqual(client.post("/api/vendor-suggestions/", body, format="json").status_code, 400)
         self.assertEqual(client.post("/api/vendor-suggestions/", {**body, "reason_category": "other", "comment": "x"}, format="json").status_code, 400)
         self.assertEqual(client.post("/api/vendor-suggestions/", {**body, "reason_category": "fuel_price"}, format="json").status_code, 201)
+
+
+class HistoryNotificationNonFishTests(StallSampleTests):
+    """Imported history in charts and forecasts, saved notification state, and non-fish items."""
+
+    def test_fish_card_includes_imported_history_without_market(self):
+        from api.models import Market
+        pasil = Market.objects.create(name="Pasil Fish Market", municipality=self.place)
+        today = timezone.localdate()
+        # Monthly DVMF history (no market), long before today's market price.
+        for month in range(1, 13):
+            PriceRecord.objects.create(fish_species=self.fish, municipality=self.place, price_per_kg=Decimal(150 + month),
+                                       recorded_date=datetime.date(2025, month, 1), status="published", source="DVFM historical data")
+        PriceRecord.objects.create(fish_species=self.fish, municipality=self.place, market=pasil, price_per_kg=Decimal("160"),
+                                   recorded_date=today, status="published")
+        data = APIClient().get(f"/api/public/fish/{self.fish.pk}/", {"municipality": self.place.pk, "market": pasil.pk}).data
+        self.assertEqual(data["latest"]["price_per_kg"], 160.0)
+        self.assertEqual(len(data["history"]), 13)
+        self.assertEqual(data["stats_30_days"]["days"], 13)
+
+    def test_forecast_reaches_back_to_older_history(self):
+        from api.forecasting import daily_series
+        today = timezone.localdate()
+        start = today - datetime.timedelta(days=600)
+        for back in range(60):
+            PriceRecord.objects.create(fish_species=self.fish, municipality=self.place, price_per_kg=Decimal(150 + back % 5),
+                                       recorded_date=start + datetime.timedelta(days=back), status="published")
+        PriceRecord.objects.create(fish_species=self.fish, municipality=self.place, price_per_kg=Decimal("160"),
+                                   recorded_date=today, status="published")
+        series, observed = daily_series(self.fish.pk, self.place.pk)
+        self.assertGreaterEqual(observed, 28)
+        self.assertEqual(series.index.max().date(), today)
+
+    def test_notification_state_is_saved_and_only_added_to(self):
+        url = "/api/auth/notification-state/"
+        self.assertEqual(self.client.get(url).data, {"seen": [], "dismissed": [], "announcements": []})
+        self.client.post(url, {"seen": ["a", "b"], "announcements": [7]}, format="json")
+        self.client.post(url, {"seen": ["b", "c"], "dismissed": ["x"]}, format="json")
+        data = self.client.get(url).data
+        self.assertEqual(data["seen"], ["a", "b", "c"])
+        self.assertEqual(data["announcements"], ["7"])
+        self.client.post(url, {"clear": ["dismissed"]}, format="json")
+        self.assertEqual(self.client.get(url).data["dismissed"], [])
+
+    def test_import_leaves_out_non_fish(self):
+        rows = [
+            {"row": 2, "date": "2026-01-05", "fish": "Sample Fish", "municipality": "Sample City", "price": "150"},
+            {"row": 3, "date": "2026-01-05", "fish": "Pusit", "municipality": "Sample City", "price": "300"},
+            {"row": 4, "date": "2026-01-05", "fish": "Hipon (shrimp)", "municipality": "Sample City", "price": "400"},
+        ]
+        done = self.client.post("/api/prices/import/", {"rows": rows}, format="json").data
+        self.assertEqual(done["imported"], 1, done)
+        self.assertEqual([f["name"] for f in done["non_fish_skipped"]], ["Hipon (Shrimp)", "Pusit"])
+        self.assertFalse(FishSpecies.objects.filter(name__icontains="pusit").exists())
+
+    def test_remove_non_fish_items(self):
+        squid = FishSpecies.objects.create(name="Pusit")
+        crab = FishSpecies.objects.create(name="Alimango")
+        PriceRecord.objects.create(fish_species=squid, municipality=self.place, price_per_kg=Decimal("300"),
+                                   recorded_date=datetime.date(2026, 1, 5), status="published")
+        listed = {row["name"] for row in self.client.get("/api/fish-species/non-fish/").data}
+        self.assertEqual(listed, {"Pusit", "Alimango"})
+        done = self.client.post("/api/fish-species/remove-non-fish/", {"ids": [squid.pk, crab.pk]}, format="json")
+        self.assertEqual(done.status_code, 200, done.data)
+        self.assertFalse(FishSpecies.objects.filter(pk__in=[squid.pk, crab.pk]).exists())
+        self.assertTrue(FishSpecies.objects.filter(pk=self.fish.pk).exists())
+        self.assertEqual(PriceRecord.objects.filter(fish_species_id=squid.pk).count(), 0)

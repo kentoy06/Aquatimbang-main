@@ -16,7 +16,8 @@ import {
   withdrawVendorSuggestion,
 } from "./api/vendorSuggestions";
 import { API_BASE_URL } from "./api/config.js";
-import { mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
+import { ALL_HISTORY_FROM, mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
+import { RANGE_LABELS, countPricedDays, daysAgo, widenRange } from "./api/priceData.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile, { ProfileProgress } from "./components/AccountProfile.jsx";
 import ProfitHelper from "./components/ProfitHelper.jsx";
@@ -533,7 +534,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
   let id = 1;
 
   announcements.filter((a) => a.is_active).forEach((a) => {
-    notifs.push({ id: `announcement-${a.id}`, type: "info", title: `📢 ${a.title}`, detail: a.message, at: a.created_at, announcement: a });
+    notifs.push({ id: `announcement-${a.id}`, key: `announcement-${a.id}`, type: "info", title: `📢 ${a.title}`, detail: a.message, at: a.created_at, announcement: a });
   });
 
   mySuggestions.forEach((s) => {
@@ -541,6 +542,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
     if (s.publishedPrice !== null && s.publishedPrice !== undefined) {
       notifs.push({
         id: `published-${s.id}-${s.publishedAt}`,
+        key: `published-${s.id}-${s.publishedAt}`,
         type: "info",
         page: "My Suggested Prices",
         at: s.publishedAt || s.createdAt,
@@ -551,6 +553,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
     if (s.status === "Reviewed" || s.status === "Adopted" || s.status === "Rejected") {
       notifs.push({
         id: id++,
+        key: `reviewed-${s.id}-${s.status}`,
         type: s.status === "Rejected" ? "danger" : "info",
         page: "My Suggested Prices",
         at: s.reviewedAt || s.createdAt,
@@ -563,7 +566,7 @@ function buildVendorNotifications(mySuggestions, publishedPrices = [], announcem
   const latest = publishedPrices.reduce((max, r) => (r.recorded_date > max ? r.recorded_date : max), "");
   if (latest) {
     notifs.push({
-      id: id++, type: "info", page: "Current Fish Prices", at: latest,
+      id: id++, key: `prices-published-${latest}`, type: "info", page: "Current Fish Prices", at: latest,
       title: "Official prices are published",
       detail: `Latest LGU-validated prices are dated ${latest}.`,
     });
@@ -582,23 +585,28 @@ function PriceTrends({ registeredSpecies = [], myFish = [], speciesLoadError = "
   const [range, setRange] = useState("30");
   const [fromDate, setFromDate] = useState("");
   const [toDate, setToDate] = useState("");
-  // A custom range may reach back before the prices already loaded.
-  const older = useOlderPublished(range === "custom" ? fromDate : "", toDate);
-  const records = mergeRecords(recentRecords, older.records);
-  const loading = recentLoading || older.loading;
-  const error = recentError || older.error;
-
+  // Which range is really shown: when the chosen one has fewer than two
+  // prices for this fish (e.g. only today's price after imported history),
+  // the next longer range with enough prices is used, up to all history.
   const speciesOptions = Array.from(new Map([
-    ...records.filter((r) => r.status === "published" || r.status === undefined)
+    ...recentRecords.filter((r) => r.status === "published" || r.status === undefined)
       .map((r) => [String(r.fish_species), { id: String(r.fish_species), name: r.fish_name || `Species #${r.fish_species}` }]),
     ...registeredSpecies.map((r) => [String(r.id), { ...r, id: String(r.id) }]),
   ]).values()).sort((a, b) => Number(myFish.includes(b.id)) - Number(myFish.includes(a.id)) || a.name.localeCompare(b.name));
   const selectedSpecies = speciesOptions.some((s) => s.id === speciesId) ? speciesId : (speciesOptions[0]?.id || "");
+  const shownRange = range === "custom" ? "custom" : widenRange(range, (days) => countPricedDays(recentRecords, {
+    species: selectedSpecies, municipality, since: daysAgo(days),
+  }));
+  // Custom dates or "all history" may reach back before the prices already loaded.
+  const older = useOlderPublished(range === "custom" ? fromDate : shownRange === "all" ? ALL_HISTORY_FROM : "", range === "custom" ? toDate : "");
+  const records = mergeRecords(recentRecords, older.records);
+  const loading = recentLoading || older.loading;
+  const error = recentError || older.error;
+
   const speciesName = speciesOptions.find((s) => s.id === selectedSpecies)?.name || "Fish species";
   const today = new Date();
   const localToday = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, "0")}-${String(today.getDate()).padStart(2, "0")}`;
-  const start = new Date(today.getFullYear(), today.getMonth(), today.getDate() - Number(range) + 1);
-  const rangeStart = `${start.getFullYear()}-${String(start.getMonth() + 1).padStart(2, "0")}-${String(start.getDate()).padStart(2, "0")}`;
+  const rangeStart = shownRange === "all" ? "0000-01-01" : daysAgo(Number(shownRange));
   const firstDate = range === "custom" ? fromDate : rangeStart;
   const lastDate = range === "custom" ? toDate : localToday;
   const invalidDates = range === "custom" && (!fromDate || !toDate || fromDate > toDate);
@@ -648,8 +656,9 @@ function PriceTrends({ registeredSpecies = [], myFish = [], speciesLoadError = "
       <div className="panel" style={{ padding: 18, marginTop: 16 }}>
         <div className="filter-row" style={{ display: "flex", flexWrap: "wrap", gap: 12, alignItems: "center" }}>
           <label>Date range <select className="date-input" value={range} onChange={(e) => setRange(e.target.value)}>
-            <option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="180">Last 180 days</option><option value="custom">Custom dates</option>
+            <option value="7">Last 7 days</option><option value="14">Last 14 days</option><option value="30">Last 30 days</option><option value="90">Last 90 days</option><option value="180">Last 180 days</option><option value="365">Last 12 months</option><option value="all">All history</option><option value="custom">Custom dates</option>
           </select></label>
+          {shownRange !== range && <span className="chart-note" style={{ margin: 0 }}>{t("Not enough prices in this range, so {range} is shown.", { range: RANGE_LABELS[shownRange] })}</span>}
           {range === "custom" && <>
             <label>From <input type="date" className="date-input" value={fromDate} onChange={(e) => setFromDate(e.target.value)} /></label>
             <label>To <input type="date" className="date-input" value={toDate} onChange={(e) => setToDate(e.target.value)} /></label>
@@ -1165,12 +1174,6 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], myFish = []
     return () => { cancelled = true; };
   }, []);
 
-  const speciesOptions = Array.from(new Map([
-    ...records.filter((r) => r.status === "published" || r.status === undefined)
-      .map((r) => [String(r.fish_species), { id: String(r.fish_species), name: r.fish_name || `Species #${r.fish_species}` }]),
-    ...registeredSpecies.map((r) => [String(r.id), { ...r, id: String(r.id) }]),
-  ]).values()).sort((a, b) => Number(myFish.includes(b.id)) - Number(myFish.includes(a.id)) || a.name.localeCompare(b.name));
-  const selectedSpecies = speciesOptions.some((s) => s.id === speciesId) ? speciesId : (speciesOptions[0]?.id || "");
   const speciesName = speciesOptions.find((s) => s.id === selectedSpecies)?.name || "Fish species";
 
   // Never combine different municipalities into a single official unit price.

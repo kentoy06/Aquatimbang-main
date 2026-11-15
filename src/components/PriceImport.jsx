@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { isNonFish } from "../api/nonFish.js";
 import { apiUrl, authHeaders, fetchAll } from "../api/config.js";
 import { parseCsv, parsePriceList, TEMPLATE_CSV, toImportRows } from "../api/csvImport.js";
 import { askConfirm } from "./ConfirmDialog.jsx";
@@ -19,7 +20,7 @@ async function sendChunk(rows, source, dryRun, options) {
 
 // Send all rows in chunks and add up the results.
 async function runImport(rows, source, dryRun, onProgress, options = {}) {
-  const total = { ready: 0, imported: 0, already_recorded: 0, error_count: 0, errors: [], first_date: null, last_date: null, new_fish: [], matched_names: [] };
+  const total = { ready: 0, imported: 0, already_recorded: 0, error_count: 0, errors: [], first_date: null, last_date: null, new_fish: [], matched_names: [], non_fish_skipped: [] };
   for (let start = 0; start < rows.length; start += CHUNK) {
     const result = await sendChunk(rows.slice(start, start + CHUNK), source, dryRun, options);
     total.ready += result.ready;
@@ -28,6 +29,10 @@ async function runImport(rows, source, dryRun, onProgress, options = {}) {
     total.error_count += result.error_count;
     total.errors.push(...result.errors);
     (result.new_fish || []).forEach((name) => { if (!total.new_fish.includes(name)) total.new_fish.push(name); });
+    (result.non_fish_skipped || []).forEach((f) => {
+      const same = total.non_fish_skipped.find((x) => x.name === f.name);
+      if (same) same.rows += f.rows; else total.non_fish_skipped.push({ ...f });
+    });
     (result.matched_names || []).forEach((m) => { if (!total.matched_names.some((x) => x.from === m.from)) total.matched_names.push(m); });
     if (result.first_date && (!total.first_date || result.first_date < total.first_date)) total.first_date = result.first_date;
     if (result.last_date && (!total.last_date || result.last_date > total.last_date)) total.last_date = result.last_date;
@@ -92,6 +97,7 @@ export default function PriceImport({ notify, onImported }) {
   }, [pasteText, pasteDate, importName]);
   // Pasted lines the officer unticked (not fish, or not to import).
   const [skipped, setSkipped] = useState(() => new Set());
+  const [excludedFish, setExcludedFish] = useState(() => new Set());
 
   useEffect(() => {
     fetchAll("/municipalities/").then((rows) => {
@@ -117,7 +123,22 @@ export default function PriceImport({ notify, onImported }) {
   }, [placeId, markets.length]); // eslint-disable-line react-hooks/exhaustive-deps
   const sourceName = mode === "file" ? fileName : `Pasted price list${parsed?.rows[0]?.date ? ` (${parsed.rows[0].date})` : ""}`;
   const isList = parsed?.layout === "list";
-  const rowsToImport = parsed ? parsed.rows.filter((r) => !(isList && skipped.has(r.row))) : [];
+  // Every name in the file, with how many prices it has. Items that are not
+  // fish (squid, shrimp, crabs, shellfish...) are always left out; any other
+  // name can be unticked (e.g. something the DVMF lists that is not a fish).
+  const nameKey = (name) => String(name || "").trim().toLowerCase();
+  const fileFish = parsed ? Object.values(parsed.rows.reduce((all, r) => {
+    const key = nameKey(r.fish);
+    if (key) all[key] = { key, name: String(r.fish).trim(), count: (all[key]?.count || 0) + 1, notFish: isNonFish(r.fish) };
+    return all;
+  }, {})).sort((a, b) => Number(a.notFish) - Number(b.notFish) || a.name.localeCompare(b.name)) : [];
+  const notFish = fileFish.filter((f) => f.notFish);
+  const rowsToImport = parsed ? parsed.rows.filter((r) => !(isList && skipped.has(r.row))
+    && !isNonFish(r.fish) && !excludedFish.has(nameKey(r.fish))) : [];
+  const toggleFish = (key) => {
+    setExcludedFish((prev) => { const next = new Set(prev); if (next.has(key)) next.delete(key); else next.add(key); return next; });
+    setCheck(null);
+  };
   const toggleSkip = (row) => {
     setSkipped((prev) => { const next = new Set(prev); if (next.has(row)) next.delete(row); else next.add(row); return next; });
     setCheck(null);
@@ -133,6 +154,7 @@ export default function PriceImport({ notify, onImported }) {
       return;
     }
     setFileName(file.name);
+    setExcludedFish(new Set());
     setTable(parseCsv(await file.text()));
   };
 
@@ -274,7 +296,7 @@ export default function PriceImport({ notify, onImported }) {
             <>
               <div className="profile-grid">
                 <div className="profile-field"><span>{mode === "file" ? "File" : "From"}</span><strong>{sourceName}</strong></div>
-                <div className="profile-field"><span>Prices found</span><strong>{isList && skipped.size ? `${rowsToImport.length} of ${parsed.rows.length}` : parsed.rows.length.toLocaleString()}</strong></div>
+                <div className="profile-field"><span>Prices to import</span><strong>{rowsToImport.length < parsed.rows.length ? `${rowsToImport.length.toLocaleString()} of ${parsed.rows.length.toLocaleString()}` : parsed.rows.length.toLocaleString()}</strong></div>
                 <div className="profile-field"><span>Layout</span><strong>{parsed.layout === "list" ? "Price list (one date)" : parsed.layout === "long" ? "One row per price" : `One column per fish (${parsed.fishColumns.length})`}</strong></div>
                 {isList && parsed.rows[0] && <div className="profile-field"><span>Date of these prices</span><strong>{new Date(`${parsed.rows[0].date}T00:00:00`).toLocaleDateString("en-PH", { month: "long", day: "numeric", year: "numeric" })}</strong></div>}
                 {isList && parsed.rows[0]?.municipality && <div className="profile-field"><span>Municipality</span><strong>{parsed.rows[0].municipality}</strong></div>}
@@ -287,13 +309,41 @@ export default function PriceImport({ notify, onImported }) {
                 </div>}
               </div>
 
+              {fileFish.length > 0 && (
+                <div className="import-fish-pick">
+                  <header>
+                    <span><strong>Fish in this file ({fileFish.length - notFish.length})</strong> · untick anything that is not a fish you track.</span>
+                    {excludedFish.size > 0 && <button type="button" className="secondary-btn" onClick={() => { setExcludedFish(new Set()); setCheck(null); }}>Tick all fish again</button>}
+                  </header>
+                  {notFish.length > 0 && (
+                    <p className="warn-box" style={{ margin: "0 0 8px" }}>
+                      🦐 <strong>{notFish.length} item{notFish.length === 1 ? " is" : "s are"} not fish and will not be imported:</strong>{" "}
+                      {notFish.map((f) => `${f.name} (${f.count})`).join(", ")}. AquaTimbang tracks fish only.
+                    </p>
+                  )}
+                  <div className="import-fish-list">
+                    {fileFish.map((f) => f.notFish ? (
+                      <label key={f.key} className="off not-fish" title="Not a fish; it is not imported">
+                        <input type="checkbox" checked={false} disabled readOnly /> {f.name} <small>not fish</small>
+                      </label>
+                    ) : (
+                      <label key={f.key} className={excludedFish.has(f.key) ? "off" : ""}>
+                        <input type="checkbox" checked={!excludedFish.has(f.key)} onChange={() => toggleFish(f.key)} />
+                        {f.name} <small>{f.count.toLocaleString()}</small>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
+
               <div style={{ overflowX: "auto", marginTop: 12 }}>
                 <PagedTable className="inner-table">
                   <thead><tr>{isList && <th>IMPORT</th>}<th>ROW</th><th>DATE</th><th>FISH</th><th>MUNICIPALITY</th><th>PRICE</th></tr></thead>
                   <tbody>
                     {(isList ? parsed.rows : parsed.rows.slice(0, 8)).map((r, i) => isList ? (
-                      <tr key={i} className={skipped.has(r.row) ? "import-skipped" : ""}>
-                        <td><input type="checkbox" checked={!skipped.has(r.row)} onChange={() => toggleSkip(r.row)} aria-label={`Import ${r.fish}`} /></td>
+                      <tr key={i} className={skipped.has(r.row) || isNonFish(r.fish) || excludedFish.has(nameKey(r.fish)) ? "import-skipped" : ""}>
+                        <td><input type="checkbox" checked={!skipped.has(r.row) && !isNonFish(r.fish) && !excludedFish.has(nameKey(r.fish))}
+                          disabled={isNonFish(r.fish) || excludedFish.has(nameKey(r.fish))} onChange={() => toggleSkip(r.row)} aria-label={`Import ${r.fish}`} /></td>
                         <td>{r.row}</td><td>{r.date}</td><td>{r.fish}</td><td>{r.municipality || "—"}</td>
                         <td>{r.price}{r.range ? <small className="muted-text"> (middle of {r.range})</small> : null}</td>
                       </tr>
@@ -303,7 +353,7 @@ export default function PriceImport({ notify, onImported }) {
                   </tbody>
                 </PagedTable>
                 {isList
-                  ? <p className="chart-note">Untick anything that is not a fish you track (for example shellfish or squid) and it will not be imported.</p>
+                  ? <p className="chart-note">Untick any row you do not want to import.</p>
                   : parsed.rows.length > 8 && <p className="chart-note">First 8 of {parsed.rows.length.toLocaleString()} prices.</p>}
               </div>
 
@@ -322,6 +372,11 @@ export default function PriceImport({ notify, onImported }) {
                   {check.first_date && <> ({check.first_date} to {check.last_date})</>}.
                   {check.already_recorded > 0 && <> {check.already_recorded.toLocaleString()} already recorded (will be skipped).</>}
                   {check.error_count > 0 && <> {check.error_count.toLocaleString()} rows have problems and will be skipped.</>}
+                  {check.non_fish_skipped?.length > 0 && (
+                    <p style={{ margin: "6px 0 0" }}>
+                      🦐 Left out because they are not fish: {check.non_fish_skipped.map((f) => `${f.name} (${f.rows})`).join(", ")}.
+                    </p>
+                  )}
                   {check.new_fish.length > 0 && (
                     <p style={{ margin: "6px 0 0" }}>
                       🐟 <strong>{check.new_fish.length} new fish will be added</strong> to Fish Species: {check.new_fish.join(", ")}.

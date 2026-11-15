@@ -470,7 +470,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         send_to_review = bool(request.data.get("send_to_review"))
 
         from .validators import clean_fish_name
-        from .species_tools import add_alias, find_same_fish, known_scientific_name, name_key as plain_key
+        from .species_tools import add_alias, find_same_fish, is_non_fish, known_scientific_name, name_key as plain_key
 
         # Match names after tidying them, ignoring capitals, spaces and
         # hyphens: "lapu lapu", "Lapu-lapu", "LAPULAPU" and "lapu2x" are all
@@ -532,6 +532,8 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
         today = timezone.localdate()
 
         errors, candidates, seen = [], [], set()
+        non_fish = {}
+        keep_non_fish = str(request.data.get("keep_non_fish", "")).lower() in ("1", "true", "yes")
         for index, row in enumerate(rows):
             row_number = row.get("row", index + 1) if isinstance(row, dict) else index + 1
             if not isinstance(row, dict):
@@ -545,6 +547,11 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             except ValueError:
                 day = None
                 problems.append(f"unreadable date \"{row.get('date', '')}\"")
+            # AquaTimbang tracks fish only: squid, shrimp, crabs, shellfish and
+            # the like are left out (unless the person kept them on purpose).
+            if not keep_non_fish and is_non_fish(row.get("fish", "")):
+                non_fish[clean_fish_name(row.get("fish", ""))[:100]] = non_fish.get(clean_fish_name(row.get("fish", ""))[:100], 0) + 1
+                continue
             fish = find_fish(row.get("fish", ""))
             if fish is None:
                 problems.append(f"missing or unreadable fish name \"{row.get('fish', '')}\"")
@@ -683,6 +690,7 @@ class PriceRecordViewSet(viewsets.ModelViewSet):
             "last_date": max(all_dates).isoformat() if all_dates else None,
             # Fish that were not in AquaTimbang: added (or, on a check, will be added).
             "new_fish": sorted(f.name for f in new_fish.values()),
+            "non_fish_skipped": [{"name": name, "rows": count} for name, count in sorted(non_fish.items())],
             # Names read as another spelling of a fish already in the list.
             "matched_names": [{"from": raw, **info} for raw, info in sorted(matched_names.items())],
         })
@@ -1511,6 +1519,12 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
                 status=status.HTTP_400_BAD_REQUEST,
             )
         reason = str(request.data.get("reason") or "").strip()[:300]
+        details = self._delete_with_records(fish, reason)
+        return Response({"message": f"{fish.name} and all its records were deleted.", **details})
+
+    def _delete_with_records(self, fish, reason):
+        """Delete a fish and everything recorded under it; the audit log keeps the counts."""
+        from .models import FishScanPhoto, VendorPriceSuggestion, WeightEntry
         with transaction.atomic():
             prices = PriceRecord.objects.filter(fish_species=fish)
             published = prices.filter(status=PriceRecord.STATUS_PUBLISHED).count()
@@ -1529,7 +1543,41 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
             WeightEntry.objects.filter(fish_species=fish).delete()
             FishScanPhoto.objects.filter(fish_species=fish).delete()
             fish.delete()
-        return Response({"message": f"{fish.name} and all its records were deleted.", **details})
+        return details
+
+    @action(detail=False, methods=["get"], url_path="non-fish")
+    def non_fish(self, request):
+        """
+        Items in Fish Species that are not fish (squid, shrimp, crabs,
+        shellfish, seaweed...), found by name, with how many prices each has.
+        """
+        from django.db.models import Count
+        from .species_tools import is_non_fish
+        rows = FishSpecies.objects.annotate(price_total=Count("price_records")).order_by("name")
+        return Response([
+            {"id": f.pk, "name": f.name, "prices": f.price_total, "is_active": f.is_active}
+            for f in rows if is_non_fish(f.name)
+        ])
+
+    @action(detail=False, methods=["post"], url_path="remove-non-fish")
+    def remove_non_fish(self, request):
+        """
+        Remove the chosen items (ids) together with their prices, so only fish
+        stay in AquaTimbang. Each removal is kept in the audit log.
+        """
+        ids = [int(i) for i in (request.data.get("ids") or []) if str(i).isdigit()]
+        if not ids:
+            return Response({"ids": "Choose what to remove."}, status=status.HTTP_400_BAD_REQUEST)
+        removed = []
+        for fish in FishSpecies.objects.filter(pk__in=ids):
+            details = self._delete_with_records(fish, "Not a fish (removed from Fish Species)")
+            removed.append({"name": fish.name, "prices": details["prices_deleted"]})
+        total = sum(r["prices"] for r in removed)
+        return Response({
+            "removed": removed,
+            "message": f"Removed {len(removed)} item{'s' if len(removed) != 1 else ''} that {'are' if len(removed) != 1 else 'is'} not fish"
+                       f" and {total:,} price{'s' if total != 1 else ''}.",
+        })
 
     @action(detail=True, methods=["get"], authentication_classes=[], permission_classes=[AllowAny])
     def photo(self, request, pk=None):
@@ -2212,6 +2260,7 @@ def public_fish_profile(request, fish_id):
     Only published prices are shown.
     """
     from datetime import timedelta
+    from django.db.models import Q
     from .models import ClosedFishingSeason
 
     fish = FishSpecies.objects.filter(pk=fish_id, is_active=True).first()
@@ -2228,7 +2277,9 @@ def public_fish_profile(request, fish_id):
 
     if request.query_params.get("market"):
         try:
-            published = published.filter(market_id=int(request.query_params["market"]))
+            # Prices of this market, plus municipal prices with no market
+            # (e.g. imported DVMF history), so the history is not lost.
+            published = published.filter(Q(market_id=int(request.query_params["market"])) | Q(market__isnull=True))
         except ValueError:
             pass
     latest = published.select_related("municipality", "market").order_by("-recorded_date", "-id").first()
@@ -2242,7 +2293,12 @@ def public_fish_profile(request, fish_id):
     if week_ago and week_ago.price_per_kg:
         change = round(float((latest.price_per_kg - week_ago.price_per_kg) / week_ago.price_per_kg * 100), 1)
 
-    start = latest.recorded_date - timedelta(days=29)
+    # The last 30 days with a price. When prices are sparse (e.g. monthly
+    # DVMF records), these reach further back than 30 calendar days.
+    recent_days = list(
+        published.order_by("-recorded_date").values_list("recorded_date", flat=True).distinct()[:30]
+    )
+    start = min(recent_days) if recent_days else latest.recorded_date
     history = list(
         published.filter(recorded_date__gte=start)
         .order_by("recorded_date", "id")
@@ -2294,7 +2350,8 @@ def public_fish_profile(request, fish_id):
         "weekly_change_percent": change,
         "history": [{"date": day, "price": price} for day, price in by_day.items()],
         "stats_30_days": (
-            {"low": min(prices), "high": max(prices), "average": round(sum(prices) / len(prices), 2), "days": len(prices)}
+            {"low": min(prices), "high": max(prices), "average": round(sum(prices) / len(prices), 2), "days": len(prices),
+             "from": start, "to": latest.recorded_date}
             if prices else None
         ),
         "closed_seasons_now": seasons,
@@ -3802,6 +3859,46 @@ def record_failed_login(username):
 def presence_heartbeat(request):
     """Open pages call this every minute; authentication records last_seen."""
     return Response({"ok": True})
+
+
+NOTIFICATION_STATE_KEYS = ("seen", "dismissed", "announcements")
+NOTIFICATION_STATE_LIMIT = 500
+
+
+@api_view(["GET", "POST"])
+@permission_classes([IsAuthenticated])
+def notification_state(request):
+    """
+    Which notifications and announcements this user has read or cleared.
+    POST adds to the lists, so two open devices cannot undo each other;
+    only {"clear": ["dismissed"]} (Restore dismissed) empties one. Each list
+    keeps the newest 500 entries.
+    """
+    profile = UserProfile.objects.filter(user=request.user).first()
+    if profile is None:
+        return Response({key: [] for key in NOTIFICATION_STATE_KEYS})
+    state = profile.notification_state if isinstance(profile.notification_state, dict) else {}
+    if request.method == "POST":
+        changed = False
+        # "Restore dismissed" empties a list on purpose.
+        for key in request.data.get("clear") or []:
+            if key in NOTIFICATION_STATE_KEYS and state.get(key):
+                state[key] = []; changed = True
+        for key in NOTIFICATION_STATE_KEYS:
+            incoming = request.data.get(key) or []
+            if not isinstance(incoming, list):
+                continue
+            current = [str(v) for v in state.get(key, [])]
+            known = set(current)
+            for value in incoming:
+                value = str(value)[:300]
+                if value not in known:
+                    current.append(value); known.add(value); changed = True
+            state[key] = current[-NOTIFICATION_STATE_LIMIT:]
+        if changed:
+            profile.notification_state = state
+            profile.save(update_fields=["notification_state"])
+    return Response({key: state.get(key, []) for key in NOTIFICATION_STATE_KEYS})
 
 
 @api_view(["POST"])

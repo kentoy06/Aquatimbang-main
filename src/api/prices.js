@@ -9,6 +9,9 @@ import { fetchAll } from "./config.js";
 
 export const RECENT_DAYS = 365;
 
+// Start date used to load every older price ("All history").
+export const ALL_HISTORY_FROM = "2000-01-01";
+
 // First day of the recent window, as "YYYY-MM-DD".
 export function recentSince() {
   const day = new Date();

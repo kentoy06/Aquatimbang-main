@@ -223,6 +223,9 @@ class UserProfile(models.Model):
     # When this account last used AquaTimbang (any API request while
     # logged in). Used to show Online / Offline.
     last_seen = models.DateTimeField(null=True, blank=True)
+    # Notifications and announcements this user has read or cleared, so they
+    # stay read on every device: {"seen": [...], "dismissed": [...], "announcements": [...]}.
+    notification_state = models.JSONField(default=dict, blank=True)
 
     def __str__(self):
 
