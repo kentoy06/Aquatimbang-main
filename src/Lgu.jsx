@@ -1,4 +1,6 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import { LANGUAGES, useLanguageSetting } from "./i18n/vendor.js";
+import AutoTranslate from "./i18n/AutoTranslate.jsx";
 import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
 import FishNameField from "./components/FishNameField.jsx";
 import PriceRecommendations from "./components/PriceRecommendations.jsx";
@@ -410,6 +412,8 @@ useEffect(() => {
   };
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
+  // Display language (English, Filipino, Cebuano), remembered on this device.
+  const [language, setLanguage] = useLanguageSetting();
 
   // Related pages share one menu item and open as tabs. Notifications open
   // from the bell at the top.
@@ -417,37 +421,37 @@ useEffect(() => {
     {
       label: "DAILY OPERATIONS",
       items: [
-        { name: "Dashboard", icon: "▦" },
-        { name: "Price Recommendations", icon: "✎" },
-        { name: "Import Price History", icon: "⇪" },
-        { name: "Fish Species Management", icon: "🐟" },
+        { name: "Dashboard", icon: "🏠" },
+        { name: "Price Recommendations", icon: "💡" },
+        { name: "Import Price History", icon: "⬆️" },
+        { name: "Fish Species Management", icon: "🐠" },
       ],
     },
     {
       label: "FISH VENDORS",
       items: [
-        { name: "Vendors", icon: "👥", tabs: ["Vendor Registrations", "Vendor Management"] },
-        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "◉" }] : []),
+        { name: "Vendors", icon: "🧑‍🤝‍🧑", tabs: ["Vendor Registrations", "Vendor Management"] },
+        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "📷" }] : []),
       ],
     },
     {
       label: "PRICES & ANALYTICS",
       items: [
-        { name: "Published Prices", icon: "₱", tabs: ["Official Reference Prices", "Price Trends", "Price Comparison"] },
-        { name: "Forecast & Insights", icon: "∿", tabs: ["Price Forecast", "Market Insights", "Price Anomalies", "External Factors"] },
+        { name: "Published Prices", icon: "🏷️", tabs: ["Official Reference Prices", "Price Trends", "Price Comparison"] },
+        { name: "Forecast & Insights", icon: "📈", tabs: ["Price Forecast", "Market Insights", "Price Anomalies", "External Factors"] },
       ],
     },
     {
       label: "REPORTS & AUDIT",
       items: [
-        { name: "Reports & Logs", icon: "▤", tabs: ["Reports", "Validation History", "Audit Log"] },
+        { name: "Reports & Logs", icon: "🗂️", tabs: ["Reports", "Validation History", "Audit Log"] },
       ],
     },
     {
       label: "ACCOUNT",
       items: [
-        { name: "Messages", icon: "✉" },
-        { name: "My Profile", icon: "♙" },
+        { name: "Messages", icon: "💬" },
+        { name: "My Profile", icon: "👤" },
       ],
     },
   ];
@@ -599,7 +603,14 @@ useEffect(() => {
           </div>
 
           <div className="topbar-right">
-          <NotificationBell count={unread.length} onClick={toggleNotifications} />
+          <label className="language-picker" title="Language">
+              <span aria-hidden="true">🌐</span>
+              <select aria-label="Language" value={language} onChange={(e) => setLanguage(e.target.value)} data-no-translate>
+                {LANGUAGES.map((l) => <option key={l.code} value={l.code}>{l.label}</option>)}
+              </select>
+            </label>
+            <AutoTranslate language={language} />
+            <NotificationBell count={unread.length} onClick={toggleNotifications} />
           <div className="top-profile">
     {/* Actual user's initials. */}
           <UserAvatar profile={account.profile} initials={userInitials} small />
@@ -1957,11 +1968,11 @@ function OfficialReferencePrices({ priceRecords, loading, error, goTo }) {
           <h2>Official Reference Prices</h2>
           <p>The latest published price per species and municipality.</p>
         </div>
-        <button className="secondary-btn" onClick={() => goTo("Price Recommendations")}>✎ Publish Today's Prices</button>
+        <button className="secondary-btn" onClick={() => goTo("Price Recommendations")}>💡 Go to Price Recommendations</button>
       </div>
 
       <div className="info-box" style={{ marginBottom: 14 }}>
-        To change a reference price, encode a new price in Price Entry and publish it in Review &amp; Publish.
+        Prices are published from Price Recommendations, automatically when vendors agree, or imported from DVMF records. To fix a published price, correct it with a reason.
       </div>
 
       <div className="panel">

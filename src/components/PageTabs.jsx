@@ -37,11 +37,41 @@ const TAB_ICONS = {
   "System Configuration": "⚙️", "System Announcements": "📢",
 };
 
+// One plain sentence under the tabs saying what the open tab is for.
+const TAB_HINTS = {
+  "Current Fish Prices": "Today's price of each fish. Tap a fish to see its picture.",
+  "Price Trends": "How the price of a fish went up or down over the past days.",
+  "Price Forecast": "What the price of a fish may be in the coming days.",
+  "Submit Suggested Price": "Think the price is wrong? Enter your price and choose why.",
+  "My Suggested Prices": "Your suggestions, and a \u201cUsed\u201d mark when your price was published.",
+  "Community Average": "The average price other vendors suggested, without their names.",
+  "Vendor Registrations": "New vendors waiting for your approval.",
+  "Vendor Management": "All vendors of your municipality.",
+  "Official Reference Prices": "The latest published price of each fish.",
+  "Price Comparison": "The price of one fish in different municipalities.",
+  "Market Insights": "Conditions that often come with higher or lower prices.",
+  "Price Anomalies": "Prices that look too high or too low compared with usual.",
+  "External Factors": "Record fuel price, weather, holidays, and closed seasons.",
+  "Reports": "Make and download reports.",
+  "Validation History": "Every price action you took.",
+  "Audit Log": "Everything you changed, with the date and time.",
+  "Price Records": "All prices in the system.",
+  "Vendor Suggestions": "Prices suggested by vendors, with their reasons.",
+  "Import Price History": "Add past prices from a CSV file or a pasted list.",
+  "Predictive Analytics": "Price forecasts and their accuracy.",
+  "Data Monitoring": "How complete the price data is.",
+  "Reports Management": "Make and download reports.",
+  "Activity Logs": "Every important action, with who did it and when.",
+  "System Configuration": "Price limits and the automatic publishing rule.",
+  "System Announcements": "Messages shown to vendors and LGU officers.",
+};
+
 /** Tab bar shown above a page that belongs to a group. */
 export default function PageTabs({ menuGroups, page, onSelect, translate = (text) => text }) {
   const item = itemFor(menuGroups, page);
   if (!item?.tabs || item.tabs.length < 2) return null;
   return (
+    <>
     <div className="page-tabs" role="tablist" aria-label={translate(item.name)}>
       {item.tabs.map((tab) => (
         <button
@@ -57,5 +87,7 @@ export default function PageTabs({ menuGroups, page, onSelect, translate = (text
         </button>
       ))}
     </div>
+    {TAB_HINTS[page] && <p className="page-tab-hint"><span aria-hidden="true">💡</span> {translate(TAB_HINTS[page])}</p>}
+    </>
   );
 }
