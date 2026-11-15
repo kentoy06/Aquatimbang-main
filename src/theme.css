@@ -2079,7 +2079,7 @@ table th {
 .similar-names-tools input { padding: 9px 12px; border: 1px solid #d0d5dd; border-radius: 10px; min-width: 220px; font: inherit; }
 .similar-names-tools .muted-text { font-size: 12.5px; }
 .similar-names-table { border: 1px solid #eaecf0; border-radius: 12px; overflow: hidden; }
-.similar-names-row { display: grid; grid-template-columns: 1fr 1fr 1.4fr; gap: 12px; align-items: center; padding: 10px 14px; border-top: 1px solid #f2f4f7; font-size: 13.5px; }
+.similar-names-row { display: grid; grid-template-columns: 1fr 1fr 1.6fr 1.3fr; gap: 12px; align-items: center; padding: 10px 14px; border-top: 1px solid #f2f4f7; font-size: 13.5px; }
 .similar-names-row:first-child { border-top: 0; }
 .similar-names-row.head { background: #f8fafc; font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .05em; color: #667085; }
 .similar-names-row.empty { display: block; color: #667085; }
@@ -2092,9 +2092,17 @@ table th {
 .similar-names-pager .secondary-btn { padding: 6px 12px; font-size: 12.5px; }
 @media (max-width: 720px) {
   .similar-names-row { grid-template-columns: 1fr 1fr; }
-  .similar-names-row.head span:last-child { display: none; }
-  .similar-names-actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .similar-names-row.head span:nth-child(n+3) { display: none; }
+  .similar-names-why, .similar-names-actions { grid-column: 1 / -1; justify-content: flex-start; }
 }
+.similar-names-why { gap: 3px !important; }
+.similar-names-why .dup-badge { justify-self: start; }
+.similar-names-all { margin-left: auto; padding: 8px 14px; font-size: 13px; }
+.similar-names-legend { margin: 0 0 10px; font-size: 12px; color: #667085; line-height: 1.9; }
+.dup-badge { display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: 11.5px; font-weight: 700; white-space: nowrap; }
+.dup-badge.high { background: #dcfae6; color: #067647; }
+.dup-badge.medium { background: #fef0c7; color: #b54708; }
+.dup-badge.low { background: #f2f4f7; color: #475467; }
 .import-matched { margin: 6px 0 0; }
 .import-matched li { margin: 2px 0; }
 
