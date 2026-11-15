@@ -2681,6 +2681,43 @@ class FishNameVariantTests(StallSampleTests):
         self.assertIn("Timbungan", FishSpecies.objects.get(pk=keep.pk).aliases)
         self.assertEqual(self.client.get("/api/fish-species/similar-names/").data, [])
 
+    def test_duplicate_confidence_uses_prices_and_same_day(self):
+        day = lambda d: datetime.date(2026, 1, d)
+        def price(fish, value, d):
+            PriceRecord.objects.create(fish_species=fish, municipality=self.place, price_per_kg=Decimal(value),
+                                       recorded_date=day(d), status="published")
+        # Same fish, two spellings: similar prices, never on the same day.
+        a1, a2 = FishSpecies.objects.create(name="Anduhaw"), FishSpecies.objects.create(name="Andohaw")
+        for d in (1, 2, 3): price(a1, "160", d)
+        price(a2, "158", 4)
+        # Look-alike names but priced side by side on the same days: different fish.
+        b1, b2 = FishSpecies.objects.create(name="Bariles"), FishSpecies.objects.create(name="Barilis")
+        for d in (1, 2, 3):
+            price(b1, "300", d); price(b2, "120", d)
+        pairs = {p["other"]["name"]: p for p in self.client.get("/api/fish-species/similar-names/").data}
+        self.assertEqual(pairs["Andohaw"]["confidence"], "high")
+        self.assertEqual(pairs["Andohaw"]["keep"]["name"], "Anduhaw")
+        self.assertEqual(pairs["Andohaw"]["same_days"], 0)
+        low = pairs.get("Barilis") or pairs.get("Bariles")
+        self.assertEqual(low["confidence"], "low")
+        self.assertEqual(low["same_days"], 3)
+
+        done = self.client.post("/api/fish-species/merge-likely/", {}, format="json")
+        self.assertEqual(done.status_code, 200, done.data)
+        self.assertEqual(done.data["merged"], [{"from": "Andohaw", "into": "Anduhaw"}])
+        self.assertFalse(FishSpecies.objects.filter(pk=a2.pk).exists())
+        self.assertEqual(PriceRecord.objects.filter(fish_species=a1).count(), 4)
+        self.assertIn("Andohaw", FishSpecies.objects.get(pk=a1.pk).aliases)
+        self.assertTrue(FishSpecies.objects.filter(pk__in=[b1.pk, b2.pk]).count() == 2)  # left for a person
+
+    def test_import_uses_existing_fish_when_duplicates_exist(self):
+        first = FishSpecies.objects.create(name="Anduhaw")
+        FishSpecies.objects.create(name="Andohaw")
+        rows = [{"row": 2, "date": "2026-01-05", "fish": "Anduhao", "municipality": "Sample City", "price": "150"}]
+        self.client.post("/api/prices/import/", {"rows": rows}, format="json")
+        self.assertFalse(FishSpecies.objects.filter(name="Anduhao").exists())
+        self.assertEqual(PriceRecord.objects.get().fish_species_id, first.pk)
+
     def test_cleanup_merges_spelling_variants(self):
         from importlib import import_module
         from django.apps import apps as django_apps

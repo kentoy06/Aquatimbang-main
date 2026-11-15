@@ -1399,18 +1399,58 @@ class FishSpeciesViewSet(viewsets.ModelViewSet):
         "Anduhaw" and "Andohaw"), with their price counts, so the LGU can merge
         them. The fish with more prices is suggested as the one to keep.
         """
-        from django.db.models import Count
-        from .species_tools import similar_pairs
-        fishes = list(FishSpecies.objects.annotate(price_total=Count("price_records")))
         pairs = []
-        for a, b, ratio in similar_pairs(fishes):
-            keep, other = (a, b) if (a.price_total, -a.pk) >= (b.price_total, -b.pk) else (b, a)
+        for keep, other, ratio, info in self._likely_duplicates():
             pairs.append({
                 "keep": {"id": keep.pk, "name": keep.name, "prices": keep.price_total},
                 "other": {"id": other.pk, "name": other.name, "prices": other.price_total},
-                "similarity": ratio,
+                "similarity": ratio, **info,
             })
-        return Response(pairs[:50])
+        return Response(pairs[:100])
+
+    def _likely_duplicates(self):
+        """Similar-name pairs with their evidence; the fish with more prices is kept."""
+        from django.db.models import Count
+        from .species_tools import duplicate_evidence, similar_pairs
+        fishes = list(FishSpecies.objects.annotate(price_total=Count("price_records")))
+        out = []
+        for a, b, ratio, info in duplicate_evidence(similar_pairs(fishes), PriceRecord):
+            keep, other = (a, b) if (a.price_total, -a.pk) >= (b.price_total, -b.pk) else (b, a)
+            out.append((keep, other, ratio, info))
+        return out
+
+    @action(detail=False, methods=["post"], url_path="merge-likely")
+    def merge_likely(self, request):
+        """
+        Merge every pair the analysis rates High confidence (same spelling,
+        similar prices, never priced on the same day): the fish with fewer
+        prices moves into the other and its name is kept as another spelling.
+        """
+        from .models import ClosedFishingSeason, FishScanPhoto, FishVendorVerification, VendorPriceSuggestion, WeightEntry
+        from .species_tools import merge_species
+        merged, into = [], {}
+        def final(fish_id):
+            while fish_id in into: fish_id = into[fish_id]
+            return fish_id
+        with transaction.atomic():
+            for keep, other, ratio, info in self._likely_duplicates():
+                if info["confidence"] != "high":
+                    continue
+                target_id, source_id = final(keep.pk), final(other.pk)
+                if target_id == source_id:
+                    continue
+                target = FishSpecies.objects.filter(pk=target_id).first()
+                source = FishSpecies.objects.filter(pk=source_id).first()
+                if not target or not source:
+                    continue
+                counts = merge_species(source, target, PriceRecord, VendorPriceSuggestion, WeightEntry,
+                                       FishScanPhoto, FishVendorVerification, ClosedFishingSeason)
+                self._log("merged", source, {"merged_into": target.name, "merged_into_id": target.pk, **counts,
+                                             "reason": "Likely duplicate: " + "; ".join(info["reasons"])})
+                into[source.pk] = target.pk
+                merged.append({"from": source.name, "into": target.name})
+                source.delete()
+        return Response({"merged": merged, "message": f"Merged {len(merged)} duplicate name{'s' if len(merged) != 1 else ''}."})
 
     @action(detail=True, methods=["get"], url_path="usage")
     def usage(self, request, pk=None):

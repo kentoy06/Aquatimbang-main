@@ -106,8 +106,10 @@ def find_same_fish(name, fishes):
             return "alias", fish
     folded = spelling_key(name)
     same = [f for f in fishes if any(spelling_key(n) == folded for n in names_of(f))]
-    if len(same) == 1:
-        return "spelling", same[0]
+    if same:
+        # When duplicates already exist, use the oldest record rather than
+        # adding a third spelling of the same fish.
+        return "spelling", min(same, key=lambda f: (f.pk is None, f.pk or 0))
     if len(key) >= 5:
         scored = sorted(
             ((max(similarity(name, n) for n in names_of(f)), f) for f in fishes),
@@ -181,3 +183,61 @@ def merge_species(source, target, PriceRecord, VendorPriceSuggestion, WeightEntr
     if changed:
         target.save(update_fields=changed)
     return {"prices_moved": moved, "duplicate_prices_removed": len(duplicates), "suggestions_moved": suggestions}
+
+
+def duplicate_evidence(pairs, PriceRecord):
+    """
+    How likely each similar-name pair is the same fish, from the names and
+    the published prices:
+      - spelling: the names are the same after the Cebuano/Filipino spelling
+        rules (o = u, e = i, ao = aw, double letters once);
+      - prices: the same fish sells at a similar price, so the medians of the
+        two names should be close;
+      - same day: a price list never names one fish twice, so two names that
+        were both priced on the same day in the same market are most likely
+        different fish.
+    Returns [(a, b, ratio, info)], info = {confidence, score, reasons, ...}.
+    """
+    from statistics import median
+    ids = {f.pk for a, b, _ in pairs for f in (a, b)}
+    prices, days = {}, {}
+    rows = (PriceRecord.objects.filter(fish_species_id__in=ids, status="published")
+            .values_list("fish_species_id", "price_per_kg", "recorded_date", "market_id", "municipality_id"))
+    for fid, price, day, market, place in rows:
+        prices.setdefault(fid, []).append(float(price))
+        days.setdefault(fid, set()).add((day, market or 0, place))
+    out = []
+    for a, b, ratio in pairs:
+        same_spelling = any(spelling_key(x) == spelling_key(y) for x in names_of(a) for y in names_of(b))
+        ma = median(prices[a.pk]) if prices.get(a.pk) else None
+        mb = median(prices[b.pk]) if prices.get(b.pk) else None
+        closeness = (1 - abs(ma - mb) / max(ma, mb)) if ma and mb else None
+        overlap = len(days.get(a.pk, set()) & days.get(b.pk, set()))
+        reasons = []
+        if same_spelling:
+            reasons.append("Same name after the spelling rules (o = u, e = i, ao = aw)")
+        else:
+            reasons.append(f"Names are {round(ratio * 100)}% alike")
+        if closeness is not None:
+            reasons.append(f"Typical prices \u20b1{ma:,.2f} and \u20b1{mb:,.2f} ({round(closeness * 100)}% alike)")
+        else:
+            reasons.append("Not enough prices to compare")
+        if overlap:
+            reasons.append(f"Both were priced on {overlap} same day{'s' if overlap != 1 else ''} in the same market, so they may be different fish")
+        else:
+            reasons.append("Never priced on the same day in the same market")
+        name_ok = same_spelling or ratio >= 0.92
+        price_ok = closeness is None or closeness >= 0.75
+        if overlap >= 3 or (closeness is not None and closeness < 0.5):
+            confidence = "low"
+        elif name_ok and price_ok and overlap == 0:
+            confidence = "high"
+        else:
+            confidence = "medium"
+        score = {"high": 2, "medium": 1, "low": 0}[confidence] + ratio
+        out.append((a, b, ratio, {
+            "confidence": confidence, "score": round(score, 3), "reasons": reasons,
+            "same_spelling": same_spelling, "price_closeness": round(closeness, 2) if closeness is not None else None,
+            "same_days": overlap,
+        }))
+    return sorted(out, key=lambda row: -row[3]["score"])
