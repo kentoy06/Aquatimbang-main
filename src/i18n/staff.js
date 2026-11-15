@@ -334,4 +334,7 @@ export const STAFF_PHRASES = {
   "Submission Date": ["Petsa ng Pagpasa", "Petsa sa Pagpasa"],
   "Submitted by": ["Ipinasa ni", "Gipasa ni"],
   "Suggested Price": ["Iminungkahing Presyo", "Gisugyot nga Presyo"],
+  "Logs": ["Mga Talaan", "Mga Talaan"],
+  "PRICES": ["MGA PRESYO", "MGA PRESYO"],
+  "REPORTS": ["MGA ULAT", "MGA TAHO"],
 };

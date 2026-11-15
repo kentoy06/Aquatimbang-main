@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import Icon from "./components/Icon.jsx";
 import { LANGUAGES, useLanguageSetting } from "./i18n/vendor.js";
 import AutoTranslate from "./i18n/AutoTranslate.jsx";
 import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
@@ -616,33 +617,48 @@ useEffect(() => {
     setTimeout(() => setToast(""), 2600);
   };
 
-  // Related pages share one menu item and open as tabs. Notifications open
-  // from the bell at the top.
+  // Menu sections; only closely related pages share one item as tabs.
+  // Notifications open from the bell at the top.
   const menuGroups = [
     {
       label: "ADMINISTRATION",
       items: [
-        { name: "Dashboard", icon: "🏠" },
-        { name: "User Management", icon: "👥" },
-        { name: "Fish Species", icon: "🐠" },
-        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "📷" }] : []),
-        { name: "Municipality & Market", icon: "🏪" },
-        { name: "Prices", icon: "🏷️", tabs: ["Price Records", "Vendor Suggestions", "Import Price History"] },
+        { name: "Dashboard", icon: "home" },
+        { name: "User Management", icon: "users" },
+        { name: "Fish Species", icon: "fish" },
+        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "camera" }] : []),
+        { name: "Municipality & Market", icon: "store" },
+      ],
+    },
+    {
+      label: "PRICES",
+      items: [
+        { name: "Price Records", icon: "tag" },
+        { name: "Vendor Suggestions", icon: "message" },
+        { name: "Import Price History", icon: "upload" },
       ],
     },
     {
       label: "MONITORING",
       items: [
-        { name: "Analytics", icon: "📈", tabs: ["Predictive Analytics", "Market Insights", "External Factors", "Data Monitoring"] },
-        { name: "Reports & Logs", icon: "🗂️", tabs: ["Reports Management", "Activity Logs"] },
+        { name: "Predictive Analytics", icon: "forecast" },
+        { name: "Market Insights", icon: "chart", tabs: ["Market Insights", "Data Monitoring"] },
+        { name: "External Factors", icon: "cloud" },
+      ],
+    },
+    {
+      label: "REPORTS",
+      items: [
+        { name: "Reports Management", icon: "file" },
+        { name: "Activity Logs", icon: "history" },
       ],
     },
     {
       label: "SYSTEM",
       items: [
-        { name: "System", icon: "⚙️", tabs: ["System Configuration", "System Announcements"] },
-        { name: "Messages", icon: "💬" },
-        { name: "Admin Profile", icon: "👤" },
+        { name: "System", icon: "settings", tabs: ["System Configuration", "System Announcements"] },
+        { name: "Messages", icon: "message" },
+        { name: "Admin Profile", icon: "user" },
       ],
     },
   ];
@@ -802,7 +818,7 @@ useEffect(() => {
                   className={`nav-item ${isActiveItem(item, activePage) ? "active" : ""}`}
                   onClick={() => { setActivePage(firstPage(item)); setMenuOpen(false); }}
                 >
-                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-icon"><Icon name={item.icon} /></span>
                   <span>{item.name}</span>
                   {item.name === "Messages" && unreadMessages > 0 && (
                     <span className="nav-badge">{unreadMessages}</span>

@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import Icon from "./components/Icon.jsx";
 import { LANGUAGES, useLanguageSetting } from "./i18n/vendor.js";
 import AutoTranslate from "./i18n/AutoTranslate.jsx";
 import PageTabs, { firstPage, isActiveItem } from "./components/PageTabs.jsx";
@@ -415,43 +416,48 @@ useEffect(() => {
   // Display language (English, Filipino, Cebuano), remembered on this device.
   const [language, setLanguage] = useLanguageSetting();
 
-  // Related pages share one menu item and open as tabs. Notifications open
-  // from the bell at the top.
+  // Menu sections; only closely related pages share one item as tabs.
+  // Notifications open from the bell at the top.
   const menuGroups = [
     {
       label: "DAILY OPERATIONS",
       items: [
-        { name: "Dashboard", icon: "🏠" },
-        { name: "Price Recommendations", icon: "💡" },
-        { name: "Import Price History", icon: "⬆️" },
-        { name: "Fish Species Management", icon: "🐠" },
+        { name: "Dashboard", icon: "home" },
+        { name: "Price Recommendations", icon: "bulb" },
+        { name: "Import Price History", icon: "upload" },
+        { name: "Fish Species Management", icon: "fish" },
+        { name: "External Factors", icon: "cloud" },
       ],
     },
     {
       label: "FISH VENDORS",
       items: [
-        { name: "Vendors", icon: "🧑‍🤝‍🧑", tabs: ["Vendor Registrations", "Vendor Management"] },
-        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "📷" }] : []),
+        { name: "Vendor Registrations", icon: "check" },
+        { name: "Vendor Management", icon: "users" },
+        ...(FISH_SCANNER ? [{ name: "Fish Scanner Photos", icon: "camera" }] : []),
       ],
     },
     {
       label: "PRICES & ANALYTICS",
       items: [
-        { name: "Published Prices", icon: "🏷️", tabs: ["Official Reference Prices", "Price Trends", "Price Comparison"] },
-        { name: "Forecast & Insights", icon: "📈", tabs: ["Price Forecast", "Market Insights", "Price Anomalies", "External Factors"] },
+        { name: "Published Prices", icon: "tag", tabs: ["Official Reference Prices", "Price Comparison"] },
+        { name: "Price Trends", icon: "trend" },
+        { name: "Price Forecast", icon: "forecast" },
+        { name: "Market Insights", icon: "chart", tabs: ["Market Insights", "Price Anomalies"] },
       ],
     },
     {
       label: "REPORTS & AUDIT",
       items: [
-        { name: "Reports & Logs", icon: "🗂️", tabs: ["Reports", "Validation History", "Audit Log"] },
+        { name: "Reports", icon: "file" },
+        { name: "Logs", icon: "history", tabs: ["Validation History", "Audit Log"] },
       ],
     },
     {
       label: "ACCOUNT",
       items: [
-        { name: "Messages", icon: "💬" },
-        { name: "My Profile", icon: "👤" },
+        { name: "Messages", icon: "message" },
+        { name: "My Profile", icon: "user" },
       ],
     },
   ];
@@ -551,7 +557,7 @@ useEffect(() => {
                   className={`nav-item ${isActiveItem(item, activePage) ? "active" : ""}`}
                   onClick={() => { setActivePage(firstPage(item)); setMenuOpen(false); }}
                 >
-                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-icon"><Icon name={item.icon} /></span>
                   <span>{item.name}</span>
                   {item.name === "Messages" && unreadMessages > 0 && (
                     <span className="nav-badge">{unreadMessages}</span>

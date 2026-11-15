@@ -1,4 +1,5 @@
 import React from "react";
+import Icon from "./Icon.jsx";
 
 /*
  * Grouped menu items. A sidebar item may hold several pages as tabs:
@@ -25,16 +26,16 @@ export const firstPage = (item) => (item.tabs ? item.tabs[0] : item.name);
 
 // A picture for each tab, so it is recognised before it is read.
 const TAB_ICONS = {
-  "Current Fish Prices": "🐟", "Price Trends": "📈", "Price Forecast": "🔮",
-  "Submit Suggested Price": "✍️", "My Suggested Prices": "📋", "Community Average": "👥",
-  "Vendor Registrations": "🆕", "Vendor Management": "🧑‍🤝‍🧑",
-  "Official Reference Prices": "₱", "Price Comparison": "⚖️",
-  "Market Insights": "💡", "Price Anomalies": "⚠️", "External Factors": "🌦️",
-  "Reports": "📄", "Validation History": "✅", "Audit Log": "🕘",
-  "Price Records": "₱", "Vendor Suggestions": "💬", "Import Price History": "⬆️",
-  "Predictive Analytics": "🔮", "Data Monitoring": "📊",
-  "Reports Management": "📄", "Activity Logs": "🕘",
-  "System Configuration": "⚙️", "System Announcements": "📢",
+  "Current Fish Prices": "fish", "Price Trends": "trend", "Price Forecast": "forecast",
+  "Submit Suggested Price": "pencil", "My Suggested Prices": "list", "Community Average": "users",
+  "Vendor Registrations": "check", "Vendor Management": "users",
+  "Official Reference Prices": "tag", "Price Comparison": "scale",
+  "Market Insights": "chart", "Price Anomalies": "alert", "External Factors": "cloud",
+  "Reports": "file", "Validation History": "check", "Audit Log": "history",
+  "Price Records": "tag", "Vendor Suggestions": "message", "Import Price History": "upload",
+  "Predictive Analytics": "forecast", "Data Monitoring": "activity",
+  "Reports Management": "file", "Activity Logs": "history",
+  "System Configuration": "settings", "System Announcements": "megaphone",
 };
 
 // One plain sentence under the tabs saying what the open tab is for.
@@ -82,12 +83,12 @@ export default function PageTabs({ menuGroups, page, onSelect, translate = (text
           className={tab === page ? "active" : ""}
           onClick={() => onSelect(tab)}
         >
-          <span className="page-tab-icon" aria-hidden="true">{TAB_ICONS[tab] || "•"}</span>
+          <span className="page-tab-icon" aria-hidden="true"><Icon name={TAB_ICONS[tab] || "list"} size={16} /></span>
           <span>{translate(tab)}</span>
         </button>
       ))}
     </div>
-    {TAB_HINTS[page] && <p className="page-tab-hint"><span aria-hidden="true">💡</span> {translate(TAB_HINTS[page])}</p>}
+    {TAB_HINTS[page] && <p className="page-tab-hint"><span className="page-tab-hint-icon" aria-hidden="true"><Icon name="bulb" size={15} /></span>{translate(TAB_HINTS[page])}</p>}
     </>
   );
 }
