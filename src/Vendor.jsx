@@ -1,4 +1,5 @@
 import { BrandMark } from "./components/BrandLogo.jsx";
+import Icon from "./components/Icon.jsx";
 import AutoTranslate from "./i18n/AutoTranslate.jsx";
 import PageTabs, { firstPage, isActiveItem, itemFor } from "./components/PageTabs.jsx";
 import { askConfirm } from "./components/ConfirmDialog.jsx";
@@ -245,35 +246,37 @@ useEffect(() => {
   // Unread private messages for the sidebar badge.
   const unreadMessages = useUnreadMessages();
 
-  // Related pages share one menu item and open as tabs. Notifications open
-  // from the bell at the top.
+  // Menu sections; only closely related pages share one item as tabs.
+  // Notifications open from the bell at the top.
   const menuGroups = [
     {
       label: "PRICES",
       items: [
-        { name: "Dashboard", icon: "🏠" },
-        { name: "Fish Prices", icon: "🐟", tabs: ["Current Fish Prices", "Price Trends", "Price Forecast"] },
+        { name: "Dashboard", icon: "home" },
+        { name: "Fish Prices", icon: "fish", tabs: ["Current Fish Prices", "Price Trends"] },
+        { name: "Price Forecast", icon: "forecast" },
       ],
     },
     {
       label: "SUGGESTIONS",
       items: [
-        { name: "Suggested Prices", icon: "✍️", tabs: ["Submit Suggested Price", "My Suggested Prices", "Community Average"] },
+        { name: "Submit Suggested Price", icon: "pencil" },
+        { name: "My Suggested Prices", icon: "list", tabs: ["My Suggested Prices", "Community Average"] },
       ],
     },
     {
       label: "TOOLS",
       items: [
-        { name: "Fair Price Calculator", icon: "🧮" },
-        { name: "Export Reports", icon: "📄" },
+        { name: "Fair Price Calculator", icon: "calculator" },
+        { name: "Export Reports", icon: "file" },
       ],
     },
     {
       label: "ACCOUNT",
       items: [
-        { name: "Messages", icon: "💬" },
-        { name: "My Profile", icon: "👤" },
-        { name: "Help / How to Use", icon: "❓" },
+        { name: "Messages", icon: "message" },
+        { name: "My Profile", icon: "user" },
+        { name: "Help / How to Use", icon: "help" },
       ],
     },
   ];
@@ -366,7 +369,7 @@ useEffect(() => {
                   className={`nav-item ${isActiveItem(item, activePage) ? "active" : ""}`}
                   onClick={() => { setActivePage(firstPage(item)); setMenuOpen(false); }}
                 >
-                  <span className="nav-icon">{item.icon}</span>
+                  <span className="nav-icon"><Icon name={item.icon} /></span>
                   <span>{t(item.name)}</span>
                   {item.name === "Messages" && unreadMessages > 0 && (
                     <span className="nav-badge">{unreadMessages}</span>
@@ -428,11 +431,11 @@ useEffect(() => {
         </section>
         {/* Phones: the main pages as big buttons at the bottom of the screen. */}
         <nav className="bottom-nav" aria-label={t("Main menu")}>
-          {[["🏠", "Home", "Dashboard"], ["🐟", "Prices", "Current Fish Prices"], ["✍️", "Suggest", "Submit Suggested Price"], ["🧮", "Calculator", "Fair Price Calculator"], ["☰", "More", null]].map(([icon, label, page]) => (
+          {[["home", "Home", "Dashboard"], ["fish", "Prices", "Current Fish Prices"], ["pencil", "Suggest", "Submit Suggested Price"], ["calculator", "Calculator", "Fair Price Calculator"], ["menu", "More", null]].map(([icon, label, page]) => (
             <button key={label} type="button"
               className={page && (activePage === page || itemFor(menuGroups, activePage)?.tabs?.includes(page)) ? "active" : ""}
               onClick={() => (page ? setActivePage(page) : setMenuOpen(true))}>
-              <span aria-hidden="true">{icon}</span>{t(label)}
+              <span className="bottom-nav-icon" aria-hidden="true"><Icon name={icon} size={20} /></span>{t(label)}
             </button>
           ))}
         </nav>
@@ -1556,15 +1559,15 @@ function LiveVendorDashboard({ records, loading, error, municipality, onMunicipa
       <h3>{t("What do you want to do?")}</h3>
       <div className="quick-grid">
         {[
-          ["🐟", "Check fish prices", "See today's price of each fish", "Current Fish Prices"],
-          ["✍️", "Suggest a price", "Tell the LGU your price and why", "Submit Suggested Price"],
-          ["🧮", "Compute a fair price", "Enter the weight, get the total", "Fair Price Calculator"],
-          ["📈", "See tomorrow's prices", "Price forecast for the coming days", "Price Forecast"],
-          ["📋", "My suggestions", "See if your price was used", "My Suggested Prices"],
-          ["💬", "Message the LGU", "Ask your LGU officer", "Messages"],
+          ["fish", "Check fish prices", "See today's price of each fish", "Current Fish Prices"],
+          ["pencil", "Suggest a price", "Tell the LGU your price and why", "Submit Suggested Price"],
+          ["calculator", "Compute a fair price", "Enter the weight, get the total", "Fair Price Calculator"],
+          ["forecast", "See tomorrow's prices", "Price forecast for the coming days", "Price Forecast"],
+          ["list", "My suggestions", "See if your price was used", "My Suggested Prices"],
+          ["message", "Message the LGU", "Ask your LGU officer", "Messages"],
         ].map(([icon, title, sub, page]) => (
           <button key={page} type="button" className="quick-card" onClick={() => goTo(page)}>
-            <span className="quick-icon" aria-hidden="true">{icon}</span>
+            <span className="quick-icon" aria-hidden="true"><Icon name={icon} size={24} /></span>
             <strong>{t(title)}</strong>
             <small>{t(sub)}</small>
           </button>
