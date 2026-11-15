@@ -51,20 +51,22 @@ export function FishPicture({ fish, alt, emptyText = "No photo yet. An LGU Offic
  * myFish:  ids of fish the vendor sells (marked with ★ and listed first by the caller)
  */
 export function FishPicker({ species, value, onChange, myFish = [], disabled = false, labels = {}, id, preview = true }) {
-  const selected = species.find((fish) => String(fish.id) === String(value));
+  // A choice may stand for several spellings of one fish (fish.ids).
+  const holds = (fish, v) => String(fish.id) === String(v) || (fish.ids || []).includes(String(v));
+  const selected = species.find((fish) => holds(fish, value));
   if (!species.length) return <div className="locked-field">{labels.empty || "No fish species registered"}</div>;
   const select = (
     <select
       id={id}
       className="fish-picker-select"
-      value={value}
+      value={selected ? String(selected.id) : value}
       onChange={(event) => onChange(event.target.value)}
       disabled={disabled}
       aria-label={labels.group || "Fish species"}
     >
       {species.map((fish) => (
         <option key={fish.id} value={String(fish.id)}>
-          {myFish.includes(String(fish.id)) ? "★ " : ""}{fish.name}
+          {myFish.includes(String(fish.id)) || (fish.ids || []).some((x) => myFish.includes(x)) ? "★ " : ""}{fish.label || fish.name}
         </option>
       ))}
     </select>
