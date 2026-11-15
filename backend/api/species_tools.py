@@ -263,7 +263,7 @@ NON_FISH_WORDS = {
     # other sea products
     "seaweed", "seaweeds", "guso", "gamet", "lato", "urchin", "tuyom", "salawaki", "cucumber",
     # not seafood
-    "annicad", "anicad",
+    "annicad", "anicad", "aninicad",
     "frog", "palaka", "turtle", "pawikan", "egg", "eggs", "itlog", "chicken", "manok", "pork", "baboy",
     "beef", "baka", "rice", "bugas", "vegetable", "vegetables", "gulay", "ice", "yelo",
 }

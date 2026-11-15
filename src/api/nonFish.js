@@ -8,7 +8,7 @@ const NON_FISH_WORDS = new Set([
   "kugita", "pugita", "shellfish", "shell", "shells", "mussel", "mussels", "tahong", "oyster", "oysters",
   "talaba", "clam", "clams", "halaan", "tuway", "imbaw", "imbao", "litob", "sisi", "kinhason",
   "scallop", "scallops", "kapis", "abalone", "kuhol", "snail", "snails", "seaweed", "seaweeds", "guso",
-  "gamet", "lato", "urchin", "tuyom", "salawaki", "cucumber", "annicad", "anicad", "frog", "palaka", "turtle", "pawikan",
+  "gamet", "lato", "urchin", "tuyom", "salawaki", "cucumber", "annicad", "anicad", "aninicad", "frog", "palaka", "turtle", "pawikan",
   "egg", "eggs", "itlog", "chicken", "manok", "pork", "baboy", "beef", "baka", "rice",
   "bugas", "vegetable", "vegetables", "gulay", "ice", "yelo",
 ]);

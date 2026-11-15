@@ -19,7 +19,7 @@ async function call(path, method = "GET", body) {
  * - Nothing recorded under it: delete it after a confirmation.
  * - It has prices or other records: merge it into the correct fish, so no
  *   price history is lost, or (for something that should not be here at
- *   all) delete it with everything under it after typing its name.
+ *   all) delete it with everything under it after a confirmation.
  *
  *   const remover = useRemoveFish({ notify, species, onDone });
  *   <button onClick={() => remover.start(fish)}>Remove</button>
@@ -31,7 +31,6 @@ export function useRemoveFish({ notify, species = [], onDone }) {
   const [reason, setReason] = useState("");
   const [busy, setBusy] = useState(false);
   const [mode, setMode] = useState("merge"); // "merge" | "delete"
-  const [typed, setTyped] = useState("");
 
   const start = async (fish) => {
     try {
@@ -44,7 +43,7 @@ export function useRemoveFish({ notify, species = [], onDone }) {
         onDone?.();
         return;
       }
-      setInto(""); setReason(""); setTyped(""); setMode("merge");
+      setInto(""); setReason(""); setMode("merge");
       setMerging({ fish, usage });
     } catch (error) {
       notify?.(error.message);
@@ -70,11 +69,10 @@ export function useRemoveFish({ notify, species = [], onDone }) {
 
   const deleteAll = async () => {
     const { fish, usage } = merging;
-    if (typed.trim().toLowerCase() !== fish.name.trim().toLowerCase()) return;
     if (!(await askConfirm(`Delete ${fish.name} and its ${usage.prices} price${usage.prices === 1 ? "" : "s"}?\n\nThis cannot be undone. The audit log keeps a note of what was removed.`, { confirmLabel: "Delete everything", danger: true }))) return;
     setBusy(true);
     try {
-      const result = await call(`/fish-species/${fish.id}/delete-everything/`, "POST", { confirm_name: typed.trim(), reason });
+      const result = await call(`/fish-species/${fish.id}/delete-everything/`, "POST", { confirm_name: fish.name, reason });
       notify?.(result.message);
       setMerging(null);
       onDone?.();
@@ -120,12 +118,7 @@ export function useRemoveFish({ notify, species = [], onDone }) {
               {others.map((s) => <option key={s.id} value={s.id}>{s.name}</option>)}
             </select>
           </div>
-        ) : (
-          <div className="form-group">
-            <label htmlFor="delete-confirm">Type <strong>{merging.fish.name}</strong> to confirm</label>
-            <input id="delete-confirm" autoComplete="off" value={typed} placeholder={merging.fish.name} onChange={(e) => setTyped(e.target.value)} />
-          </div>
-        )}
+        ) : null}
         <div className="form-group">
           <label htmlFor="merge-reason">Reason <span className="optional">(optional)</span></label>
           <input id="merge-reason" maxLength={300} value={reason}
@@ -144,7 +137,7 @@ export function useRemoveFish({ notify, species = [], onDone }) {
             <button className="primary-btn" onClick={merge} disabled={!into || busy}>{busy ? "Merging…" : "Merge and remove"}</button>
           ) : (
             <button className="confirm-danger-btn remove-delete-btn" onClick={deleteAll}
-              disabled={busy || typed.trim().toLowerCase() !== merging.fish.name.trim().toLowerCase()}>
+              disabled={busy}>
               {busy ? "Deleting…" : "Delete completely"}
             </button>
           )}
