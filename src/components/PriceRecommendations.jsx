@@ -34,6 +34,14 @@ async function call(path, method = "GET", body) {
  * vendors' suggestions of the last days, with the vendors' reasons grouped
  * by text clustering, give a recommended price that the LGU publishes.
  */
+// "Nov 16, 2026 · 8:42 AM" for the time a vendor sent the suggestion.
+function suggestedOn(value) {
+  if (!value) return "—";
+  const d = new Date(value);
+  if (Number.isNaN(d.getTime())) return "—";
+  return `${d.toLocaleDateString("en-PH", { month: "short", day: "numeric", year: "numeric" })} · ${d.toLocaleTimeString("en-PH", { hour: "numeric", minute: "2-digit" })}`;
+}
+
 export default function PriceRecommendations({ notify }) {
   const [market, setMarket] = useState("");
   const [data, setData] = useState(null);
@@ -204,7 +212,7 @@ export default function PriceRecommendations({ notify }) {
                 <div className="mini-head">Who suggested (each vendor's latest suggestion)</div>
                 <div className="table-scroll">
                   <table className="who-suggested">
-                    <thead><tr><th>Vendor</th><th>Price</th><th>Reason</th><th>Comment</th><th>Counted</th></tr></thead>
+                    <thead><tr><th>Vendor</th><th>Price</th><th>Reason</th><th>Comment</th><th>Suggested on</th><th>Counted</th></tr></thead>
                     <tbody>
                       {details.suggesters.map((s) => (
                         <tr key={s.id}>
@@ -212,6 +220,7 @@ export default function PriceRecommendations({ notify }) {
                           <td>{peso(s.price)}</td>
                           <td>{s.reason}</td>
                           <td>{s.comment ? `"${s.comment}"` : <span className="muted-text">—</span>}</td>
+                          <td className="nowrap">{suggestedOn(s.suggested_at)}</td>
                           <td>{s.agrees ? <span className="badge success">Agrees</span> : <span className="muted-text">No</span>}</td>
                         </tr>
                       ))}

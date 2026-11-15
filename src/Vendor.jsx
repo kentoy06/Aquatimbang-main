@@ -475,7 +475,7 @@ function FishInfoModal({ fish, latest, onClose, onCompute }) {
           {fish.scientific_name && <p className="fish-info-sci"><span className="muted-text">{t("Scientific name")}:</span> <em>{fish.scientific_name}</em></p>}
           <p className="fish-info-desc">{fish.description || t("No description yet.")}</p>
           <div className="fish-info-price">
-            <span>{t("Latest official price")}</span>
+            <span>{t("Latest suggested price")}</span>
             <strong>{latest ? <>{peso(latest.price_per_kg)}<small> / kg</small></> : t("Not available")}</strong>
             {latest && <small>{latest.municipality_name} · {latest.recorded_date}</small>}
           </div>
@@ -850,7 +850,7 @@ function SubmitSuggestedPrice({
           </div>
 
           <div className="form-group">
-            <label>{t("Current Official Price")}</label>
+            <label>{t("Current Suggested Price")}</label>
             <div className="locked-field">
               {officialNow !== null ? peso(officialNow) : t("Not available")}
               {officialNow !== null && (
@@ -880,8 +880,8 @@ function SubmitSuggestedPrice({
           {bigDiff && (
             <div className="warn-box">
               {t(diffPct > 0
-                ? "⚠ This is {pct}% above the current official price. Adding a comment helps the LGU officer understand why."
-                : "⚠ This is {pct}% below the current official price. Adding a comment helps the LGU officer understand why.",
+                ? "⚠ This is {pct}% above the current suggested price. Adding a comment helps the LGU officer understand why."
+                : "⚠ This is {pct}% below the current suggested price. Adding a comment helps the LGU officer understand why.",
               { pct: Math.abs(diffPct).toFixed(0) })}
             </div>
           )}

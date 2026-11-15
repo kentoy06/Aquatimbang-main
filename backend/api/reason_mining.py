@@ -254,7 +254,7 @@ def recommend_price(fish, municipality, market=None, today=None):
 
     suggestions = latest_suggestions(fish, municipality, today)
     items = [{"id": s.pk, "category": s.reason_category, "comment": s.comment, "price": float(s.suggested_price),
-              "vendor": vendor_name(s.vendor)} for s in suggestions]
+              "vendor": vendor_name(s.vendor), "suggested_at": s.created_at.isoformat()} for s in suggestions]
     clusters = cluster_reasons(items)
     vendors = len(items)
     top = clusters[0] if clusters else None
@@ -322,7 +322,7 @@ def recommend_price(fish, municipality, market=None, today=None):
         "suggesters": [
             {"id": i["id"], "vendor": i["vendor"], "price": i["price"], "category": i["category"],
              "reason": dict(_reason_labels()).get(i["category"], "Other"), "comment": i["comment"],
-             "agrees": agree and i["id"] in agreeing_ids}
+             "agrees": agree and i["id"] in agreeing_ids, "suggested_at": i["suggested_at"]}
             for i in sorted(items, key=lambda x: x["vendor"].lower())
         ],
         "vendor_weight": round(weight, 2),

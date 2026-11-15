@@ -124,6 +124,7 @@ export const STAFF_PHRASES = {
   "Change": ["Baguhin", "Usba"],
   "Agrees": ["Sang-ayon", "Uyon"],
   "Counted": ["Binilang", "Giihap"],
+  "Suggested on": ["Petsa ng mungkahi", "Petsa sa sugyot"],
   "Publish this price": ["Ilathala ang presyong ito", "Ipatik kini nga presyo"],
   "Outside the allowed range": ["Labas sa pinapayagang halaga", "Gawas sa gitugot nga kantidad"],
   "Loading recommendations…": ["Kinukuha ang mga rekomendasyon…", "Gikuha ang mga rekomendasyon…"],

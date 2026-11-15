@@ -91,7 +91,7 @@ const PHRASES = {
   // Fish details window
   "Fish Details": ["Detalye ng Isda", "Detalye sa Isda"],
   "Scientific name": ["Siyentipikong pangalan", "Siyentipikong ngalan"],
-  "Latest official price": ["Pinakabagong opisyal na presyo", "Pinakabag-ong opisyal nga presyo"],
+  "Latest suggested price": ["Pinakabagong mungkahing presyo", "Pinakabag-ong gisugyot nga presyo"],
   "No description yet.": ["Wala pang paglalarawan.", "Wala pay paghulagway."],
   "No photo of this fish yet.": ["Wala pang larawan ang isdang ito.", "Wala pay hulagway kini nga isda."],
   "Close": ["Isara", "Sirado"],
@@ -256,16 +256,16 @@ const PHRASES = {
   ],
   "New Suggestion": ["Bagong Mungkahi", "Bag-ong Sugyot"],
   "Submitted suggestions are reviewed by an LGU officer.": ["Sinusuri ng LGU officer ang bawat mungkahi.", "Gisusi sa LGU officer ang matag sugyot."],
-  "Current Official Price": ["Kasalukuyang Opisyal na Presyo", "Opisyal nga Presyo Karon"],
+  "Current Suggested Price": ["Kasalukuyang Mungkahing Presyo", "Gisugyot nga Presyo Karon"],
   "LGU Validated": ["Beripikado ng LGU", "Gi-verify sa LGU"],
   "Your Suggested Price per KG": ["Iyong Mungkahing Presyo kada KG", "Imong Gisugyot nga Presyo matag KG"],
-  "⚠ This is {pct}% above the current official price. Adding a comment helps the LGU officer understand why.": [
-    "⚠ Ito ay {pct}% mas mataas sa opisyal na presyo. Makakatulong ang komento para maintindihan ng LGU officer kung bakit.",
-    "⚠ Kini {pct}% mas taas sa opisyal nga presyo. Makatabang ang komento aron masabtan sa LGU officer ngano.",
+  "⚠ This is {pct}% above the current suggested price. Adding a comment helps the LGU officer understand why.": [
+    "⚠ Ito ay {pct}% mas mataas sa kasalukuyang mungkahing presyo. Makakatulong ang komento para maintindihan ng LGU officer kung bakit.",
+    "⚠ Kini {pct}% mas taas sa gisugyot nga presyo karon. Makatabang ang komento aron masabtan sa LGU officer ngano.",
   ],
-  "⚠ This is {pct}% below the current official price. Adding a comment helps the LGU officer understand why.": [
-    "⚠ Ito ay {pct}% mas mababa sa opisyal na presyo. Makakatulong ang komento para maintindihan ng LGU officer kung bakit.",
-    "⚠ Kini {pct}% mas ubos sa opisyal nga presyo. Makatabang ang komento aron masabtan sa LGU officer ngano.",
+  "⚠ This is {pct}% below the current suggested price. Adding a comment helps the LGU officer understand why.": [
+    "⚠ Ito ay {pct}% mas mababa sa kasalukuyang mungkahing presyo. Makakatulong ang komento para maintindihan ng LGU officer kung bakit.",
+    "⚠ Kini {pct}% mas ubos sa gisugyot nga presyo karon. Makatabang ang komento aron masabtan sa LGU officer ngano.",
   ],
   "Comment (optional)": ["Komento (opsyonal)", "Komento (opsyonal)"],
   "Explain the market conditions or price difference": [
