@@ -1183,6 +1183,13 @@ function FairPriceCalculator({ records = [], registeredSpecies = [], myFish = []
     return () => { cancelled = true; };
   }, []);
 
+  const speciesOptions = Array.from(new Map([
+    ...records.filter((r) => r.status === "published" || r.status === undefined)
+      .map((r) => [String(r.fish_species), { id: String(r.fish_species), name: r.fish_name || `Species #${r.fish_species}` }]),
+    ...registeredSpecies.map((r) => [String(r.id), { ...r, id: String(r.id) }]),
+  ]).values()).sort((a, b) => Number(myFish.includes(b.id)) - Number(myFish.includes(a.id)) || a.name.localeCompare(b.name));
+  const selectedSpecies = speciesOptions.some((s) => s.id === speciesId) ? speciesId : (speciesOptions[0]?.id || "");
+
   const speciesName = speciesOptions.find((s) => s.id === selectedSpecies)?.name || "Fish species";
 
   // Never combine different municipalities into a single official unit price.
@@ -1326,6 +1333,7 @@ function ExportReports(props) {
 }
 
 function ExportReportsPage({ title, mySuggestions = [], suggestionsLoading, suggestionsError, records: recentRecords = [], loading: recentLoading, error: recentError, municipality, onMunicipalityChange, availableMunicipalities = [], defaultMunicipality = "", registeredSpecies = [], notify }) {
+  const t = useT();
   const [reportType, setReportType] = useState("Published LGU Price History");
   const [speciesId, setSpeciesId] = useState("");
   const [fromDate, setFromDate] = useState("");
