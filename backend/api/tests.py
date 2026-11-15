@@ -3092,3 +3092,19 @@ class HistoryNotificationNonFishTests(StallSampleTests):
         self.assertFalse(FishSpecies.objects.filter(pk__in=[squid.pk, crab.pk]).exists())
         self.assertTrue(FishSpecies.objects.filter(pk=self.fish.pk).exists())
         self.assertEqual(PriceRecord.objects.filter(fish_species_id=squid.pk).count(), 0)
+
+
+class RemoveNonFishMigrationTests(StallSampleTests):
+    def test_migration_removes_only_non_fish(self):
+        from importlib import import_module
+        from django.apps import apps as django_apps
+        step = import_module("api.migrations.0046_remove_non_fish")
+        squid = FishSpecies.objects.create(name="Pusit")
+        FishSpecies.objects.create(name="Tahong")
+        PriceRecord.objects.create(fish_species=squid, municipality=self.place, price_per_kg=Decimal("300"),
+                                   recorded_date=datetime.date(2026, 1, 5), status="published")
+        step.remove_non_fish(django_apps, None)
+        self.assertFalse(FishSpecies.objects.filter(name__in=["Pusit", "Tahong"]).exists())
+        self.assertTrue(FishSpecies.objects.filter(pk=self.fish.pk).exists())
+        self.assertEqual(PriceRecord.objects.filter(fish_species_id=squid.pk).count(), 0)
+        self.assertTrue(ActivityLog.objects.filter(target_name="Pusit", actor_username="system").exists())
