@@ -18,6 +18,8 @@ import {
 import { API_BASE_URL } from "./api/config.js";
 import { ALL_HISTORY_FROM, mergeRecords, useOlderPublished, withRecentWindow } from "./api/prices.js";
 import { RANGE_LABELS, countPricedDays, daysAgo, widenRange } from "./api/priceData.js";
+import { mergeSameFish } from "./api/fishNames.js";
+import { isNonFish } from "./api/nonFish.js";
 import { fullName, useMyProfile } from "./api/account.js";
 import AccountProfile, { ProfileProgress } from "./components/AccountProfile.jsx";
 import ProfitHelper from "./components/ProfitHelper.jsx";
@@ -718,16 +720,23 @@ function SubmitSuggestedPrice({
   try { savedUser = JSON.parse(localStorage.getItem("user") || "null"); } catch { /* ignore invalid storage */ }
   const municipalityId = savedUser?.municipality_id;
 
-  // Default to the first registered species once the list loads.
+  // One choice per fish: spellings of the same fish ("Anduhaw", "Anduhao")
+  // are merged into "Anduhaw (Anduhao)", kept on the name with the most prices.
+  const priceTotals = records.reduce((all, r) => {
+    const key = String(r.fish_species); all[key] = (all[key] || 0) + 1; return all;
+  }, {});
+  const fishChoices = mergeSameFish(registeredSpecies.filter((f) => !isNonFish(f.name)), { priceCount: (id) => priceTotals[id] || 0, myFish });
+  const selectedSpecies = fishChoices.find((s) => s.id === speciesId || s.ids.includes(String(speciesId)));
+  const selectedIds = selectedSpecies ? selectedSpecies.ids : [String(speciesId)];
+
+  // Default to the first fish once the list loads.
   useEffect(() => {
-    if (!speciesId && registeredSpecies.length) setSpeciesId(registeredSpecies[0].id);
-  }, [registeredSpecies, speciesId]);
+    if (!speciesId && fishChoices.length) setSpeciesId(fishChoices[0].id);
+  }, [fishChoices.length, speciesId]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const selectedSpecies = registeredSpecies.find((s) => s.id === speciesId);
-
-  // Latest published price for this species in the vendor's municipality.
+  // Latest published price for this fish (any of its spellings) in the vendor's municipality.
   const latest = records
-    .filter((r) => String(r.fish_species) === String(speciesId) && String(r.municipality) === String(municipalityId))
+    .filter((r) => selectedIds.includes(String(r.fish_species)) && String(r.municipality) === String(municipalityId))
     .reduce((best, r) => (!best || r.recorded_date > best.recorded_date ? r : best), null);
   const officialNow = latest ? Number(latest.price_per_kg) : null;
 
@@ -830,7 +839,7 @@ function SubmitSuggestedPrice({
           <div className="form-group">
             <label>{t("Fish Species")}</label>
             <FishPicker
-              species={registeredSpecies}
+              species={fishChoices}
               value={speciesId}
               onChange={setSpeciesId}
               myFish={myFish}
