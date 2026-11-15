@@ -2179,6 +2179,7 @@ table th {
 /* Who suggested a price (LGU Price Recommendations, public fish profile) */
 .who-suggested { width: 100%; border-collapse: collapse; font-size: 13px; margin-bottom: 12px; }
 .who-suggested th, .who-suggested td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line, #e2e8f0); vertical-align: top; }
+.who-suggested .nowrap { white-space: nowrap; }
 .who-suggested th { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #64748b); }
 .fp-suggesters { list-style: none; margin: 6px 0 0; padding: 0; display: flex; flex-wrap: wrap; gap: 6px; }
 .fp-suggesters li { background: #f1f5f9; border-radius: 999px; padding: 4px 10px; font-size: 13px; color: #334155; }

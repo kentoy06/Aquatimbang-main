@@ -16,36 +16,47 @@ const SKIP = new Set(["SCRIPT", "STYLE", "TEXTAREA", "CODE", "PRE"]);
 export default function AutoTranslate({ language }) {
   useEffect(() => {
     const root = document.body;
-    const english = new Map();      // text node -> its English text
-    const translatedAttr = new Map(); // element -> { attr: English }
+    // Only what this component changed is remembered: node -> { english, shown }.
+    // Text React writes itself (vendor pages use t()) is never put back, so the
+    // page follows the new language at once without a refresh.
+    const changedText = new Map();
+    const changedAttr = new Map(); // element -> { attr: { english, shown } }
 
-    const translateText = (node) => {
-      const parent = node.parentElement;
-      if (!parent || SKIP.has(parent.tagName) || parent.closest("[data-no-translate]")) return;
-      const value = node.nodeValue;
-      const known = english.get(node);
-      // Our own translation coming back: nothing to do.
-      if (known !== undefined && value === swap(known)) return;
-      english.set(node, value);
-      const next = swap(value);
-      if (next !== value) node.nodeValue = next;
-    };
     const swap = (text) => {
       const trimmed = text.trim();
       if (!trimmed) return text;
       const out = lookupPhrase(language, trimmed);
       return out && out !== trimmed ? text.replace(trimmed, out) : text;
     };
+    const translateText = (node) => {
+      const parent = node.parentElement;
+      if (!parent || SKIP.has(parent.tagName) || parent.closest("[data-no-translate]")) return;
+      const value = node.nodeValue;
+      const done = changedText.get(node);
+      if (done && value === done.shown) return; // our own translation
+      const next = swap(value);
+      if (next !== value) {
+        changedText.set(node, { english: value, shown: next });
+        node.nodeValue = next;
+      } else {
+        changedText.delete(node);
+      }
+    };
     const translateAttrs = (el) => {
       if (el.closest("[data-no-translate]")) return;
       for (const attr of ATTRS) {
         if (!el.hasAttribute(attr)) continue;
         const value = el.getAttribute(attr);
-        const saved = translatedAttr.get(el) || {};
-        if (saved[attr] !== undefined && value === swap(saved[attr])) continue;
-        saved[attr] = value; translatedAttr.set(el, saved);
+        const saved = changedAttr.get(el) || {};
+        if (saved[attr] && value === saved[attr].shown) continue;
         const next = swap(value);
-        if (next !== value) el.setAttribute(attr, next);
+        if (next !== value) {
+          saved[attr] = { english: value, shown: next };
+          changedAttr.set(el, saved);
+          el.setAttribute(attr, next);
+        } else {
+          delete saved[attr];
+        }
       }
     };
     const walk = (start) => {
@@ -70,11 +81,15 @@ export default function AutoTranslate({ language }) {
 
     return () => {
       observer?.disconnect();
-      // Put the English text back before the next language is applied.
-      english.forEach((text, node) => { if (node.isConnected && node.nodeValue !== text) node.nodeValue = text; });
-      translatedAttr.forEach((saved, el) => {
+      // Put back the English only where our translation is still showing.
+      changedText.forEach(({ english, shown }, node) => {
+        if (node.isConnected && node.nodeValue === shown) node.nodeValue = english;
+      });
+      changedAttr.forEach((saved, el) => {
         if (!el.isConnected) return;
-        for (const [attr, text] of Object.entries(saved)) el.setAttribute(attr, text);
+        for (const [attr, { english, shown }] of Object.entries(saved)) {
+          if (el.getAttribute(attr) === shown) el.setAttribute(attr, english);
+        }
       });
     };
   }, [language]);

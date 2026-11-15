@@ -98,6 +98,13 @@ function Landing({ onGetStarted, onRegister }) {
 
   const count = (value) => (summary ? Number(value ?? 0).toLocaleString() : "—");
   const allPrices = summary?.today_prices || [];
+  // A "Latest suggested prices" card opens the same details as the price board.
+  const openFeatured = (item) => setProfile(
+    allPrices.find((p) => (item.fish_id ? p.fish_id === item.fish_id : p.fish_name === item.fish_name)
+      && p.municipality_name === item.municipality_name && (p.market || "") === (item.market || ""))
+    || allPrices.find((p) => (item.fish_id ? p.fish_id === item.fish_id : p.fish_name === item.fish_name))
+    || item,
+  );
   // Fish shown under "Current prices" (checked recently), counted once each.
   const currentFish = new Set(allPrices.filter((p) => p.current !== false).map((p) => p.fish_id)).size;
   const stats = [
@@ -191,7 +198,13 @@ function Landing({ onGetStarted, onRegister }) {
             <span className="hero-cards-label">Latest suggested prices</span>
           )}
           {(summary?.featured_prices || []).map((item) => (
-            <div className="hero-price-card" key={`${item.fish_name}-${item.municipality_name}`}>
+            <button
+              type="button"
+              className="hero-price-card"
+              key={`${item.fish_name}-${item.municipality_name}`}
+              onClick={() => openFeatured(item)}
+              aria-label={`${item.fish_name}: ${peso(item.price_per_kg)} per kilo. Show details`}
+            >
               <span>{item.fish_name} · {item.market ? `${item.market}, ` : ""}{item.municipality_name}</span>
               <strong>{peso(item.price_per_kg)}<small>/kg</small></strong>
               {item.weekly_change_percent !== null && (
@@ -199,7 +212,7 @@ function Landing({ onGetStarted, onRegister }) {
                   {item.weekly_change_percent >= 0 ? "▲" : "▼"} {Math.abs(item.weekly_change_percent).toFixed(1)}% vs last week
                 </em>
               )}
-            </div>
+            </button>
           ))}
         </div>
 
@@ -292,16 +305,17 @@ function Landing({ onGetStarted, onRegister }) {
         <div className="section-cta">
           <button className="pill-btn pill-orange" onClick={onGetStarted}>Log in for trends &amp; forecasts</button>
         </div>
-        {profile && (
-          <FishProfileModal
-            item={profile}
-            onClose={() => setProfile(null)}
-            onLogin={() => { setProfile(null); onGetStarted(); }}
-            onRegister={() => { setProfile(null); onRegister?.(); }}
-          />
-        )}
         </div>
         )}
+
+      {profile && (
+        <FishProfileModal
+          item={profile}
+          onClose={() => setProfile(null)}
+          onLogin={() => { setProfile(null); onGetStarted(); }}
+          onRegister={() => { setProfile(null); onRegister?.(); }}
+        />
+      )}
 
       {/* ABOUT */}
         {section === "about" && (

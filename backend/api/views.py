@@ -1954,7 +1954,13 @@ def public_summary(request):
                     float((record.price_per_kg - week_ago.price_per_kg) / week_ago.price_per_kg * 100), 1
                 )
             featured.append({
+                "fish_id": record.fish_species_id,
                 "fish_name": record.fish_species.name,
+                "scientific_name": record.fish_species.scientific_name,
+                "has_photo": bool(record.fish_species.photo),
+                "updated_at": record.fish_species.updated_at.isoformat(),
+                "municipality_id": record.municipality_id,
+                "market_id": record.market_id,
                 "municipality_name": record.municipality.name,
                 "market": record.market.name if record.market_id else _market_label(record.source),
                 "price_per_kg": record.price_per_kg,

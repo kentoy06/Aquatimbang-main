@@ -361,6 +361,21 @@ html, body, #root {
   border: 1px solid rgba(255, 255, 255, 0.14);
   backdrop-filter: blur(12px);
   box-shadow: 0 14px 30px rgba(0, 0, 0, 0.3);
+  /* The cards are buttons that open the fish's details. */
+  display: block;
+  text-align: left;
+  font: inherit;
+  color: #fff;
+  cursor: pointer;
+  transition: transform 0.18s ease, background 0.18s ease, border-color 0.18s ease;
+}
+
+.hero-price-card:hover,
+.hero-price-card:focus-visible {
+  transform: translateY(-3px);
+  background: rgba(7, 26, 43, 0.78);
+  border-color: rgba(255, 176, 122, 0.6);
+  outline: none;
 }
 
 .hero-price-card:nth-child(2) {
