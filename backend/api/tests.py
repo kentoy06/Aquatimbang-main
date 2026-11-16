@@ -2835,6 +2835,12 @@ class PriceRecommendationTests(StallSampleTests):
                                        price_per_kg=Decimal(price), recorded_date=today - datetime.timedelta(days=days + 1),
                                        status="published")
         self.Suggestion = VendorPriceSuggestion
+        # The live default is 100 agreeing vendors; these tests use a small
+        # market of 6 vendors, so the minimum is set to 3.
+        from .models import SystemSetting
+        setting = SystemSetting.load()
+        setting.auto_publish_min_vendors = 3
+        setting.save()
 
     def suggest(self, vendor, price, category, comment=""):
         return self.Suggestion.objects.create(vendor=vendor, fish_species=self.fish, municipality=self.place,
@@ -2859,8 +2865,8 @@ class PriceRecommendationTests(StallSampleTests):
         rows = self.client.get("/api/price-recommendations/", {"market": self.market.pk}).data["results"]
         row = next(r for r in rows if r["fish_name"] == "Sample Fish")
         self.assertEqual((row["history_median"], row["vendor_median"], row["vendor_count"]), (200.0, 240.0, 5))
-        self.assertEqual(row["vendor_weight"], 0.5)          # 5 vendors x 0.1
-        self.assertEqual(row["recommended_price"], 220.0)    # 0.5 x 200 + 0.5 x 240
+        self.assertEqual(row["vendor_weight"], 0.57)         # 30% at 3 vendors, +40% x (5 - 3) / 3
+        self.assertEqual(row["recommended_price"], 222.8)    # 0.43 x 200 + 0.57 x 240
         self.assertIn("5 of 5 vendors (100%)", row["basis"])
 
     def submit(self, vendor, price, category, comment=""):
@@ -2889,11 +2895,12 @@ class PriceRecommendationTests(StallSampleTests):
         # history 200, agreeing vendors' median 240, weight 0.3 -> 212
         self.assertEqual(record.price_per_kg, Decimal("212.00"))
         self.assertIn("Main reason: Higher fuel", record.remarks)
-        # A 5th agreeing vendor updates the same automatic price.
+        # A 5th vendor (4 now agree) updates the same automatic price:
+        # weight 30% + 40% x (4 - 3) / 3 = 43%, so 0.57 x 200 + 0.43 x 240 = 217.20.
         self.submit(self.vendors[4], 240, "fuel_price")
         record.refresh_from_db()
         self.assertEqual(self.auto_records().count(), 1)
-        self.assertEqual(record.price_per_kg, Decimal("216.00"))
+        self.assertEqual(record.price_per_kg, Decimal("217.20"))
         self.assertTrue(ActivityLog.objects.filter(action="auto-published", target_id=record.pk).exists())
         self.assertTrue(ActivityLog.objects.filter(action="auto-updated", target_id=record.pk).exists())
         self.assertTrue(PriceRecord.objects.filter(status="published", recorded_date=timezone.localdate()).exists())
@@ -3025,6 +3032,30 @@ class PriceRecommendationTests(StallSampleTests):
         self.assertEqual(client.post("/api/vendor-suggestions/", body, format="json").status_code, 400)
         self.assertEqual(client.post("/api/vendor-suggestions/", {**body, "reason_category": "other", "comment": "x"}, format="json").status_code, 400)
         self.assertEqual(client.post("/api/vendor-suggestions/", {**body, "reason_category": "fuel_price"}, format="json").status_code, 201)
+
+
+class VendorWeightTests(TestCase):
+    """The vendors' share grows from 30% at the minimum to 70% at double the minimum."""
+
+    def test_weight_scales_with_the_minimum(self):
+        from .reason_mining import vendor_weight
+        self.assertEqual(vendor_weight(99, 100), 0.0)
+        self.assertEqual(vendor_weight(100, 100), 0.3)
+        self.assertEqual(vendor_weight(150, 100), 0.5)
+        self.assertEqual(vendor_weight(200, 100), 0.7)
+        self.assertEqual(vendor_weight(350, 100), 0.7)
+        self.assertEqual(vendor_weight(3, 3), 0.3)
+
+    def test_default_minimum_is_100_and_admin_can_set_up_to_200(self):
+        from .models import SystemSetting
+        self.assertEqual(SystemSetting.load().auto_publish_min_vendors, 100)
+        admin = User.objects.create_user("wadmin", "wadmin@example.com", "TestPass123!")
+        UserProfile.objects.create(user=admin, role=Role.objects.get_or_create(name="Administrator")[0],
+                                   account_status="approved", is_active=True)
+        client = APIClient()
+        client.force_authenticate(admin)
+        self.assertEqual(client.patch("/api/system-settings/", {"auto_publish_min_vendors": 200}, format="json").status_code, 200)
+        self.assertEqual(client.patch("/api/system-settings/", {"auto_publish_min_vendors": 201}, format="json").status_code, 400)
 
 
 class HistoryNotificationNonFishTests(StallSampleTests):

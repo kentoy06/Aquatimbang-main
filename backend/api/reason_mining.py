@@ -19,8 +19,11 @@ Vendor suggestion analytics: reason clustering and the recommended price.
    within the allowed spread of that cluster's median. When there are at
    least the minimum number of them and they are at least the required
    share of all vendors, their price moves the recommendation in proportion
-   to how many agree:
-       weight = min(MAX_VENDOR_WEIGHT, VENDOR_WEIGHT_STEP x vendors)
+   to how many agree. At the minimum the vendors count MIN_VENDOR_WEIGHT
+   (30%); the share grows evenly until double the minimum, where it reaches
+   MAX_VENDOR_WEIGHT (70%). With a minimum of 100: 100 vendors 30%,
+   150 vendors 50%, 200 or more 70%.
+       weight = min(MAX, MIN + (MAX - MIN) x (vendors - minimum) / minimum)
        recommended = (1 - weight) x history_median + weight x vendor_median
    Otherwise the history alone is used. The LGU reviews the recommendation
    and publishes it.
@@ -35,8 +38,9 @@ from django.utils import timezone
 
 # The number of agreeing vendors, the share they must be, and how close
 # their prices must be are set by the Administrator (SystemSetting).
-VENDOR_WEIGHT_STEP = 0.1   # weight added per vendor
+MIN_VENDOR_WEIGHT = 0.3    # vendors' share when exactly the minimum agree
 MAX_VENDOR_WEIGHT = 0.7    # vendors never decide more than 70% of the price
+                           # (reached at double the minimum)
 SUGGESTION_DAYS = 7        # suggestions older than this are not counted
 HISTORY_COUNT = 7          # latest published prices used for the history
 OTHER_SIMILARITY = 0.15    # an "Other" reason this close to a group joins it
@@ -208,6 +212,15 @@ def cluster_reasons(items):
     return clusters
 
 
+def vendor_weight(agreeing, minimum):
+    """Share of the price given to the agreeing vendors: 30% at the minimum, rising to 70% at double the minimum."""
+    minimum = max(1, minimum)
+    if agreeing < minimum:
+        return 0.0
+    grown = MIN_VENDOR_WEIGHT + (MAX_VENDOR_WEIGHT - MIN_VENDOR_WEIGHT) * (agreeing - minimum) / minimum
+    return round(min(MAX_VENDOR_WEIGHT, grown), 2)
+
+
 def latest_suggestions(fish, municipality, today=None, days=SUGGESTION_DAYS):
     """Each vendor's latest active suggestion for this fish in the last `days` days."""
     from .models import VendorPriceSuggestion
@@ -274,7 +287,7 @@ def recommend_price(fish, municipality, market=None, today=None):
         top["agreeing"] = len(agreeing)
     vendor_median = round(median(agreeing if agree else [i["price"] for i in items]), 2) if items else None
 
-    weight = min(MAX_VENDOR_WEIGHT, VENDOR_WEIGHT_STEP * len(agreeing)) if agree else 0.0
+    weight = vendor_weight(len(agreeing), min_vendors) if agree else 0.0
     if history_median is None:
         recommended = vendor_median if agree else None
         weight = 1.0 if agree else 0.0
@@ -337,7 +350,7 @@ def recommend_price(fish, municipality, market=None, today=None):
         "rules": {
             "min_vendors": min_vendors, "agreement_share": agreement_needed,
             "price_spread": spread, "auto_publish": settings.auto_publish_enabled,
-            "weight_per_vendor": VENDOR_WEIGHT_STEP, "max_vendor_weight": MAX_VENDOR_WEIGHT,
+            "min_vendor_weight": MIN_VENDOR_WEIGHT, "max_vendor_weight": MAX_VENDOR_WEIGHT,
             "suggestion_days": SUGGESTION_DAYS, "history_count": HISTORY_COUNT,
         },
     }

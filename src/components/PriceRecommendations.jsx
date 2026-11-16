@@ -108,9 +108,9 @@ export default function PriceRecommendations({ notify }) {
 
       <div className="info-box recommend-how">
         <strong>How the price is computed.</strong> Start from the history: the median of the latest {rules?.history_count || 7} published prices.
-        The vendors' reasons from the last {rules?.suggestion_days || 7} days are grouped by text clustering. When at least {rules?.min_vendors || 3} vendors,
+        The vendors' reasons from the last {rules?.suggestion_days || 7} days are grouped by text clustering. When at least {rules?.min_vendors || 100} vendors,
         and at least {pct(rules?.agreement_share || 0.6)} of all who suggested, gave the same reason with prices within {pct(rules?.price_spread || 0.15)} of each other, their median price counts
-        {" "}{pct(rules?.weight_per_vendor || 0.1)} per vendor (up to {pct(rules?.max_vendor_weight || 0.7)}); otherwise the history alone is used.
+        {" "}{pct(rules?.min_vendor_weight ?? 0.3)}, growing to {pct(rules?.max_vendor_weight || 0.7)} when {(rules?.min_vendors || 100) * 2} or more agree; otherwise the history alone is used.
         {" "}{rules?.auto_publish === false
           ? <strong>Automatic publishing is switched off by the Administrator, so publish each price here.</strong>
           : <><strong>When the vendors agree, the price is published automatically</strong> as soon as a vendor submits, and it is updated as more vendors suggest.</>}
