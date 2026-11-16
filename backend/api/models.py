@@ -1258,7 +1258,7 @@ class SystemSetting(models.Model):
     # other, and they are at least `auto_publish_agreement_percent` of all
     # vendors who suggested a price for that fish.
     auto_publish_enabled = models.BooleanField(default=True)
-    auto_publish_min_vendors = models.PositiveSmallIntegerField(default=3)
+    auto_publish_min_vendors = models.PositiveSmallIntegerField(default=100)
     auto_publish_agreement_percent = models.PositiveSmallIntegerField(default=60)
     auto_publish_price_spread_percent = models.PositiveSmallIntegerField(default=15)
 

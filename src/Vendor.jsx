@@ -908,7 +908,7 @@ function SubmitSuggestedPrice({
           </div>
 
           <div className="info-box">
-            {t("How it is used: the system groups the reasons of all vendors. When at least 3 vendors suggest and most of them give the same reason, their median price moves the next price published by the LGU, together with the price history.")}
+            {t("How it is used: the system groups the reasons of all vendors. When enough vendors suggest (set by the Administrator) and most of them give the same reason, their median price moves the next price published by the LGU, together with the price history.")}
           </div>
 
           {error && (
@@ -1117,7 +1117,7 @@ function CommunityAverage({ averages = [], publishedPrices = [], loading, error,
       </div></div>
       <div className="notice"><div className="notice-icon">!</div><div>
         <strong>Community price — not the official LGU price</strong>
-        <p>Withdrawn and rejected suggestions are not counted. When at least 3 vendors suggest a price and most give the same reason, their prices are used for the next published price.</p>
+        <p>Withdrawn and rejected suggestions are not counted. When enough vendors suggest a price and most give the same reason, their prices are used for the next published price.</p>
       </div></div>
       <PriceMunicipalitySelector records={publishedPrices} municipality={municipality} onMunicipalityChange={onMunicipalityChange} availableMunicipalities={availableMunicipalities} defaultMunicipality={defaultMunicipality} />
       <div className="panel" style={{ padding: 18, marginBottom: 16, display: "flex", alignItems: "center", gap: 12, flexWrap: "wrap" }}>

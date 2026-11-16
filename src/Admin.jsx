@@ -3322,9 +3322,9 @@ function SystemConfiguration({ notify }) {
               <div className="form-group">
                 <label htmlFor="cfg-auto-min">Minimum agreeing vendors</label>
                 <div className="input-with-unit input-with-unit-after">
-                  <input id="cfg-auto-min" type="number" min="2" max="20" step="1" value={auto.auto_publish_min_vendors}
+                  <input id="cfg-auto-min" type="number" min="2" max="200" step="1" value={auto.auto_publish_min_vendors}
                     disabled={!auto.auto_publish_enabled} onChange={(e) => setAuto((a) => ({ ...a, auto_publish_min_vendors: e.target.value }))} />
-                  <span>vendors (2 to 20)</span>
+                  <span>vendors (2 to 200)</span>
                 </div>
                 {errors.auto_publish_min_vendors && <small className="field-error">{errors.auto_publish_min_vendors}</small>}
               </div>
@@ -3347,9 +3347,10 @@ function SystemConfiguration({ notify }) {
                 {errors.auto_publish_price_spread_percent && <small className="field-error">{errors.auto_publish_price_spread_percent}</small>}
               </div>
               <div className="info-box">
-                Recommended: at least <b>3 vendors</b>, <b>60%</b>, and prices within <b>15%</b>. Example: 4 vendors suggest
-                Bangus; 3 say ₱240 because of fuel and 1 says ₱150. The 3 agree (75%), so the price is published from the
-                history and their ₱240. When they don't agree, the LGU publishes the price on Price Recommendations.
+                Recommended: at least <b>100 vendors</b>, <b>60%</b>, and prices within <b>15%</b>. The agreeing vendors' price
+                counts <b>30%</b> at the minimum and grows to <b>70%</b> at double the minimum (with 100: 100 vendors 30%,
+                150 vendors 50%, 200 or more 70%); the price history counts the rest. When they don't agree, the LGU publishes
+                the price on Price Recommendations.
               </div>
               <button className="primary-btn full-btn" style={{ marginTop: 14 }} onClick={saveAuto}
                 disabled={savingAuto || !autoChanged}>
